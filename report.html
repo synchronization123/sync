@@ -82,6 +82,20 @@
             margin-bottom: 20px;
             width: 100%;
             box-sizing: border-box;
+            text-align: center;
+        }
+        .search-filter input[type="text"] {
+            padding: 10px;
+            border: 1px solid #cfd8dc;
+            border-radius: 6px;
+            font-size: 14px;
+            width: 300px;
+            background: #fafafa;
+            margin-bottom: 10px;
+        }
+        .search-filter input[type="text"]:focus {
+            border-color: #455a64;
+            outline: none;
         }
         .search-filter select {
             padding: 10px;
@@ -267,6 +281,7 @@
         </div>
         <div class="tab-content active" id="report">
             <div class="search-filter">
+                <input type="text" id="_report_engagement_search" placeholder="Search Engagements..." />
                 <select id="_report_engagement_select">
                     <option value="">Select Engagement</option>
                 </select>
