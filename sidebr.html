@@ -1,0 +1,65 @@
+<div class="sidebar" id="sidebar">
+    <ul style="list-style: none; padding: 0;">
+        <li title="Manage application patches" style="margin: 20px 0;">
+            <i class="fas fa-tools fa-2x" style="color: #007bff;"></i> Patches
+        </li>
+        <li title="Vulnerability Assessment and Penetration Testing" style="margin: 20px 0;">
+            <i class="fas fa-shield-alt fa-2x" style="color: #dc3545;"></i> VAPT
+        </li>
+        <li title="Software Composition Analysis" style="margin: 20px 0;">
+            <i class="fas fa-box-open fa-2x" style="color: #fd7e14;"></i> SCA
+        </li>
+        <li title="Contrast Security Integration" style="margin: 20px 0;">
+            <i class="fas fa-bolt fa-2x" style="color: #6f42c1;"></i> Contrast
+        </li>
+        <li title="SonarQube Code Analysis" style="margin: 20px 0;">
+            <i class="fas fa-satellite-dish fa-2x" style="color: #17a2b8;"></i> SonarQube
+        </li>
+    </ul>
+</div>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" integrity="..." crossorigin="anonymous" referrerpolicy="no-referrer" />
+<style>
+    .sidebar {
+        width: 3cm;
+        background: #455a64;
+        color: #fff;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        z-index: 100;
+        box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
+    }
+    .sidebar ul {
+        width: 100%;
+        padding: 15px 5px;
+    }
+    .sidebar li {
+        margin: 20px 0;
+        padding: 12px 10px;
+        border-radius: 8px;
+        background: #5a6f7d;
+        transition: background 0.3s, transform 0.1s;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        display: flex;
+        align-items: center;
+        width: calc(100% - 20px);
+        font-size: 16px; /* Reduced from 14px to 12px for smaller text */
+    }
+    .sidebar li:hover {
+        background: #6b8292;
+        transform: scale(1.02);
+        color: #ffffff;
+    }
+    .sidebar i {
+        margin-right: 5px;
+    }
+    .sidebar li {
+        color: #e0e0e0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+</style>
