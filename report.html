@@ -111,6 +111,22 @@
             border-color: #455a64;
             outline: none;
         }
+        .search-filter .create-btn {
+            padding: 10px 20px;
+            background: #4caf50;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+            margin: 5px;
+            display: none;
+        }
+        .search-filter .create-btn:hover {
+            background: #43a047;
+        }
         .table-container {
             margin-bottom: 20px;
             width: 100%;
@@ -221,7 +237,7 @@
                 border: none;
                 padding: 20px;
             }
-            .search-filter, .view-btn, .save-pdf-btn {
+            .search-filter, .view-btn, .save-pdf-btn, .create-btn {
                 display: none !important;
             }
             .report-table {
@@ -285,6 +301,8 @@
                 <select id="_report_engagement_select">
                     <option value="">Select Engagement</option>
                 </select>
+                <button id="_report_create_risk_register" class="create-btn" onclick="_report_createRiskRegisterTests()">Create Risk Register</button>
+                <button id="_report_create_reporting_test" class="create-btn" onclick="_report_createReportingTest()">Create Contrast</button>
             </div>
             <div class="report-container" id="_report_container" style="display: none;">
                 <div class="report-header">
