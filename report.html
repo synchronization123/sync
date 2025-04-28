@@ -14,6 +14,46 @@
             color: #263238;
             width: 100%;
         }
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            padding: 20px;
+            position: relative;
+            z-index: 1;
+        }
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #cfd8dc;
+            margin-bottom: 20px;
+            z-index: 20;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            font-weight: 500;
+            color: #455a64;
+            transition: background 0.2s;
+        }
+        .tab:hover {
+            background: #eceff1;
+        }
+        .tab.active {
+            background: #ffffff;
+            border-bottom: 2px solid #455a64;
+            color: #455a64;
+        }
+        .tab-content {
+            display: none;
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            position: relative;
+            z-index: 10;
+        }
+        .tab-content.active {
+            display: block;
+        }
         .report-container {
             width: 170mm;
             margin: 20mm auto;
@@ -214,7 +254,18 @@
 </head>
 <body>
     <div class="container">
-        <div class="tab-content" id="report">
+        <div class="tabs">
+            <div class="tab" data-tab="mcr-jira-open">MCR Jira (Open)</div>
+            <div class="tab" data-tab="open-sct">Open SCT</div>
+            <div class="tab active" data-tab="report">Report</div>
+            <div class="tab" data-tab="assignment">Assignment</div>
+            <div class="tab" data-tab="engagement_summary">Engagement Summary</div>
+            <div class="tab" data-tab="engagement_rm_eta">Engagement RM ETA</div>
+            <div class="tab" data-tab="changelog">Changelog</div>
+            <div class="tab" data-tab="open_engagements">Open Engagements</div>
+            <div class="tab" data-tab="create_engagement">Create Engagement</div>
+        </div>
+        <div class="tab-content active" id="report">
             <div class="search-filter">
                 <select id="_report_engagement_select">
                     <option value="">Select Engagement</option>
@@ -290,5 +341,17 @@
     <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://demo.defectdojo.org/media/uploaded_files/8d7e746d-1af9-4ca4-b33a-e9493113e19a.js"></script>
+    <script src="report.js"></script>
+    <script>
+        // Tab switching logic
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab).classList.add('active');
+            });
+        });
+    </script>
 </body>
 </html>
