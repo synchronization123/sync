@@ -79,9 +79,8 @@ async function _report_fetchEngagements() {
 function _report_renderEngagementDropdown() {
     const select = $('#_report_engagement_select');
     const searchInput = $('#_report_engagement_search');
-    let filteredEngagements = [..._report_engagements]; // Clone the engagements array
+    let filteredEngagements = [..._report_engagements];
 
-    // Initial render of all engagements
     const renderOptions = (engagements) => {
         select.empty().append('<option value="">Select Engagement</option>');
         engagements.forEach(engagement => {
@@ -91,7 +90,6 @@ function _report_renderEngagementDropdown() {
     };
 
     if (_report_engagements.length > 0) {
-        // Render the dropdown with jQuery UI selectmenu
         select.selectmenu({
             width: 300,
             change: async function(event, ui) {
@@ -102,39 +100,62 @@ function _report_renderEngagementDropdown() {
                     $('#_report_engagement_name').text(
                         _report_engagements.find(e => e.id == _report_selected_engagement_id).name
                     );
-                    const riskRegisterResponse = await fetch(`${_report_api_urls.tests}${_report_selected_engagement_id}&tags=risk_register&limit=100`);
-                    if (!riskRegisterResponse.ok) throw new Error(`HTTP error! status: ${riskRegisterResponse.status}`);
-                    const riskRegisterData = await riskRegisterResponse.json();
-                    const riskRegisterExists = riskRegisterData.results && riskRegisterData.results.length > 0;
+                    // Check for risk_register tests
+                    let riskRegisterExists = false;
+                    try {
+                        const riskRegisterResponse = await fetch(`${_report_api_urls.tests}${_report_selected_engagement_id}&tags=risk_register&limit=100`);
+                        if (!riskRegisterResponse.ok) throw new Error(`HTTP error! status: ${riskRegisterResponse.status}`);
+                        const riskRegisterData = await riskRegisterResponse.json();
+                        console.log('Risk Register Data:', riskRegisterData);
+                        riskRegisterExists = riskRegisterData.results && riskRegisterData.results.length > 0;
+                        console.log('Risk Register Exists:', riskRegisterExists);
+                    } catch (error) {
+                        console.error('Error fetching risk_register tests:', error);
+                        _report_showToast('Error checking risk register: ' + error.message, 'error');
+                    }
                     const riskRegisterButton = $('#_report_create_risk_register');
                     if (riskRegisterExists) {
                         riskRegisterButton.hide();
+                        console.log('Hiding Create Risk Register button');
                     } else {
                         riskRegisterButton.show();
+                        console.log('Showing Create Risk Register button');
                     }
-                    const reportingResponse = await fetch(`${_report_api_urls.tests}${_report_selected_engagement_id}&tags=reporting&limit=100`);
-                    if (!reportingResponse.ok) throw new Error(`HTTP error! status: ${reportingResponse.status}`);
-                    const reportingData = await reportingResponse.json();
-                    const reportingExists = reportingData.results && reportingData.results.length > 0;
+
+                    // Check for reporting tests
+                    let reportingExists = false;
+                    try {
+                        const reportingResponse = await fetch(`${_report_api_urls.tests}${_report_selected_engagement_id}&tags=reporting&limit=100`);
+                        if (!reportingResponse.ok) throw new Error(`HTTP error! status: ${reportingResponse.status}`);
+                        const reportingData = await reportingResponse.json();
+                        console.log('Reporting Data:', reportingData);
+                        reportingExists = reportingData.results && reportingData.results.length > 0;
+                        console.log('Reporting Exists:', reportingExists);
+                    } catch (error) {
+                        console.error('Error fetching reporting tests:', error);
+                        _report_showToast('Error checking reporting: ' + error.message, 'error');
+                    }
                     const reportingButton = $('#_report_create_reporting_test');
                     if (reportingExists) {
                         reportingButton.hide();
+                        console.log('Hiding Create Contrast button');
                     } else {
                         reportingButton.show();
+                        console.log('Showing Create Contrast button');
                     }
+
                     _report_fetchTests();
                 } else {
                     $('#_report_container').hide();
                     $('#_report_create_risk_register').hide();
                     $('#_report_create_reporting_test').hide();
+                    console.log('No engagement selected, hiding buttons');
                 }
             }
         }).selectmenu('menuWidget').addClass('ui-menu-scroll');
 
-        // Initial render with all engagements
         renderOptions(_report_engagements);
 
-        // Add search functionality
         searchInput.on('input', function() {
             const searchTerm = $(this).val().toLowerCase();
             filteredEngagements = _report_engagements.filter(engagement =>
