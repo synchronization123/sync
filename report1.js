@@ -78,11 +78,20 @@ async function _report_fetchEngagements() {
 
 function _report_renderEngagementDropdown() {
     const select = $('#_report_engagement_select');
-    select.empty().append('<option value="">Select Engagement</option>');
-    if (_report_engagements.length > 0) {
-        _report_engagements.forEach(engagement => {
+    const searchInput = $('#_report_engagement_search');
+    let filteredEngagements = [..._report_engagements]; // Clone the engagements array
+
+    // Initial render of all engagements
+    const renderOptions = (engagements) => {
+        select.empty().append('<option value="">Select Engagement</option>');
+        engagements.forEach(engagement => {
             select.append(`<option value="${engagement.id}">${engagement.name}</option>`);
         });
+        select.selectmenu('refresh');
+    };
+
+    if (_report_engagements.length > 0) {
+        // Render the dropdown with jQuery UI selectmenu
         select.selectmenu({
             width: 300,
             change: async function(event, ui) {
@@ -93,7 +102,6 @@ function _report_renderEngagementDropdown() {
                     $('#_report_engagement_name').text(
                         _report_engagements.find(e => e.id == _report_selected_engagement_id).name
                     );
-                    // Check for risk_register tests
                     const riskRegisterResponse = await fetch(`${_report_api_urls.tests}${_report_selected_engagement_id}&tags=risk_register&limit=100`);
                     if (!riskRegisterResponse.ok) throw new Error(`HTTP error! status: ${riskRegisterResponse.status}`);
                     const riskRegisterData = await riskRegisterResponse.json();
@@ -104,7 +112,6 @@ function _report_renderEngagementDropdown() {
                     } else {
                         riskRegisterButton.show();
                     }
-                    // Check for reporting tests
                     const reportingResponse = await fetch(`${_report_api_urls.tests}${_report_selected_engagement_id}&tags=reporting&limit=100`);
                     if (!reportingResponse.ok) throw new Error(`HTTP error! status: ${reportingResponse.status}`);
                     const reportingData = await reportingResponse.json();
@@ -123,6 +130,23 @@ function _report_renderEngagementDropdown() {
                 }
             }
         }).selectmenu('menuWidget').addClass('ui-menu-scroll');
+
+        // Initial render with all engagements
+        renderOptions(_report_engagements);
+
+        // Add search functionality
+        searchInput.on('input', function() {
+            const searchTerm = $(this).val().toLowerCase();
+            filteredEngagements = _report_engagements.filter(engagement =>
+                engagement.name.toLowerCase().includes(searchTerm)
+            );
+            console.log('Filtered engagements:', filteredEngagements.length);
+            renderOptions(filteredEngagements);
+            if (filteredEngagements.length === 0) {
+                select.append('<option value="" disabled>No matching engagements</option>');
+                select.selectmenu('refresh');
+            }
+        });
     } else {
         console.warn('No engagements available to render');
         _report_showToast('No engagements available', 'error');
