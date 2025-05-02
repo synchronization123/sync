@@ -1,0 +1,53 @@
+import pandas as pd
+import requests
+import time
+
+# Configuration
+API_TOKEN = 'djjddnndkkd'
+BASE_URL = 'https://demo.defectdojo.org/api/v2/tests/'
+HEADERS = {
+    'Authorization': f'Token {API_TOKEN}',
+    'Content-Type': 'application/json'
+}
+EXCEL_FILE = 'jiras-reassign.xlsx'
+
+# Load Excel
+df = pd.read_excel(EXCEL_FILE)
+
+# Ensure required columns exist
+required_columns = {'id', 'lead'}
+if not required_columns.issubset(df.columns):
+    raise ValueError(f"Excel must contain the following columns: {required_columns}")
+
+# Iterate through each row and update lead
+for _, row in df.iterrows():
+    test_id = row['id']
+    new_lead = row['lead']
+
+    # GET current test details
+    get_response = requests.get(f"{BASE_URL}{test_id}/", headers=HEADERS)
+
+    if get_response.status_code != 200:
+        print(f"Failed to fetch test id: {test_id} - {get_response.status_code}")
+        continue
+
+    test_data = get_response.json()
+
+    # Update required fields
+    payload = {
+        "title": test_data['title'],
+        "target_start": test_data['target_start'],
+        "target_end": test_data['target_end'],
+        "lead": int(new_lead),
+        "engagement": test_data['engagement']
+    }
+
+    # PUT updated test
+    put_response = requests.put(f"{BASE_URL}{test_id}/", headers=HEADERS, json=payload)
+
+    if put_response.status_code == 200:
+        print(f"Test id: {test_id} is updated with lead: {new_lead}")
+    else:
+        print(f"Failed to update test id: {test_id} - {put_response.status_code} - {put_response.text}")
+
+    time.sleep(0.1)  # slight delay to avoid overwhelming the API
