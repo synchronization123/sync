@@ -1,0 +1,46 @@
+import requests
+import pandas as pd
+
+# Constants
+API_URL = "https://demo.defectdojo.org/api/v2/engagements"
+API_TOKEN = "djjddnndkkd"
+HEADERS = {
+    "Authorization": f"Token {API_TOKEN}",
+    "Content-Type": "application/json"
+}
+
+# Load Excel
+df = pd.read_excel("patches-reassign.xlsx", usecols=["id", "lead"])
+
+# Iterate through each row
+for index, row in df.iterrows():
+    engagement_id = row["id"]
+    new_lead = row["lead"]
+
+    # GET current engagement data
+    get_url = f"{API_URL}/{engagement_id}/"
+    get_resp = requests.get(get_url, headers=HEADERS)
+
+    if get_resp.status_code != 200:
+        print(f"Failed to fetch engagement id: {engagement_id}")
+        continue
+
+    engagement_data = get_resp.json()
+
+    # Update only the required fields
+    updated_data = {
+        "id": engagement_id,
+        "name": engagement_data["name"],
+        "target_start": engagement_data["target_start"],
+        "target_end": engagement_data["target_end"],
+        "lead": new_lead,
+        "product": engagement_data["product"]
+    }
+
+    # PUT update
+    put_resp = requests.put(get_url, headers=HEADERS, json=updated_data)
+
+    if put_resp.status_code in [200, 204]:
+        print(f"Engagement id: {engagement_id} is updated with lead: {new_lead}")
+    else:
+        print(f"Failed to update engagement id: {engagement_id}")
