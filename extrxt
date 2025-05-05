@@ -1,0 +1,36 @@
+import os
+import re
+import PyPDF2
+from openpyxl import Workbook
+
+def extract_answer_from_pdf(pdf_path):
+    with open(pdf_path, 'rb') as file:
+        reader = PyPDF2.PdfReader(file)
+        full_text = ''
+        for page in reader.pages:
+            full_text += page.extract_text() + '\n'
+
+        # Normalize text and search for point 5
+        match = re.search(r'5\.\s*What technology stack is used in the project\?\s*(.*?)(\n\d+\.|\Z)', full_text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return 'Not Found'
+
+def process_pdfs_in_folder(folder_path, output_excel):
+    wb = Workbook()
+    ws = wb.active
+    ws.append(['PDF File Name', 'Answer to Point 5'])
+
+    for file in os.listdir(folder_path):
+        if file.lower().endswith('.pdf'):
+            filepath = os.path.join(folder_path, file)
+            answer = extract_answer_from_pdf(filepath)
+            ws.append([os.path.splitext(file)[0], answer])
+
+    wb.save(output_excel)
+    print(f"Data saved to {output_excel}")
+
+# Example usage
+pdf_folder = 'path_to_your_pdf_folder'  # Replace with the folder path
+output_file = 'output.xlsx'
+process_pdfs_in_folder(pdf_folder, output_file)
