@@ -43,7 +43,7 @@
 </head>
 <body>
     <div class="container">
-        <h1 class="text-center mb-4">EHR Threat Modeling Utility</h1>
+        <h1 class="text-center mb-4_;">EHR Threat Modeling Utility</h1>
         <div class="card p-4 mb-4">
             <h5>Enter EHR User Stories</h5>
             <textarea class="form-control mb-3" id="userStories" placeholder="Enter user stories, one per line, e.g., As a provider, I want to prescribe medications to manage patient care or As a nurse I need the ability to document clinical notes"></textarea>
@@ -93,7 +93,7 @@
                     return '';
                 },
                 Tampering: (action) => {
-                    if (action.includes('document') || action.includes('prescribe') || action.includes('reconcile') || action.includes('submit') 或 action.includes('filter')) {
+                    if (action.includes('document') || action.includes('prescribe') || action.includes('reconcile') || action.includes('submit') || action.includes('filter')) {
                         return 'Alteration of clinical data or claims, compromising patient safety or billing integrity';
                     }
                     return '';
@@ -116,7 +116,7 @@
                     }
                     return '';
                 },
-                'Elevation of Privileges': (action) => {
+                'Elevation of Privilege': (action) => {
                     if (action.includes('approve') || action.includes('configure') || action.includes('audit') || action.includes('filter')) {
                         return 'Unauthorized access to administrative functions, compromising system integrity';
                     }
@@ -196,7 +196,7 @@
                     <td>${threats.Repudiation}</td>
                     <td>${threats['Information Disclosure']}</td>
                     <td>${threats['Denial of Service']}</td>
-                    <td>${threats['Elevation of Privileges']}</td>
+                    <td>${threats['Elevation of Privilege']}</td>
                 `;
                 tableBody.appendChild(row);
             });
