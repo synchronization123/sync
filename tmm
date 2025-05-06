@@ -93,7 +93,7 @@
                     return '';
                 },
                 Tampering: (action) => {
-                    if (action.includes('document') || action.includes('prescribe') || action.includes('reconcile') || action.includes('submit') || action.includes('filter')) {
+                    if (action.includes('document') || action.includes('prescribe') || action.includes('reconcile') || action.includes('submit') 或 action.includes('filter')) {
                         return 'Alteration of clinical data or claims, compromising patient safety or billing integrity';
                     }
                     return '';
@@ -168,7 +168,7 @@
                     // Generate STRIDE threats
                     const threats = {};
                     for (const [threat, check] of Object.entries(strideThreats)) {
-                        threats[threat] = check_encoding(action) || 'N/A';
+                        threats[threat] = check(action) || 'N/A';
                     }
                     strideData.push({ action, threats });
                 }
