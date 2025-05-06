@@ -28,7 +28,7 @@
             height: 400px;
             border: 1px solid #dee2e6;
             border-radius: 15px;
-            background-color: #fff;
+            achtergrond-color: #fff;
         }
         .table th, .table td {
             vertical-align: middle;
@@ -46,7 +46,7 @@
         <h1 class="text-center mb-4">Threat Modeling Utility</h1>
         <div class="card p-4 mb-4">
             <h5>Enter User Stories</h5>
-            <textarea class="form-control mb-3" id="userStories" placeholder="Enter user stories, one per line, e.g., As a customer, I want to log in to access my account"></textarea>
+            <textarea class="form-control mb-3" id="userStories" placeholder="Enter user stories, one per line, e.g., As a customer, I want to log in to access my account or As an administrator I need the ability to filter by user areas"></textarea>
             <button class="btn btn-primary" onclick="generateDiagram()">Generate Diagram & STRIDE Table</button>
         </div>
         <div class="card p-4 mb-4">
@@ -87,21 +87,34 @@
             // STRIDE threat definitions
             const strideThreats = {
                 Spoofing: (action) => action.includes('log in') || action.includes('reset') ? 'Unauthorized access via fake credentials' : '',
-                Tampering: (action) => action.includes('place') || action.includes('update') || action.includes('upload') ? 'Data modification during submission' : '',
+                Tampering: (action) => action.includes('place') || action.includes('update') || action.includes('upload') || action.includes('filter') ? 'Data modification during submission' : '',
                 Repudiation: (action) => action.includes('place') || action.includes('approve') || action.includes('process') ? 'Denying performed actions' : '',
-                'Information Disclosure': (action) => action.includes('view') || action.includes('search') ? 'Exposure of sensitive data' : '',
-                'Denial of Service': (action) => action.includes('log in') || action.includes('process') || action.includes('search') ? 'Service disruption' : '',
-                'Elevation of Privileges': (action) => action.includes('approve') || action.includes('update') ? 'Unauthorized access to privileged functions' : ''
+                'Information Disclosure': (action) => action.includes('view') || action.includes('search') || action.includes('filter') ? 'Exposure of sensitive data' : '',
+                'Denial of Service': (action) => action.includes('log in') || action.includes('process') || action.includes('search') || action.includes('filter') ? 'Service disruption' : '',
+                'Elevation of Privileges': (action) => action.includes('approve') || action.includes('update') || action.includes('filter') ? 'Unauthorized access to privileged functions' : ''
             };
 
             // Parse user stories
             userStories.forEach((story, index) => {
-                const match = story.match(/As a ([^,]+), I (?:want to |need to |can )([^ to]+).*to (.+)/);
-                if (match) {
-                    const actor = match[1].trim();
-                    const action = match[2].trim();
-                    const purpose = match[3].trim();
+                let actor, action, purpose;
 
+                // Try parsing format 1: "As a [actor], I (want to|need to|can) [action] to [purpose]"
+                let match = story.match(/As a ([^,]+), I (?:want to|need to|can) ([^ ]+(?: [^ ]+)*) to (.+)/);
+                if (match) {
+                    actor = match[1].trim();
+                    action = match[2].trim();
+                    purpose = match[3].trim();
+                } else {
+                    // Try parsing format 2: "As an [actor] I need the ability to [action] [object/purpose]"
+                    match = story.match(/As an ([^ ]+(?: [^ ]+)*) I need the ability to ([^ ]+(?: [^ ]+)*) (.+)/);
+                    if (match) {
+                        actor = match[1].trim();
+                        action = match[2].trim();
+                        purpose = match[3].trim();
+                    }
+                }
+
+                if (actor && action && purpose) {
                     // Add actor node
                     if (!nodeMap.has(actor)) {
                         nodeMap.set(actor, nodes.length);
