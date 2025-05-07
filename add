@@ -215,6 +215,33 @@
             height: 40px;
             animation: spin 1s linear infinite;
         }
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            padding: 10px 20px;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 0.9rem;
+            max-width: 300px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            animation: toastFadeIn 0.3s ease, toastFadeOut 0.3s ease 4.7s;
+        }
+        .toast.success {
+            background: linear-gradient(45deg, #2ecc71, #27ae60);
+        }
+        .toast.error {
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+        }
+        .toast.warning {
+            background: linear-gradient(45deg, #f1c40f, #e67e22);
+        }
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
@@ -226,6 +253,14 @@
         @keyframes slideIn {
             from { transform: translateY(-20px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes toastFadeIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes toastFadeOut {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(20px); }
         }
         @media (max-width: 768px) {
             .filters {
@@ -247,6 +282,15 @@
             .action-cell {
                 flex-direction: column;
                 gap: 5px;
+            }
+            .toast-container {
+                top: 10px;
+                right: 10px;
+                left: 10px;
+                align-items: center;
+            }
+            .toast {
+                max-width: 90%;
             }
         }
     </style>
@@ -373,6 +417,8 @@
         <div class="loader"></div>
     </div>
 
+    <div id="toast-container" class="toast-container"></div>
+
     <script>
         const engagementId = 23;
         const pageSize = 20;
@@ -382,6 +428,21 @@
         let products = [];
         let editingTestId = null;
         const excludedProductNames = ['crm', 'drm', 'cvv'];
+
+        // Toast notification function
+        function showToast(message, type = 'success') {
+            const toastContainer = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            toastContainer.appendChild(toast);
+
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                toast.style.animation = 'toastFadeOut 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 4700);
+        }
 
         // Fetch CSRF token dynamically from /api/key-v2
         async function getCsrfToken() {
@@ -403,6 +464,7 @@
                 return input.value;
             } catch (error) {
                 console.error('CSRF Token Fetch Error:', error);
+                showToast('Failed to load CSRF token. Please ensure you are logged in and try again.', 'error');
                 throw error;
             }
         }
@@ -413,7 +475,7 @@
                 window.csrfToken = await getCsrfToken();
                 init();
             } catch (error) {
-                alert('Failed to load CSRF token. Please ensure you are logged in and try again.');
+                // Error already shown via toast
             }
         });
 
@@ -436,7 +498,7 @@
                 return options.method === 'DELETE' ? response : await response.json();
             } catch (error) {
                 console.error('Fetch error:', error);
-                alert('An error occurred while fetching data: ' + error.message);
+                showToast('An error occurred while fetching data: ' + error.message, 'error');
                 return null;
             } finally {
                 hideLoader();
@@ -685,10 +747,25 @@
 
             if (!productId) {
                 document.getElementById('modal-product-error').textContent = 'Product is required';
+                showToast('Product is required', 'error');
                 valid = false;
             }
             if (!title) {
                 document.getElementById('modal-title-error').textContent = 'Product Name is required';
+                showToast('Product Name is required', 'error');
+                valid = false;
+            }
+
+            // Check for duplicate title (case-insensitive)
+            const titleLower = title.toLowerCase();
+            const isDuplicate = allTests.some(test => 
+                test.title && 
+                test.title.toLowerCase() === titleLower && 
+                (!editingTestId || test.id !== editingTestId)
+            );
+            if (isDuplicate) {
+                document.getElementById('modal-title-error').textContent = 'A test with this title already exists';
+                showToast('A test with this title already exists', 'error');
                 valid = false;
             }
 
@@ -725,11 +802,11 @@
             }
 
             if (response) {
-                alert(editingTestId ? 'Test updated successfully!' : 'Test added successfully!');
+                showToast(editingTestId ? 'Test updated successfully!' : 'Test added successfully!', 'success');
                 closeModal();
                 loadTests();
             } else {
-                alert(editingTestId ? 'Failed to update test.' : 'Failed to add test.');
+                showToast(editingTestId ? 'Failed to update test.' : 'Failed to add test.', 'error');
             }
         }
 
@@ -741,10 +818,10 @@
             });
 
             if (response) {
-                alert('Test deleted successfully!');
+                showToast('Test deleted successfully!', 'success');
                 loadTests();
             } else {
-                alert('Failed to delete test.');
+                showToast('Failed to delete test.', 'error');
             }
         }
 
