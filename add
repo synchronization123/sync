@@ -96,6 +96,14 @@
         .edit-button:hover {
             background: linear-gradient(45deg, #e67e22, #f1c40f);
         }
+        .delete-button {
+            padding: 8px 14px;
+            font-size: 0.85rem;
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+        }
+        .delete-button:hover {
+            background: linear-gradient(45deg, #c0392b, #e74c3c);
+        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -125,6 +133,10 @@
         }
         td {
             border-bottom: 1px solid #dfe6e9;
+        }
+        .action-cell {
+            display: flex;
+            gap: 10px;
         }
         .pagination {
             margin-top: 20px;
@@ -231,6 +243,10 @@
             }
             .modal-content {
                 width: 90%;
+            }
+            .action-cell {
+                flex-direction: column;
+                gap: 5px;
             }
         }
     </style>
@@ -340,7 +356,7 @@
             </div>
             <div class="form-group">
                 <label for="modal-branch-tag">Jira Project, Component</label>
-                <input type="text" id="modal-branch-tag" placeholder="Project,Component">
+                <input type="text" id="modal-branch-tag" placeholder="Project,Component1,Component2">
             </div>
             <div class="form-group">
                 <button id="modal-submit" onclick="submitTest()">Submit</button>
@@ -412,7 +428,7 @@
                     credentials: 'include',
                 });
                 if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-                return await response.json();
+                return options.method === 'DELETE' ? response : await response.json();
             } catch (error) {
                 console.error('Fetch error:', error);
                 alert('An error occurred while fetching data: ' + error.message);
@@ -442,7 +458,7 @@
 
         function updateProductDropdowns() {
             // Get products already used in tests under this engagement
-            const usedProductIds = new Set(allTests.map(test => test.product));
+            const usedProductIds = new Set(allTests.map(test => test.product).filter(id => id));
             console.log('Used Product IDs:', [...usedProductIds]); // Debugging
             const availableProducts = products.filter(product => !usedProductIds.has(product.id));
 
@@ -488,10 +504,10 @@
                 const matchesSonar = !sonarFilter || test.version === sonarFilter;
                 const matchesContrast = !contrastFilter || test.build_id === contrastFilter;
                 const matchesDT = !dtFilter || test.commit_hash === dtFilter;
-                const [jiraProject, jiraComponent] = test.branch_tag ? test.branch_tag.split(',').map(s => s.trim()) : ['', ''];
+                const [jiraProject, ...jiraComponents] = test.branch_tag ? test.branch_tag.split(',').map(s => s.trim()) : ['', ''];
                 const matchesJira = !jiraFilter || 
                     (jiraProject && jiraProject.toLowerCase().includes(jiraFilter)) || 
-                    (jiraComponent && jiraComponent.toLowerCase().includes(jiraFilter));
+                    (jiraComponents.some(comp => comp && comp.toLowerCase().includes(jiraFilter)));
 
                 return matchesProduct && matchesDescription && matchesSonar && matchesContrast && matchesDT && matchesJira;
             });
@@ -509,7 +525,8 @@
             const paginatedTests = filteredTests.slice(start, end);
 
             paginatedTests.forEach(test => {
-                const [jiraProject, jiraComponent] = test.branch_tag ? test.branch_tag.split(',').map(s => s.trim()) : ['', ''];
+                const [jiraProject, ...jiraComponents] = test.branch_tag ? test.branch_tag.split(',').map(s => s.trim()) : ['', ''];
+                const componentsHtml = jiraComponents.filter(comp => comp).join('<br>');
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${test.title || ''}</td>
@@ -518,8 +535,11 @@
                     <td>${test.build_id || ''}</td>
                     <td>${test.commit_hash || ''}</td>
                     <td>${jiraProject || ''}</td>
-                    <td>${jiraComponent || ''}</td>
-                    <td><button class="edit-button" onclick="openModal(${test.id})">Edit</button></td>
+                    <td>${componentsHtml || ''}</td>
+                    <td class="action-cell">
+                        <button class="edit-button" onclick="openModal(${test.id})">Edit</button>
+                        <button class="delete-button" onclick="deleteTest(${test.id})">Delete</button>
+                    </td>
                 `;
                 tbody.appendChild(row);
             });
@@ -680,6 +700,21 @@
                 loadTests();
             } else {
                 alert(editingTestId ? 'Failed to update test.' : 'Failed to add test.');
+            }
+        }
+
+        async function deleteTest(testId) {
+            if (!confirm('Are you sure you want to delete this test?')) return;
+
+            const response = await fetchWithAuth(`https://demo.defectdojo.org/api/v2/tests/${testId}/`, {
+                method: 'DELETE',
+            });
+
+            if (response) {
+                alert('Test deleted successfully!');
+                loadTests();
+            } else {
+                alert('Failed to delete test.');
             }
         }
 
