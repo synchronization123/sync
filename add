@@ -1,37 +1,888 @@
-function updateTable() {
-    const tbody = document.getElementById('tests-body');
-    tbody.innerHTML = '';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DefectDojo Test Management</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 2.2rem;
+            font-weight: 700;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+        }
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .filter {
+            flex: 1;
+            min-width: 200px;
+        }
+        .filter label {
+            display: block;
+            font-size: 0.9rem;
+            color: #34495e;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        select, input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #dfe6e9;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        select:focus, input:focus, textarea:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+            outline: none;
+        }
+        select:disabled {
+            background: #f8f9fa;
+            cursor: not-allowed;
+        }
+        button {
+            padding: 12px 24px;
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.3s;
+        }
+        button:hover {
+            background: linear-gradient(45deg, #2980b9, #3498db);
+            transform: translateY(-2px);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .edit-button {
+            padding: 8px 14px;
+            font-size: 0.85rem;
+            background: linear-gradient(45deg, #f1c40f, #e67e22);
+        }
+        .edit-button:hover {
+            background: linear-gradient(45deg, #e67e22, #f1c40f);
+        }
+        .delete-button {
+            padding: 8px 14px;
+            font-size: 0.85rem;
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+        }
+        .delete-button:hover {
+            background: linear-gradient(45deg, #c0392b, #e74c3c);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            font-size: 0.95rem;
+        }
+        th {
+            background: #34495e;
+            color: #fff;
+            font-weight: 500;
+            position: sticky;
+            top: 0;
+        }
+        tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        tr:hover {
+            background: #e8f4f8;
+            transition: background 0.2s;
+        }
+        td {
+            border-bottom: 1px solid #dfe6e9;
+        }
+        .action-cell {
+            display: flex;
+            gap: 10px;
+        }
+        .pagination {
+            margin-top: 20px;
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+        }
+        .pagination button {
+            padding: 8px 14px;
+            font-size: 0.9rem;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn 0.3s ease;
+        }
+        .modal-content {
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            width: 20cm;
+            height: 15cm;
+            max-width: 90%;
+            overflow-y: auto;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+            transform: translateY(-20px);
+            animation: slideIn 0.3s ease forwards;
+        }
+        .modal-content h2 {
+            margin: 0 0 20px;
+            color: #2c3e50;
+            font-size: 1.5rem;
+        }
+        .modal-content p {
+            font-size: 0.95rem;
+            color: #34495e;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 0.9rem;
+            color: #34495e;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        .form-group input[readonly] {
+            background: #f8f9fa;
+            cursor: not-allowed;
+        }
+        .form-group-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: flex-end;
+        }
+        .error {
+            color: #e74c3c;
+            font-size: 0.85rem;
+            margin-top: 5px;
+        }
+        .loader-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .loader {
+            border: 5px solid #dfe6e9;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            padding: 10px 20px;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 0.9rem;
+            max-width: 300px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            animation: toastFadeIn 0.3s ease, toastFadeOut 0.3s ease 4.7s;
+        }
+        .toast.success {
+            background: linear-gradient(45deg, #2ecc71, #27ae60);
+        }
+        .toast.error {
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+        }
+        .toast.warning {
+            background: linear-gradient(45deg, #f1c40f, #e67e22);
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes toastFadeIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes toastFadeOut {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(20px); }
+        }
+        @media (max-width: 768px) {
+            .filters {
+                flex-direction: column;
+            }
+            .filter {
+                min-width: 100%;
+            }
+            .actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .actions button {
+                width: 100%;
+            }
+            .modal-content {
+                width: 90%;
+            }
+            .action-cell {
+                flex-direction: column;
+                gap: 5px;
+            }
+            .form-group-buttons {
+                flex-direction: column;
+                gap: 10px;
+            }
+            .form-group-buttons button {
+                width: 100%;
+            }
+            .toast-container {
+                top: 10px;
+                right: 10px;
+                left: 10px;
+                align-items: center;
+            }
+            .toast {
+                max-width: 90%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>DefectDojo Test Management</h1>
+    <div class="container">
+        <div class="actions">
+            <button onclick="openModal()">New Test</button>
+            <button onclick="loadTests()">Refresh</button>
+        </div>
+        <div class="filters">
+            <div class="filter">
+                <label>Test Title</label>
+                <input type="text" id="filter-title" oninput="applyFilters()" placeholder="Search title...">
+            </div>
+            <div class="filter">
+                <label>Description</label>
+                <input type="text" id="filter-description" oninput="applyFilters()" placeholder="Search description...">
+            </div>
+            <div class="filter">
+                <label>Sonar</label>
+                <select id="filter-sonar" onchange="applyFilters()">
+                    <option value="">All</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                </select>
+            </div>
+            <div class="filter">
+                <label>Contrast</label>
+                <select id="filter-contrast" onchange="applyFilters()">
+                    <option value="">All</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                </select>
+            </div>
+            <div class="filter">
+                <label>DT</label>
+                <select id="filter-dt" onchange="applyFilters()">
+                    <option value="">All</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                </select>
+            </div>
+            <div class="filter">
+                <label>Jira Project/Components</label>
+                <input type="text" id="filter-jira" oninput="applyFilters()" placeholder="Search Jira...">
+            </div>
+        </div>
+        <table id="tests-table">
+            <thead>
+                <tr>
+                    <th>Product Name</th>
+                    <th>Product Description</th>
+                    <th>Sonar</th>
+                    <th>Contrast</th>
+                    <th>DT</th>
+                    <th>Jira Project</th>
+                    <th>Jira Component</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="tests-body"></tbody>
+        </table>
+        <div class="pagination" id="pagination"></div>
+    </div>
 
-    const start = (currentPage - 1) * pageSize;
-    const end = start + pageSize;
-    const paginatedTests = filteredTests.slice(start, end);
+    <div id="new-test-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="modal-title-text">Add New Test</h2>
+            <div class="form-group">
+                <label for="product-search">Search Product</label>
+                <input type="text" id="product-search" placeholder="Type to search products...">
+            </div>
+            <div class="form-group">
+                <label for="modal-product">Product</label>
+                <select id="modal-product" onchange="setProductName()" required></select>
+                <div id="modal-product-error" class="error"></div>
+            </div>
+            <div class="form-group">
+                <label for="modal-title">Product Name</label>
+                <input type="text" id="modal-title" readonly>
+                <div id="modal-title-error" class="error"></div>
+            </div>
+            <div class="form-group">
+                <label for="modal-description">Product Description</label>
+                <textarea id="modal-description" rows="4" placeholder="Enter description..."></textarea>
+            </div>
+            <div class="form-group">
+                <label for="modal-sonar">Sonar</label>
+                <select id="modal-sonar">
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="modal-contrast">Contrast</label>
+                <select id="modal-contrast">
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="modal-dt">DT</label>
+                <select id="modal-dt">
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="modal-branch-tag">Jira Project, Component</label>
+                <input type="text" id="modal-branch-tag" placeholder="Project,Component1,Component2">
+            </div>
+            <div class="form-group form-group-buttons">
+                <button id="modal-submit" onclick="submitTest()">Submit</button>
+                <button onclick="closeModal()" style="background: linear-gradient(45deg, #e74c3c, #c0392b);">Cancel</button>
+            </div>
+        </div>
+    </div>
 
-    paginatedTests.forEach(test => {
-        const [jiraProject, ...jiraComponents] = test.branch_tag ? test.branch_tag.split(',').map(s => s.trim()) : ['', ''];
-        const componentsHtml = jiraComponents.filter(comp => comp).join('<br>');
-        // Format description as bullet points
-        const descriptionHtml = test.description
-            ? `<ul style="margin: 0; padding-left: 20px;">${test.description
-                  .split('\n')
-                  .map(line => `<li>${line.trim() || '&nbsp;'}</li>`)
-                  .join('')}</ul>`
-            : '';
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${test.title || ''}</td>
-            <td>${descriptionHtml}</td>
-            <td>${test.version || ''}</td>
-            <td>${test.build_id || ''}</td>
-            <td>${test.commit_hash || ''}</td>
-            <td>${jiraProject || ''}</td>
-            <td>${componentsHtml || ''}</td>
-            <td class="action-cell">
-                <button class="edit-button" onclick="openModal(${test.id})">Edit</button>
-                <button class="delete-button" onclick="deleteTest(${test.id})">Delete</button>
-            </td>
-        `;
-        tbody.appendChild(row);
-    });
+    <div id="delete-confirm-modal" class="modal">
+        <div class="modal-content">
+            <h2>Confirm Delete</h2>
+            <p>Are you sure you want to delete this test?</p>
+            <div class="form-group form-group-buttons">
+                <button id="confirm-delete" onclick="confirmDelete()">Delete</button>
+                <button onclick="closeDeleteModal()" style="background: linear-gradient(45deg, #e74c3c, #c0392b);">Cancel</button>
+            </div>
+        </div>
+    </div>
 
-    updatePagination();
-}
+    <div id="loader-overlay" class="loader-overlay">
+        <div class="loader"></div>
+    </div>
+
+    <div id="toast-container" class="toast-container"></div>
+
+    <script>
+        const engagementId = 23;
+        const pageSize = 20;
+        let currentPage = 1;
+        let allTests = [];
+        let filteredTests = [];
+        let products = [];
+        let editingTestId = null;
+        let deletingTestId = null;
+        const excludedProductNames = ['crm', 'drm', 'cvv'];
+
+        // Toast notification function
+        function showToast(message, type = 'success') {
+            const toastContainer = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            toastContainer.appendChild(toast);
+
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                toast.style.animation = 'toastFadeOut 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 4700);
+        }
+
+        // Fetch CSRF token dynamically from /api/key-v2
+        async function getCsrfToken() {
+            try {
+                const response = await fetch('https://demo.defectdojo.org/api/key-v2', {
+                    method: 'GET',
+                    credentials: 'include',
+                });
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch CSRF token page: ${response.status}`);
+                }
+                const text = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
+                const input = doc.querySelector('input[name="csrfmiddlewaretoken"]');
+                if (!input || !input.value) {
+                    throw new Error('CSRF token not found in /api/key-v2 page');
+                }
+                return input.value;
+            } catch (error) {
+                console.error('CSRF Token Fetch Error:', error);
+                showToast('Failed to load CSRF token. Please ensure you are logged in and try again.', 'error');
+                throw error;
+            }
+        }
+
+        // Initialize CSRF token on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                window.csrfToken = await getCsrfToken();
+                init();
+            } catch (error) {
+                // Error already shown via toast
+            }
+        });
+
+        async function fetchWithAuth(url, options = {}) {
+            if (!window.csrfToken) {
+                throw new Error('CSRF token is not available');
+            }
+            showLoader();
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers: {
+                        ...options.headers,
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': window.csrfToken,
+                    },
+                    credentials: 'include',
+                });
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                return options.method === 'DELETE' ? response : await response.json();
+            } catch (error) {
+                console.error('Fetch error:', error);
+                showToast('An error occurred while fetching data: ' + error.message, 'error');
+                return null;
+            } finally {
+                hideLoader();
+            }
+        }
+
+        async function loadProducts() {
+            const data = await fetchWithAuth('https://demo.defectdojo.org/api/v2/products/');
+            if (data && data.results) {
+                products = data.results;
+                updateProductDropdowns();
+            }
+        }
+
+        async function loadTests() {
+            const data = await fetchWithAuth(`https://demo.defectdojo.org/api/v2/tests/?engagement=${engagementId}`);
+            if (data && data.results) {
+                allTests = data.results.filter(test => test.test_type_name === 'products');
+                filteredTests = [...allTests];
+                updateTable();
+                updateProductDropdowns();
+            }
+        }
+
+        function updateProductDropdowns(searchQuery = '') {
+            // Get products already used in tests under this engagement
+            const usedProductIds = new Set(allTests.map(test => test.product).filter(id => id));
+            console.log('Used Product IDs:', [...usedProductIds]);
+
+            // Filter products: exclude used products, CRM/DRM/CVV, and apply search query
+            const availableProducts = products.filter(product => 
+                !usedProductIds.has(product.id) &&
+                !excludedProductNames.includes(product.name.toLowerCase()) &&
+                (searchQuery === '' || product.name.toLowerCase().includes(searchQuery.toLowerCase()))
+            );
+
+            console.log('Excluded Products (CRM/DRM/CVV):', products.filter(p => excludedProductNames.includes(p.name.toLowerCase())).map(p => p.name));
+            console.log('Available Products for Modal:', availableProducts.map(p => p.name));
+
+            const modalProduct = document.getElementById('modal-product');
+            modalProduct.innerHTML = '<option value="">Select Product</option>';
+
+            availableProducts.forEach(product => {
+                const option = document.createElement('option');
+                option.value = product.id;
+                option.textContent = product.name;
+                modalProduct.appendChild(option);
+            });
+        }
+
+        function setProductName() {
+            const productId = document.getElementById('modal-product').value;
+            const product = products.find(p => p.id == productId);
+            const titleInput = document.getElementById('modal-title');
+            titleInput.value = product ? product.name : '';
+        }
+
+        function applyFilters() {
+            const titleFilter = document.getElementById('filter-title').value.toLowerCase();
+            const descriptionFilter = document.getElementById('filter-description').value.toLowerCase();
+            const sonarFilter = document.getElementById('filter-sonar').value;
+            const contrastFilter = document.getElementById('filter-contrast').value;
+            const dtFilter = document.getElementById('filter-dt').value;
+            const jiraFilter = document.getElementById('filter-jira').value.toLowerCase();
+
+            filteredTests = allTests.filter(test => {
+                const matchesTitle = !titleFilter || (test.title && test.title.toLowerCase().includes(titleFilter));
+                const matchesDescription = !descriptionFilter || (test.description && test.description.toLowerCase().includes(descriptionFilter));
+                const matchesSonar = !sonarFilter || test.version === sonarFilter;
+                const matchesContrast = !contrastFilter || test.build_id === contrastFilter;
+                const matchesDT = !dtFilter || test.commit_hash === dtFilter;
+                const [jiraProject, ...jiraComponents] = test.branch_tag ? test.branch_tag.split(',').map(s => s.trim()) : ['', ''];
+                const matchesJira = !jiraFilter || 
+                    (jiraProject && jiraProject.toLowerCase().includes(jiraFilter)) || 
+                    (jiraComponents.some(comp => comp && comp.toLowerCase().includes(jiraFilter)));
+
+                return matchesTitle && matchesDescription && matchesSonar && matchesContrast && matchesDT && matchesJira;
+            });
+
+            currentPage = 1;
+            updateTable();
+        }
+
+        function updateTable() {
+            const tbody = document.getElementById('tests-body');
+            tbody.innerHTML = '';
+
+            const start = (currentPage - 1) * pageSize;
+            const end = start + pageSize;
+            const paginatedTests = filteredTests.slice(start, end);
+
+            paginatedTests.forEach(test => {
+                const [jiraProject, ...jiraComponents] = test.branch_tag ? test.branch_tag.split(',').map(s => s.trim()) : ['', ''];
+                const componentsHtml = jiraComponents.filter(comp => comp).join('<br>');
+                // Format description as bullet points with bold text before colon
+                const descriptionHtml = test.description
+                    ? `<ul style="margin: 0; padding-left: 20px;">${test.description
+                          .split('\n')
+                          .map(line => {
+                              const trimmedLine = line.trim();
+                              if (!trimmedLine) return `<li> </li>`;
+                              // Bold text before the first colon
+                              return `<li>${trimmedLine.replace(/([^:]+)(?=:)/, '<strong>$1</strong>')}</li>`;
+                          })
+                          .join('')}</ul>`
+                    : '';
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${test.title || ''}</td>
+                    <td>${descriptionHtml}</td>
+                    <td>${test.version || ''}</td>
+                    <td>${test.build_id || ''}</td>
+                    <td>${test.commit_hash || ''}</td>
+                    <td>${jiraProject || ''}</td>
+                    <td>${componentsHtml || ''}</td>
+                    <td class="action-cell">
+                        <button class="edit-button" onclick="openModal(${test.id})">Edit</button>
+                        <button class="delete-button" onclick="deleteTest(${test.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            updatePagination();
+        }
+
+        function updatePagination() {
+            const totalPages = Math.ceil(filteredTests.length / pageSize);
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+
+            if (totalPages <= 1) return;
+
+            const prevButton = document.createElement('button');
+            prevButton.textContent = 'Previous';
+            prevButton.disabled = currentPage === 1;
+            prevButton.onclick = () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    updateTable();
+                }
+            };
+            pagination.appendChild(prevButton);
+
+            for (let i = 1; i <= totalPages; i++) {
+                const button = document.createElement('button');
+                button.textContent = i;
+                button.disabled = i === currentPage;
+                button.onclick = () => {
+                    currentPage = i;
+                    updateTable();
+                };
+                pagination.appendChild(button);
+            }
+
+            const nextButton = document.createElement('button');
+            nextButton.textContent = 'Next';
+            nextButton.disabled = currentPage === totalPages;
+            nextButton.onclick = () => {
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    updateTable();
+                }
+            };
+            pagination.appendChild(nextButton);
+        }
+
+        function openModal(testId = null) {
+            editingTestId = testId;
+            const modalTitle = document.getElementById('modal-title-text');
+            const submitButton = document.getElementById('modal-submit');
+            const modalProduct = document.getElementById('modal-product');
+            const productSearch = document.getElementById('product-search');
+
+            // Clear search and update dropdown
+            productSearch.value = '';
+            updateProductDropdowns();
+
+            // Toggle visibility of Search Product and Product fields
+            document.getElementById('product-search').parentElement.style.display = testId ? 'none' : 'block';
+            document.getElementById('modal-product').parentElement.style.display = testId ? 'none' : 'block';
+
+            // Toggle required attribute for Product field
+            modalProduct.required = !testId;
+
+            if (testId) {
+                const test = allTests.find(t => t.id === testId);
+                if (!test) return;
+
+                modalTitle.textContent = 'Edit Test';
+                submitButton.textContent = 'Update';
+                modalProduct.value = test.product;
+                document.getElementById('modal-title').value = test.title || '';
+                document.getElementById('modal-description').value = test.description || '';
+                document.getElementById('modal-sonar').value = test.version || 'Yes';
+                document.getElementById('modal-contrast').value = test.build_id || 'Yes';
+                document.getElementById('modal-dt').value = test.commit_hash || 'Yes';
+                document.getElementById('modal-branch-tag').value = test.branch_tag || '';
+            } else {
+                modalTitle.textContent = 'Add New Test';
+                submitButton.textContent = 'Submit';
+                modalProduct.disabled = false;
+                clearModal();
+            }
+
+            // Add search event listener only for new test modal
+            productSearch.oninput = testId ? null : () => updateProductDropdowns(productSearch.value);
+
+            document.getElementById('new-test-modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('new-test-modal').style.display = 'none';
+            editingTestId = null;
+            clearModal();
+        }
+
+        function clearModal() {
+            document.getElementById('product-search').value = '';
+            document.getElementById('product-search').parentElement.style.display = 'block';
+            document.getElementById('modal-product').value = '';
+            document.getElementById('modal-product').parentElement.style.display = 'block';
+            document.getElementById('modal-product').disabled = false;
+            document.getElementById('modal-product').required = true;
+            document.getElementById('modal-title').value = '';
+            document.getElementById('modal-description').value = '';
+            document.getElementById('modal-sonar').value = 'Yes';
+            document.getElementById('modal-contrast').value = 'Yes';
+            document.getElementById('modal-dt').value = 'Yes';
+            document.getElementById('modal-branch-tag').value = '';
+            clearErrors();
+            updateProductDropdowns(); // Reset dropdown
+        }
+
+        function clearErrors() {
+            document.getElementById('modal-product-error').textContent = '';
+            document.getElementById('modal-title-error').textContent = '';
+        }
+
+        async function submitTest() {
+            const productId = document.getElementById('modal-product').value;
+            const title = document.getElementById('modal-title').value;
+            const description = document.getElementById('modal-description').value;
+            const sonar = document.getElementById('modal-sonar').value;
+            const contrast = document.getElementById('modal-contrast').value;
+            const dt = document.getElementById('modal-dt').value;
+            const branchTag = document.getElementById('modal-branch-tag').value;
+
+            let valid = true;
+            clearErrors();
+
+            // Validate product only for new tests
+            if (!editingTestId && !productId) {
+                document.getElementById('modal-product-error').textContent = 'Product is required';
+                showToast('Product is required', 'error');
+                valid = false;
+            }
+            if (!title) {
+                document.getElementById('modal-title-error').textContent = 'Product Name is required';
+                showToast('Product Name is required', 'error');
+                valid = false;
+            }
+
+            // Check for duplicate title (case-insensitive) only for new tests
+            if (!editingTestId) {
+                const titleLower = title.toLowerCase();
+                const isDuplicate = allTests.some(test => 
+                    test.title && 
+                    test.title.toLowerCase() === titleLower
+                );
+                if (isDuplicate) {
+                    document.getElementById('modal-title-error').textContent = 'A test with this title already exists';
+                    showToast('A test with this title already exists', 'error');
+                    valid = false;
+                }
+            }
+
+            if (!valid) return;
+
+            const testData = {
+                engagement: engagementId,
+                test_type: 208,
+                environment: 6,
+                title,
+                description,
+                target_start: new Date().toISOString().split('T')[0],
+                target_end: new Date().toISOString().split('T')[0],
+                version: sonar,
+                build_id: contrast,
+                commit_hash: dt,
+                branch_tag: branchTag,
+                product: editingTestId ? parseInt(document.getElementById('modal-product').value) : parseInt(productId),
+            };
+
+            let response;
+            if (editingTestId) {
+                // Update existing test (PUT)
+                response = await fetchWithAuth(`https://demo.defectdojo.org/api/v2/tests/${editingTestId}/`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ ...testData, id: editingTestId }),
+                });
+            } else {
+                // Create new test (POST)
+                response = await fetchWithAuth('https://demo.defectdojo.org/api/v2/tests/', {
+                    method: 'POST',
+                    body: JSON.stringify(testData),
+                });
+            }
+
+            if (response) {
+                showToast(editingTestId ? 'Test updated successfully!' : 'Test added successfully!', 'success');
+                closeModal();
+                loadTests();
+            } else {
+                showToast(editingTestId ? 'Failed to update test.' : 'Failed to add test.', 'error');
+            }
+        }
+
+        function deleteTest(testId) {
+            deletingTestId = testId;
+            document.getElementById('delete-confirm-modal').style.display = 'flex';
+        }
+
+        async function confirmDelete() {
+            const testId = deletingTestId;
+            closeDeleteModal();
+            const response = await fetchWithAuth(`https://demo.defectdojo.org/api/v2/tests/${testId}/`, {
+                method: 'DELETE',
+            });
+            if (response) {
+                showToast('Test deleted successfully!', 'success');
+                loadTests();
+            } else {
+                showToast('Failed to delete test.', 'error');
+            }
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('delete-confirm-modal').style.display = 'none';
+            deletingTestId = null;
+        }
+
+        function showLoader() {
+            document.getElementById('loader-overlay').style.display = 'flex';
+        }
+
+        function hideLoader() {
+            document.getElementById('loader-overlay').style.display = 'none';
+        }
+
+        // Initialize
+        async function init() {
+            await loadProducts();
+            await loadTests();
+        }
+    </script>
+</body>
+</html>
