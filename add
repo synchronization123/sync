@@ -320,6 +320,10 @@
         <div class="modal-content">
             <h2 id="modal-title-text">Add New Test</h2>
             <div class="form-group">
+                <label for="product-search">Search Product</label>
+                <input type="text" id="product-search" placeholder="Type to search products...">
+            </div>
+            <div class="form-group">
                 <label for="modal-product">Product</label>
                 <select id="modal-product" onchange="setProductName()" required></select>
                 <div id="modal-product-error" class="error"></div>
@@ -377,6 +381,7 @@
         let filteredTests = [];
         let products = [];
         let editingTestId = null;
+        const excludedProductNames = ['crm', 'drm', 'cvv'];
 
         // Fetch CSRF token dynamically from /api/key-v2
         async function getCsrfToken() {
@@ -456,11 +461,23 @@
             }
         }
 
-        function updateProductDropdowns() {
+        function updateProductDropdowns(searchQuery = '') {
             // Get products already used in tests under this engagement
             const usedProductIds = new Set(allTests.map(test => test.product).filter(id => id));
-            console.log('Used Product IDs:', [...usedProductIds]); // Debugging
-            const availableProducts = products.filter(product => !usedProductIds.has(product.id));
+            console.log('Used Product IDs:', [...usedProductIds]);
+
+            // Filter products: exclude used products, CRM/DRM/CVV, and apply search query
+            const availableProducts = products.filter(product => 
+                !usedProductIds.has(product.id) &&
+                !excludedProductNames.includes(product.name.toLowerCase()) &&
+                (searchQuery === '' || product.name.toLowerCase().includes(searchQuery.toLowerCase()))
+            );
+            const filterProducts = products.filter(product => 
+                !excludedProductNames.includes(product.name.toLowerCase())
+            );
+
+            console.log('Excluded Products (CRM/DRM/CVV):', products.filter(p => excludedProductNames.includes(p.name.toLowerCase())).map(p => p.name));
+            console.log('Available Products for Modal:', availableProducts.map(p => p.name));
 
             const productFilter = document.getElementById('filter-product');
             const modalProduct = document.getElementById('modal-product');
@@ -475,7 +492,7 @@
                 modalProduct.appendChild(option);
             });
 
-            products.forEach(product => {
+            filterProducts.forEach(product => {
                 const option = document.createElement('option');
                 option.value = product.id;
                 option.textContent = product.name;
@@ -593,6 +610,11 @@
             const modalTitle = document.getElementById('modal-title-text');
             const submitButton = document.getElementById('modal-submit');
             const modalProduct = document.getElementById('modal-product');
+            const productSearch = document.getElementById('product-search');
+
+            // Clear search and update dropdown
+            productSearch.value = '';
+            updateProductDropdowns();
 
             if (testId) {
                 const test = allTests.find(t => t.id === testId);
@@ -608,12 +630,17 @@
                 document.getElementById('modal-contrast').value = test.build_id || 'Yes';
                 document.getElementById('modal-dt').value = test.commit_hash || 'Yes';
                 document.getElementById('modal-branch-tag').value = test.branch_tag || '';
+                productSearch.disabled = true;
             } else {
                 modalTitle.textContent = 'Add New Test';
                 submitButton.textContent = 'Submit';
                 modalProduct.disabled = false;
+                productSearch.disabled = false;
                 clearModal();
             }
+
+            // Add search event listener
+            productSearch.oninput = () => updateProductDropdowns(productSearch.value);
 
             document.getElementById('new-test-modal').style.display = 'flex';
         }
@@ -625,6 +652,8 @@
         }
 
         function clearModal() {
+            document.getElementById('product-search').value = '';
+            document.getElementById('product-search').disabled = false;
             document.getElementById('modal-product').value = '';
             document.getElementById('modal-product').disabled = false;
             document.getElementById('modal-title').value = '';
@@ -634,6 +663,7 @@
             document.getElementById('modal-dt').value = 'Yes';
             document.getElementById('modal-branch-tag').value = '';
             clearErrors();
+            updateProductDropdowns(); // Reset dropdown
         }
 
         function clearErrors() {
