@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="DYNAMIC_CSRF_TOKEN_HERE"> <!-- Replace with actual token in production -->
+    <title>DefectDojo Test Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .filters, .actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .filter {
+            flex: 1;
+            min-width: 200px;
+        }
+        select, input, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f9fa;
+        }
+        .pagination {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .pagination button {
+            margin: 0 5px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            width: 400px;
+            max-width: 90%;
+        }
+        .modal-content h2 {
+            margin-top: 0;
+        }
+        .modal-content .form-group {
+            margin-bottom: 15px;
+        }
+        .modal-content label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .error {
+            color: red;
+            font-size: 0.9em;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <h1>DefectDojo Test Management</h1>
+    <div class="container">
+        <div class="actions">
+            <button onclick="openModal()">New</button>
+            <button onclick="loadTests()">Refresh</button>
+        </div>
+        <div class="filters">
+            <div class="filter">
+                <label>Product</label>
+                <select id="filter-product" onchange="applyFilters()">
+                    <option value="">All</option>
+                </select>
+            </div>
+            <div class="filter">
+                <label>Description</label>
+                <input type="text" id="filter-description" oninput="applyFilters()">
+            </div>
+            <div class="filter">
+                <label>Sonar</label>
+                <select id="filter-sonar" onchange="applyFilters()">
+                    <option value="">All</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                </select>
+            </div>
+            <div class="filter">
+                <label>Contrast</label>
+                <select id="filter-contrast" onchange="applyFilters()">
+                    <option value="">All</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                </select>
+            </div>
+            <div class="filter">
+                <label>DT</label>
+                <select id="filter-dt" onchange="applyFilters()">
+                    <option value="">All</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                </select>
+            </div>
+            <div class="filter">
+                <label>Jira Project/Components</label>
+                <input type="text" id="filter-jira" oninput="applyFilters()">
+            </div>
+        </div>
+        <div id="loader" class="loader" style="display: none;"></div>
+        <table id="tests-table">
+            <thead>
+                <tr>
+                    <th>Product Name</th>
+                    <th>Product Description</th>
+                    <th>Sonar</th>
+                    <th>Contrast</th>
+                    <th>DT</th>
+                    <th>Jira Project</th>
+                    <th>Jira Component</th>
+                </tr>
+            </thead>
+            <tbody id="tests-body"></tbody>
+        </table>
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <div id="new-test-modal" class="modal">
+        <div class="modal-content">
+            <h2>Add New Test</h2>
+            <div class="form-group">
+                <label for="modal-product">Product</label>
+                <select id="modal-product" required></select>
+                <div id="modal-product-error" class="error"></div>
+            </div>
+            <div class="form-group">
+                <label for="modal-title">Product Name</label>
+                <input type="text" id="modal-title" required>
+                <div id="modal-title-error" class="error"></div>
+            </div>
+            <div class="form-group">
+                <label for="modal-description">Product Description</label>
+                <textarea id="modal-description" rows="4"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="modal-sonar">Sonar</label>
+                <select id="modal-sonar">
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="modal-contrast">Contrast</label>
+                <select id="modal-contrast">
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="modal-dt">DT</label>
+                <select id="modal-dt">
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="modal-branch-tag">Jira Project, Component</label>
+                <input type="text" id="modal-branch-tag" placeholder="Project,Component">
+            </div>
+            <div class="form-group">
+                <button onclick="submitTest()">Submit</button>
+                <button onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const engagementId = 23;
+        const pageSize = 20;
+        let currentPage = 1;
+        let allTests = [];
+        let filteredTests = [];
+        let products = [];
+
+        // Fetch CSRF token dynamically
+        function getCsrfToken() {
+            const meta = document.querySelector('meta[name="csrf-token"]');
+            if (!meta) {
+                throw new Error('CSRF token not found in page');
+            }
+            return meta.getAttribute('content');
+        }
+
+        // Initialize CSRF token on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                window.csrfToken = getCsrfToken();
+                init();
+            } catch (error) {
+                console.error('CSRF Token Error:', error);
+                alert('Failed to load CSRF token. Please refresh the page or check your session.');
+            }
+        });
+
+        async function fetchWithAuth(url, options = {}) {
+            if (!window.csrfToken) {
+                throw new Error('CSRF token is not available');
+            }
+            showLoader();
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers: {
+                        ...options.headers,
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': window.csrfToken,
+                    },
+                    credentials: 'include',
+                });
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                return await response.json();
+            } catch (error) {
+                console.error('Fetch error:', error);
+                alert('An error occurred while fetching data: ' + error.message);
+                return null;
+            } finally {
+                hideLoader();
+            }
+        }
+
+        async function loadProducts() {
+            const data = await fetchWithAuth('https://demo.defectdojo.org/api/v2/products/');
+            if (data && data.results) {
+                products = data.results;
+                updateProductDropdowns();
+            }
+        }
+
+        async function loadTests() {
+            const data = await fetchWithAuth(`https://demo.defectdojo.org/api/v2/engagements/${engagementId}/tests/`);
+            if (data && data.results) {
+                allTests = data.results.filter(test => test.test_type_name === 'products');
+                filteredTests = [...allTests];
+                updateTable();
+                updateProductDropdowns();
+            }
+        }
+
+        function updateProductDropdowns() {
+            const usedProductIds = new Set(allTests.map(test => test.product_details?.id));
+            const availableProducts = products.filter(product => !usedProductIds.has(product.id));
+
+            const productFilter = document.getElementById('filter-product');
+            const modalProduct = document.getElementById('modal-product');
+
+            productFilter.innerHTML = '<option value="">All</option>';
+            modalProduct.innerHTML = '<option value="">Select Product</option>';
+
+            availableProducts.forEach(product => {
+                const option = document.createElement('option');
+                option.value = product.id;
+                option.textContent = product.name;
+                modalProduct.appendChild(option);
+            });
+
+            products.forEach(product => {
+                const option = document.createElement('option');
+                option.value = product.id;
+                option.textContent = product.name;
+                productFilter.appendChild(option);
+            });
+        }
+
+        function applyFilters() {
+            const productFilter = document.getElementById('filter-product').value;
+            const descriptionFilter = document.getElementById('filter-description').value.toLowerCase();
+            const sonarFilter = document.getElementById('filter-sonar').value;
+            const contrastFilter = document.getElementById('filter-contrast').value;
+            const dtFilter = document.getElementById('filter-dt').value;
+            const jiraFilter = document.getElementById('filter-jira').value.toLowerCase();
+
+            filteredTests = allTests.filter(test => {
+                const matchesProduct = !productFilter || test.product_details?.id == productFilter;
+                const matchesDescription = !descriptionFilter || (test.description && test.description.toLowerCase().includes(descriptionFilter));
+                const matchesSonar = !sonarFilter || test.version === sonarFilter;
+                const matchesContrast = !contrastFilter || test.build_id === contrastFilter;
+                const matchesDT = !dtFilter || test.commit_hash === dtFilter;
+                const [jiraProject, jiraComponent] = test.branch_tag ? test.branch_tag.split(',').map(s => s.trim()) : ['', ''];
+                const matchesJira = !jiraFilter || 
+                    (jiraProject && jiraProject.toLowerCase().includes(jiraFilter)) || 
+                    (jiraComponent && jiraComponent.toLowerCase().includes(jiraFilter));
+
+                return matchesProduct && matchesDescription && matchesSonar && matchesContrast && matchesDT && matchesJira;
+            });
+
+            currentPage = 1;
+            updateTable();
+        }
+
+        function updateTable() {
+            const tbody = document.getElementById('tests-body');
+            tbody.innerHTML = '';
+
+            const start = (currentPage - 1) * pageSize;
+            const end = start + pageSize;
+            const paginatedTests = filteredTests.slice(start, end);
+
+            paginatedTests.forEach(test => {
+                const [jiraProject, jiraComponent] = test.branch_tag ? test.branch_tag.split(',').map(s => s.trim()) : ['', ''];
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${test.title || ''}</td>
+                    <td>${test.description || ''}</td>
+                    <td>${test.version || ''}</td>
+                    <td>${test.build_id || ''}</td>
+                    <td>${test.commit_hash || ''}</td>
+                    <td>${jiraProject || ''}</td>
+                    <td>${jiraComponent || ''}</td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            updatePagination();
+        }
+
+        function updatePagination() {
+            const totalPages = Math.ceil(filteredTests.length / pageSize);
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+
+            if (totalPages <= 1) return;
+
+            const prevButton = document.createElement('button');
+            prevButton.textContent = 'Previous';
+            prevButton.disabled = currentPage === 1;
+            prevButton.onclick = () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    updateTable();
+                }
+            };
+            pagination.appendChild(prevButton);
+
+            for (let i = 1; i <= totalPages; i++) {
+                const button = document.createElement('button');
+                button.textContent = i;
+                button.disabled = i === currentPage;
+                button.onclick = () => {
+                    currentPage = i;
+                    updateTable();
+                };
+                pagination.appendChild(button);
+            }
+
+            const nextButton = document.createElement('button');
+            nextButton.textContent = 'Next';
+            nextButton.disabled = currentPage === totalPages;
+            nextButton.onclick = () => {
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    updateTable();
+                }
+            };
+            pagination.appendChild(nextButton);
+        }
+
+        function openModal() {
+            document.getElementById('new-test-modal').style.display = 'flex';
+            clearModal();
+        }
+
+        function closeModal() {
+            document.getElementById('new-test-modal').style.display = 'none';
+            clearModal();
+        }
+
+        function clearModal() {
+            document.getElementById('modal-product').value = '';
+            document.getElementById('modal-title').value = '';
+            document.getElementById('modal-description').value = '';
+            document.getElementById('modal-sonar').value = 'Yes';
+            document.getElementById('modal-contrast').value = 'Yes';
+            document.getElementById('modal-dt').value = 'Yes';
+            document.getElementById('modal-branch-tag').value = '';
+            clearErrors();
+        }
+
+        function clearErrors() {
+            document.getElementById('modal-product-error').textContent = '';
+            document.getElementById('modal-title-error').textContent = '';
+        }
+
+        async function submitTest() {
+            const productId = document.getElementById('modal-product').value;
+            const title = document.getElementById('modal-title').value;
+            const description = document.getElementById('modal-description').value;
+            const sonar = document.getElementById('modal-sonar').value;
+            const contrast = document.getElementById('modal-contrast').value;
+            const dt = document.getElementById('modal-dt').value;
+            const branchTag = document.getElementById('modal-branch-tag').value;
+
+            let valid = true;
+            clearErrors();
+
+            if (!productId) {
+                document.getElementById('modal-product-error').textContent = 'Product is required';
+                valid = false;
+            }
+            if (!title) {
+                document.getElementById('modal-title-error').textContent = 'Product Name is required';
+                valid = false;
+            }
+
+            if (!valid) return;
+
+            const testData = {
+                engagement: engagementId,
+                test_type: 208,
+                environment: 6,
+                title,
+                description,
+                target_start: new Date().toISOString().split('T')[0],
+                target_end: new Date().toISOString().split('T')[0],
+                version: sonar,
+                build_id: contrast,
+                commit_hash: dt,
+                branch_tag: branchTag,
+                product: parseInt(productId),
+            };
+
+            const response = await fetchWithAuth('https://demo.defectdojo.org/api/v2/tests/', {
+                method: 'POST',
+                body: JSON.stringify(testData),
+            });
+
+            if (response) {
+                alert('Test added successfully!');
+                closeModal();
+                loadTests();
+            } else {
+                alert('Failed to add test.');
+            }
+        }
+
+        function showLoader() {
+            document.getElementById('loader').style.display = 'block';
+        }
+
+        function hideLoader() {
+            document.getElementById('loader').style.display = 'none';
+        }
+
+        // Initialize
+        async function init() {
+            await loadProducts();
+            await loadTests();
+        }
+    </script>
+</body>
+</html>
