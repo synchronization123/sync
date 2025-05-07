@@ -4,71 +4,138 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DefectDojo Test Management</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
         body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f4f4f4;
+            font-family: 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 20px;
         }
         h1 {
             text-align: center;
-            color: #333;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 2.2rem;
+            font-weight: 700;
         }
         .container {
             max-width: 1200px;
             margin: 0 auto;
             background: #fff;
             padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
         }
-        .filters, .actions {
+        .actions {
             display: flex;
             gap: 10px;
             margin-bottom: 20px;
+        }
+        .filters {
+            display: flex;
             flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 20px;
         }
         .filter {
             flex: 1;
             min-width: 200px;
         }
+        .filter label {
+            display: block;
+            font-size: 0.9rem;
+            color: #34495e;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
         select, input, textarea {
             width: 100%;
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
+            padding: 10px;
+            border: 1px solid #dfe6e9;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        select:focus, input:focus, textarea:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+            outline: none;
+        }
+        select:disabled {
+            background: #f8f9fa;
+            cursor: not-allowed;
         }
         button {
-            padding: 8px 16px;
-            background-color: #007bff;
+            padding: 10px 20px;
+            background: linear-gradient(45deg, #3498db, #2980b9);
             color: #fff;
             border: none;
-            border-radius: 4px;
+            border-radius: 8px;
+            font-size: 0.95rem;
             cursor: pointer;
+            transition: transform 0.2s, background 0.3s;
         }
         button:hover {
-            background-color: #0056b3;
+            background: linear-gradient(45deg, #2980b9, #3498db);
+            transform: translateY(-2px);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .edit-button {
+            padding: 8px 14px;
+            font-size: 0.85rem;
+            background: linear-gradient(45deg, #f1c40f, #e67e22);
+        }
+        .edit-button:hover {
+            background: linear-gradient(45deg, #e67e22, #f1c40f);
         }
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
         }
         th, td {
-            padding: 10px;
+            padding: 12px 15px;
             text-align: left;
-            border-bottom: 1px solid #ddd;
+            font-size: 0.95rem;
         }
         th {
-            background-color: #f8f9fa;
+            background: #34495e;
+            color: #fff;
+            font-weight: 500;
+            position: sticky;
+            top: 0;
+        }
+        tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        tr:hover {
+            background: #e8f4f8;
+            transition: background 0.2s;
+        }
+        td {
+            border-bottom: 1px solid #dfe6e9;
         }
         .pagination {
             margin-top: 20px;
             text-align: center;
+            display: flex;
+            justify-content: center;
+            gap: 8px;
         }
         .pagination button {
-            margin: 0 5px;
+            padding: 8px 14px;
+            font-size: 0.9rem;
         }
         .modal {
             display: none;
@@ -77,43 +144,94 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0, 0, 0, 0.5);
             justify-content: center;
             align-items: center;
+            animation: fadeIn 0.3s ease;
         }
         .modal-content {
             background: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            width: 400px;
+            padding: 25px;
+            border-radius: 12px;
+            width: 450px;
             max-width: 90%;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+            transform: translateY(-20px);
+            animation: slideIn 0.3s ease forwards;
         }
         .modal-content h2 {
-            margin-top: 0;
+            margin: 0 0 20px;
+            color: #2c3e50;
+            font-size: 1.5rem;
         }
-        .modal-content .form-group {
+        .form-group {
             margin-bottom: 15px;
         }
-        .modal-content label {
+        .form-group label {
             display: block;
+            font-size: 0.9rem;
+            color: #34495e;
             margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .form-group input[readonly] {
+            background: #f8f9fa;
+            cursor: not-allowed;
         }
         .error {
-            color: red;
-            font-size: 0.9em;
+            color: #e74c3c;
+            font-size: 0.85rem;
+            margin-top: 5px;
+        }
+        .loader-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
         }
         .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
+            border: 5px solid #dfe6e9;
+            border-top: 5px solid #3498db;
             border-radius: 50%;
-            width: 20px;
-            height: 20px;
+            width: 40px;
+            height: 40px;
             animation: spin 1s linear infinite;
-            margin: 0 auto;
         }
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @media (max-width: 768px) {
+            .filters {
+                flex-direction: column;
+            }
+            .filter {
+                min-width: 100%;
+            }
+            .actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .actions button {
+                width: 100%;
+            }
+            .modal-content {
+                width: 90%;
+            }
         }
     </style>
 </head>
@@ -121,7 +239,7 @@
     <h1>DefectDojo Test Management</h1>
     <div class="container">
         <div class="actions">
-            <button onclick="openModal()">New</button>
+            <button onclick="openModal()">New Test</button>
             <button onclick="loadTests()">Refresh</button>
         </div>
         <div class="filters">
@@ -133,7 +251,7 @@
             </div>
             <div class="filter">
                 <label>Description</label>
-                <input type="text" id="filter-description" oninput="applyFilters()">
+                <input type="text" id="filter-description" oninput="applyFilters()" placeholder="Search description...">
             </div>
             <div class="filter">
                 <label>Sonar</label>
@@ -161,10 +279,9 @@
             </div>
             <div class="filter">
                 <label>Jira Project/Components</label>
-                <input type="text" id="filter-jira" oninput="applyFilters()">
+                <input type="text" id="filter-jira" oninput="applyFilters()" placeholder="Search Jira...">
             </div>
         </div>
-        <div id="loader" class="loader" style="display: none;"></div>
         <table id="tests-table">
             <thead>
                 <tr>
@@ -175,6 +292,7 @@
                     <th>DT</th>
                     <th>Jira Project</th>
                     <th>Jira Component</th>
+                    <th>Action</th>
                 </tr>
             </thead>
             <tbody id="tests-body"></tbody>
@@ -184,20 +302,20 @@
 
     <div id="new-test-modal" class="modal">
         <div class="modal-content">
-            <h2>Add New Test</h2>
+            <h2 id="modal-title-text">Add New Test</h2>
             <div class="form-group">
                 <label for="modal-product">Product</label>
-                <select id="modal-product" required></select>
+                <select id="modal-product" onchange="setProductName()" required></select>
                 <div id="modal-product-error" class="error"></div>
             </div>
             <div class="form-group">
                 <label for="modal-title">Product Name</label>
-                <input type="text" id="modal-title" required>
+                <input type="text" id="modal-title" readonly>
                 <div id="modal-title-error" class="error"></div>
             </div>
             <div class="form-group">
                 <label for="modal-description">Product Description</label>
-                <textarea id="modal-description" rows="4"></textarea>
+                <textarea id="modal-description" rows="4" placeholder="Enter description..."></textarea>
             </div>
             <div class="form-group">
                 <label for="modal-sonar">Sonar</label>
@@ -225,10 +343,14 @@
                 <input type="text" id="modal-branch-tag" placeholder="Project,Component">
             </div>
             <div class="form-group">
-                <button onclick="submitTest()">Submit</button>
-                <button onclick="closeModal()">Cancel</button>
+                <button id="modal-submit" onclick="submitTest()">Submit</button>
+                <button onclick="closeModal()" style="background: linear-gradient(45deg, #e74c3c, #c0392b);">Cancel</button>
             </div>
         </div>
+    </div>
+
+    <div id="loader-overlay" class="loader-overlay">
+        <div class="loader"></div>
     </div>
 
     <script>
@@ -238,6 +360,7 @@
         let allTests = [];
         let filteredTests = [];
         let products = [];
+        let editingTestId = null;
 
         // Fetch CSRF token dynamically from /api/key-v2
         async function getCsrfToken() {
@@ -308,7 +431,7 @@
         }
 
         async function loadTests() {
-            const data = await fetchWithAuth(`https://demo.defectdojo.org/api/v2/engagements/${engagementId}/tests/`);
+            const data = await fetchWithAuth(`https://demo.defectdojo.org/api/v2/tests/?engagement=${engagementId}`);
             if (data && data.results) {
                 allTests = data.results.filter(test => test.test_type_name === 'products');
                 filteredTests = [...allTests];
@@ -318,7 +441,9 @@
         }
 
         function updateProductDropdowns() {
-            const usedProductIds = new Set(allTests.map(test => test.product_details?.id));
+            // Get products already used in tests under this engagement
+            const usedProductIds = new Set(allTests.map(test => test.product));
+            console.log('Used Product IDs:', [...usedProductIds]); // Debugging
             const availableProducts = products.filter(product => !usedProductIds.has(product.id));
 
             const productFilter = document.getElementById('filter-product');
@@ -342,6 +467,13 @@
             });
         }
 
+        function setProductName() {
+            const productId = document.getElementById('modal-product').value;
+            const product = products.find(p => p.id == productId);
+            const titleInput = document.getElementById('modal-title');
+            titleInput.value = product ? product.name : '';
+        }
+
         function applyFilters() {
             const productFilter = document.getElementById('filter-product').value;
             const descriptionFilter = document.getElementById('filter-description').value.toLowerCase();
@@ -351,7 +483,7 @@
             const jiraFilter = document.getElementById('filter-jira').value.toLowerCase();
 
             filteredTests = allTests.filter(test => {
-                const matchesProduct = !productFilter || test.product_details?.id == productFilter;
+                const matchesProduct = !productFilter || test.product == productFilter;
                 const matchesDescription = !descriptionFilter || (test.description && test.description.toLowerCase().includes(descriptionFilter));
                 const matchesSonar = !sonarFilter || test.version === sonarFilter;
                 const matchesContrast = !contrastFilter || test.build_id === contrastFilter;
@@ -387,6 +519,7 @@
                     <td>${test.commit_hash || ''}</td>
                     <td>${jiraProject || ''}</td>
                     <td>${jiraComponent || ''}</td>
+                    <td><button class="edit-button" onclick="openModal(${test.id})">Edit</button></td>
                 `;
                 tbody.appendChild(row);
             });
@@ -435,18 +568,45 @@
             pagination.appendChild(nextButton);
         }
 
-        function openModal() {
+        function openModal(testId = null) {
+            editingTestId = testId;
+            const modalTitle = document.getElementById('modal-title-text');
+            const submitButton = document.getElementById('modal-submit');
+            const modalProduct = document.getElementById('modal-product');
+
+            if (testId) {
+                const test = allTests.find(t => t.id === testId);
+                if (!test) return;
+
+                modalTitle.textContent = 'Edit Test';
+                submitButton.textContent = 'Update';
+                modalProduct.value = test.product;
+                modalProduct.disabled = true;
+                document.getElementById('modal-title').value = test.title || '';
+                document.getElementById('modal-description').value = test.description || '';
+                document.getElementById('modal-sonar').value = test.version || 'Yes';
+                document.getElementById('modal-contrast').value = test.build_id || 'Yes';
+                document.getElementById('modal-dt').value = test.commit_hash || 'Yes';
+                document.getElementById('modal-branch-tag').value = test.branch_tag || '';
+            } else {
+                modalTitle.textContent = 'Add New Test';
+                submitButton.textContent = 'Submit';
+                modalProduct.disabled = false;
+                clearModal();
+            }
+
             document.getElementById('new-test-modal').style.display = 'flex';
-            clearModal();
         }
 
         function closeModal() {
             document.getElementById('new-test-modal').style.display = 'none';
+            editingTestId = null;
             clearModal();
         }
 
         function clearModal() {
             document.getElementById('modal-product').value = '';
+            document.getElementById('modal-product').disabled = false;
             document.getElementById('modal-title').value = '';
             document.getElementById('modal-description').value = '';
             document.getElementById('modal-sonar').value = 'Yes';
@@ -499,26 +659,36 @@
                 product: parseInt(productId),
             };
 
-            const response = await fetchWithAuth('https://demo.defectdojo.org/api/v2/tests/', {
-                method: 'POST',
-                body: JSON.stringify(testData),
-            });
+            let response;
+            if (editingTestId) {
+                // Update existing test (PUT)
+                response = await fetchWithAuth(`https://demo.defectdojo.org/api/v2/tests/${editingTestId}/`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ ...testData, id: editingTestId }),
+                });
+            } else {
+                // Create new test (POST)
+                response = await fetchWithAuth('https://demo.defectdojo.org/api/v2/tests/', {
+                    method: 'POST',
+                    body: JSON.stringify(testData),
+                });
+            }
 
             if (response) {
-                alert('Test added successfully!');
+                alert(editingTestId ? 'Test updated successfully!' : 'Test added successfully!');
                 closeModal();
                 loadTests();
             } else {
-                alert('Failed to add test.');
+                alert(editingTestId ? 'Failed to update test.' : 'Failed to add test.');
             }
         }
 
         function showLoader() {
-            document.getElementById('loader').style.display = 'block';
+            document.getElementById('loader-overlay').style.display = 'flex';
         }
 
         function hideLoader() {
-            document.getElementById('loader').style.display = 'none';
+            document.getElementById('loader-overlay').style.display = 'none';
         }
 
         // Initialize
