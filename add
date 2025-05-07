@@ -176,6 +176,11 @@
             color: #2c3e50;
             font-size: 1.5rem;
         }
+        .modal-content p {
+            font-size: 0.95rem;
+            color: #34495e;
+            margin-bottom: 20px;
+        }
         .form-group {
             margin-bottom: 20px;
         }
@@ -423,6 +428,17 @@
         </div>
     </div>
 
+    <div id="delete-confirm-modal" class="modal">
+        <div class="modal-content">
+            <h2>Confirm Delete</h2>
+            <p>Are you sure you want to delete this test?</p>
+            <div class="form-group form-group-buttons">
+                <button id="confirm-delete" onclick="confirmDelete()">Delete</button>
+                <button onclick="closeDeleteModal()" style="background: linear-gradient(45deg, #e74c3c, #c0392b);">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <div id="loader-overlay" class="loader-overlay">
         <div class="loader"></div>
     </div>
@@ -437,6 +453,7 @@
         let filteredTests = [];
         let products = [];
         let editingTestId = null;
+        let deletingTestId = null;
         const excludedProductNames = ['crm', 'drm', 'cvv'];
 
         // Toast notification function
@@ -675,6 +692,13 @@
             productSearch.value = '';
             updateProductDropdowns();
 
+            // Toggle visibility of Search Product and Product fields
+            document.getElementById('product-search').parentElement.style.display = testId ? 'none' : 'block';
+            document.getElementById('modal-product').parentElement.style.display = testId ? 'none' : 'block';
+
+            // Toggle required attribute for Product field
+            modalProduct.required = !testId;
+
             if (testId) {
                 const test = allTests.find(t => t.id === testId);
                 if (!test) return;
@@ -682,24 +706,21 @@
                 modalTitle.textContent = 'Edit Test';
                 submitButton.textContent = 'Update';
                 modalProduct.value = test.product;
-                modalProduct.disabled = true;
                 document.getElementById('modal-title').value = test.title || '';
                 document.getElementById('modal-description').value = test.description || '';
                 document.getElementById('modal-sonar').value = test.version || 'Yes';
                 document.getElementById('modal-contrast').value = test.build_id || 'Yes';
                 document.getElementById('modal-dt').value = test.commit_hash || 'Yes';
                 document.getElementById('modal-branch-tag').value = test.branch_tag || '';
-                productSearch.disabled = true;
             } else {
                 modalTitle.textContent = 'Add New Test';
                 submitButton.textContent = 'Submit';
                 modalProduct.disabled = false;
-                productSearch.disabled = false;
                 clearModal();
             }
 
-            // Add search event listener
-            productSearch.oninput = () => updateProductDropdowns(productSearch.value);
+            // Add search event listener only for new test modal
+            productSearch.oninput = testId ? null : () => updateProductDropdowns(productSearch.value);
 
             document.getElementById('new-test-modal').style.display = 'flex';
         }
@@ -712,9 +733,11 @@
 
         function clearModal() {
             document.getElementById('product-search').value = '';
-            document.getElementById('product-search').disabled = false;
+            document.getElementById('product-search').parentElement.style.display = 'block';
             document.getElementById('modal-product').value = '';
+            document.getElementById('modal-product').parentElement.style.display = 'block';
             document.getElementById('modal-product').disabled = false;
+            document.getElementById('modal-product').required = true;
             document.getElementById('modal-title').value = '';
             document.getElementById('modal-description').value = '';
             document.getElementById('modal-sonar').value = 'Yes';
@@ -742,7 +765,8 @@
             let valid = true;
             clearErrors();
 
-            if (!productId) {
+            // Validate product only for new tests
+            if (!editingTestId && !productId) {
                 document.getElementById('modal-product-error').textContent = 'Product is required';
                 showToast('Product is required', 'error');
                 valid = false;
@@ -781,7 +805,7 @@
                 build_id: contrast,
                 commit_hash: dt,
                 branch_tag: branchTag,
-                product: parseInt(productId),
+                product: editingTestId ? parseInt(document.getElementById('modal-product').value) : parseInt(productId),
             };
 
             let response;
@@ -808,19 +832,28 @@
             }
         }
 
-        async function deleteTest(testId) {
-            if (!confirm('Are you sure you want to delete this test?')) return;
+        function deleteTest(testId) {
+            deletingTestId = testId;
+            document.getElementById('delete-confirm-modal').style.display = 'flex';
+        }
 
+        async function confirmDelete() {
+            const testId = deletingTestId;
+            closeDeleteModal();
             const response = await fetchWithAuth(`https://demo.defectdojo.org/api/v2/tests/${testId}/`, {
                 method: 'DELETE',
             });
-
             if (response) {
                 showToast('Test deleted successfully!', 'success');
                 loadTests();
             } else {
                 showToast('Failed to delete test.', 'error');
             }
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('delete-confirm-modal').style.display = 'none';
+            deletingTestId = null;
         }
 
         function showLoader() {
