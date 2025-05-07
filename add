@@ -56,7 +56,7 @@
         }
         select, input, textarea {
             width: 100%;
-            padding: 10px;
+            padding: 12px;
             border: 1px solid #dfe6e9;
             border-radius: 8px;
             font-size: 0.95rem;
@@ -72,7 +72,7 @@
             cursor: not-allowed;
         }
         button {
-            padding: 10px 20px;
+            padding: 12px 24px;
             background: linear-gradient(45deg, #3498db, #2980b9);
             color: #fff;
             border: none;
@@ -163,9 +163,9 @@
         }
         .modal-content {
             background: #fff;
-            padding: 25px;
+            padding: 30px;
             border-radius: 12px;
-            width: 450px;
+            width: 600px;
             max-width: 90%;
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
             transform: translateY(-20px);
@@ -177,18 +177,23 @@
             font-size: 1.5rem;
         }
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
         .form-group label {
             display: block;
             font-size: 0.9rem;
             color: #34495e;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
             font-weight: 500;
         }
         .form-group input[readonly] {
             background: #f8f9fa;
             cursor: not-allowed;
+        }
+        .form-group-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: flex-end;
         }
         .error {
             color: #e74c3c;
@@ -283,6 +288,13 @@
                 flex-direction: column;
                 gap: 5px;
             }
+            .form-group-buttons {
+                flex-direction: column;
+                gap: 10px;
+            }
+            .form-group-buttons button {
+                width: 100%;
+            }
             .toast-container {
                 top: 10px;
                 right: 10px;
@@ -304,10 +316,8 @@
         </div>
         <div class="filters">
             <div class="filter">
-                <label>Product</label>
-                <select id="filter-product" onchange="applyFilters()">
-                    <option value="">All</option>
-                </select>
+                <label>Test Title</label>
+                <input type="text" id="filter-title" oninput="applyFilters()" placeholder="Search title...">
             </div>
             <div class="filter">
                 <label>Description</label>
@@ -406,7 +416,7 @@
                 <label for="modal-branch-tag">Jira Project, Component</label>
                 <input type="text" id="modal-branch-tag" placeholder="Project,Component1,Component2">
             </div>
-            <div class="form-group">
+            <div class="form-group form-group-buttons">
                 <button id="modal-submit" onclick="submitTest()">Submit</button>
                 <button onclick="closeModal()" style="background: linear-gradient(45deg, #e74c3c, #c0392b);">Cancel</button>
             </div>
@@ -534,17 +544,11 @@
                 !excludedProductNames.includes(product.name.toLowerCase()) &&
                 (searchQuery === '' || product.name.toLowerCase().includes(searchQuery.toLowerCase()))
             );
-            const filterProducts = products.filter(product => 
-                !excludedProductNames.includes(product.name.toLowerCase())
-            );
 
             console.log('Excluded Products (CRM/DRM/CVV):', products.filter(p => excludedProductNames.includes(p.name.toLowerCase())).map(p => p.name));
             console.log('Available Products for Modal:', availableProducts.map(p => p.name));
 
-            const productFilter = document.getElementById('filter-product');
             const modalProduct = document.getElementById('modal-product');
-
-            productFilter.innerHTML = '<option value="">All</option>';
             modalProduct.innerHTML = '<option value="">Select Product</option>';
 
             availableProducts.forEach(product => {
@@ -552,13 +556,6 @@
                 option.value = product.id;
                 option.textContent = product.name;
                 modalProduct.appendChild(option);
-            });
-
-            filterProducts.forEach(product => {
-                const option = document.createElement('option');
-                option.value = product.id;
-                option.textContent = product.name;
-                productFilter.appendChild(option);
             });
         }
 
@@ -570,7 +567,7 @@
         }
 
         function applyFilters() {
-            const productFilter = document.getElementById('filter-product').value;
+            const titleFilter = document.getElementById('filter-title').value.toLowerCase();
             const descriptionFilter = document.getElementById('filter-description').value.toLowerCase();
             const sonarFilter = document.getElementById('filter-sonar').value;
             const contrastFilter = document.getElementById('filter-contrast').value;
@@ -578,7 +575,7 @@
             const jiraFilter = document.getElementById('filter-jira').value.toLowerCase();
 
             filteredTests = allTests.filter(test => {
-                const matchesProduct = !productFilter || test.product == productFilter;
+                const matchesTitle = !titleFilter || (test.title && test.title.toLowerCase().includes(titleFilter));
                 const matchesDescription = !descriptionFilter || (test.description && test.description.toLowerCase().includes(descriptionFilter));
                 const matchesSonar = !sonarFilter || test.version === sonarFilter;
                 const matchesContrast = !contrastFilter || test.build_id === contrastFilter;
@@ -588,7 +585,7 @@
                     (jiraProject && jiraProject.toLowerCase().includes(jiraFilter)) || 
                     (jiraComponents.some(comp => comp && comp.toLowerCase().includes(jiraFilter)));
 
-                return matchesProduct && matchesDescription && matchesSonar && matchesContrast && matchesDT && matchesJira;
+                return matchesTitle && matchesDescription && matchesSonar && matchesContrast && matchesDT && matchesJira;
             });
 
             currentPage = 1;
@@ -756,17 +753,18 @@
                 valid = false;
             }
 
-            // Check for duplicate title (case-insensitive)
-            const titleLower = title.toLowerCase();
-            const isDuplicate = allTests.some(test => 
-                test.title && 
-                test.title.toLowerCase() === titleLower && 
-                (!editingTestId || test.id !== editingTestId)
-            );
-            if (isDuplicate) {
-                document.getElementById('modal-title-error').textContent = 'A test with this title already exists';
-                showToast('A test with this title already exists', 'error');
-                valid = false;
+            // Check for duplicate title (case-insensitive) only for new tests
+            if (!editingTestId) {
+                const titleLower = title.toLowerCase();
+                const isDuplicate = allTests.some(test => 
+                    test.title && 
+                    test.title.toLowerCase() === titleLower
+                );
+                if (isDuplicate) {
+                    document.getElementById('modal-title-error').textContent = 'A test with this title already exists';
+                    showToast('A test with this title already exists', 'error');
+                    valid = false;
+                }
             }
 
             if (!valid) return;
