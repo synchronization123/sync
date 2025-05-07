@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DefectDojo Test Management</title>
+    <title>DefectDojo Task Management</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         * {
@@ -25,7 +25,7 @@
             font-weight: 700;
         }
         .container {
-            max-width: 1200px;
+            width: 100%;
             margin: 0 auto;
             background: #fff;
             padding: 20px;
@@ -66,10 +66,6 @@
             border-color: #3498db;
             box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
             outline: none;
-        }
-        select:disabled {
-            background: #f8f9fa;
-            cursor: not-allowed;
         }
         button {
             padding: 12px 24px;
@@ -138,6 +134,13 @@
             display: flex;
             gap: 10px;
         }
+        a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
         .pagination {
             margin-top: 20px;
             text-align: center;
@@ -193,9 +196,8 @@
             margin-bottom: 8px;
             font-weight: 500;
         }
-        .form-group input[readonly] {
-            background: #f8f9fa;
-            cursor: not-allowed;
+        .form-group input, .form-group textarea {
+            width: 100%;
         }
         .form-group-buttons {
             display: flex;
@@ -315,116 +317,54 @@
     </style>
 </head>
 <body>
-    <h1>DefectDojo Test Management</h1>
+    <h1>DefectDojo Task Management</h1>
     <div class="container">
         <div class="actions">
-            <button onclick="openModal()">New Test</button>
-            <button onclick="loadTests()">Refresh</button>
+            <button onclick="openModal()">New Task</button>
+            <button onclick="loadTasks()">Refresh</button>
         </div>
         <div class="filters">
             <div class="filter">
-                <label>Test Title</label>
-                <input type="text" id="filter-title" oninput="applyFilters()" placeholder="Search title...">
+                <label>Task Name</label>
+                <input type="text" id="filter-title" oninput="applyFilters()" placeholder="Search task name...">
             </div>
             <div class="filter">
                 <label>Description</label>
                 <input type="text" id="filter-description" oninput="applyFilters()" placeholder="Search description...">
             </div>
-            <div class="filter">
-                <label>Sonar</label>
-                <select id="filter-sonar" onchange="applyFilters()">
-                    <option value="">All</option>
-                    <option value="Yes">Yes</option>
-                    <option value="No">No</option>
-                </select>
-            </div>
-            <div class="filter">
-                <label>Contrast</label>
-                <select id="filter-contrast" onchange="applyFilters()">
-                    <option value="">All</option>
-                    <option value="Yes">Yes</option>
-                    <option value="No">No</option>
-                </select>
-            </div>
-            <div class="filter">
-                <label>DT</label>
-                <select id="filter-dt" onchange="applyFilters()">
-                    <option value="">All</option>
-                    <option value="Yes">Yes</option>
-                    <option value="No">No</option>
-                </select>
-            </div>
-            <div class="filter">
-                <label>Jira Project/Components</label>
-                <input type="text" id="filter-jira" oninput="applyFilters()" placeholder="Search Jira...">
-            </div>
         </div>
-        <table id="tests-table">
+        <table id="tasks-table">
             <thead>
                 <tr>
-                    <th>Product Name</th>
-                    <th>Product Description</th>
-                    <th>Sonar</th>
-                    <th>Contrast</th>
-                    <th>DT</th>
-                    <th>Jira Project</th>
-                    <th>Jira Component</th>
+                    <th>Task Name</th>
+                    <th>Description</th>
+                    <th>Document Link</th>
                     <th>Action</th>
                 </tr>
             </thead>
-            <tbody id="tests-body"></tbody>
+            <tbody id="tasks-body"></tbody>
         </table>
         <div class="pagination" id="pagination"></div>
     </div>
 
-    <div id="new-test-modal" class="modal">
+    <div id="new-task-modal" class="modal">
         <div class="modal-content">
-            <h2 id="modal-title-text">Add New Test</h2>
+            <h2 id="modal-title-text">Add New Task</h2>
             <div class="form-group">
-                <label for="product-search">Search Product</label>
-                <input type="text" id="product-search" placeholder="Type to search products...">
-            </div>
-            <div class="form-group">
-                <label for="modal-product">Product</label>
-                <select id="modal-product" onchange="setProductName()" required></select>
-                <div id="modal-product-error" class="error"></div>
-            </div>
-            <div class="form-group">
-                <label for="modal-title">Product Name</label>
-                <input type="text" id="modal-title" readonly>
+                <label for="modal-title">Task Title</label>
+                <input type="text" id="modal-title" placeholder="Enter task title...">
                 <div id="modal-title-error" class="error"></div>
             </div>
             <div class="form-group">
-                <label for="modal-description">Product Description</label>
+                <label for="modal-description">Description</label>
                 <textarea id="modal-description" rows="4" placeholder="Enter description..."></textarea>
             </div>
             <div class="form-group">
-                <label for="modal-sonar">Sonar</label>
-                <select id="modal-sonar">
-                    <option value="Yes">Yes</option>
-                    <option value="No">No</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="modal-contrast">Contrast</label>
-                <select id="modal-contrast">
-                    <option value="Yes">Yes</option>
-                    <option value="No">No</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="modal-dt">DT</label>
-                <select id="modal-dt">
-                    <option value="Yes">Yes</option>
-                    <option value="No">No</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="modal-branch-tag">Jira Project, Component</label>
-                <input type="text" id="modal-branch-tag" placeholder="Project,Component1,Component2">
+                <label for="modal-document-link">Enter Document Link</label>
+                <input type="text" id="modal-document-link" placeholder="Enter document link...">
             </div>
             <div class="form-group form-group-buttons">
-                <button id="modal-submit" onclick="submitTest()">Submit</button>
+                <button id="modal-submit" onclick="submitTask()">Submit</button>
                 <button onclick="closeModal()" style="background: linear-gradient(45deg, #e74c3c, #c0392b);">Cancel</button>
             </div>
         </div>
@@ -433,7 +373,7 @@
     <div id="delete-confirm-modal" class="modal">
         <div class="modal-content">
             <h2>Confirm Delete</h2>
-            <p>Are you sure you want to delete this test?</p>
+            <p>Are you sure you want to delete this task?</p>
             <div class="form-group form-group-buttons">
                 <button id="confirm-delete" onclick="confirmDelete()">Delete</button>
                 <button onclick="closeDeleteModal()" style="background: linear-gradient(45deg, #e74c3c, #c0392b);">Cancel</button>
@@ -448,15 +388,14 @@
     <div id="toast-container" class="toast-container"></div>
 
     <script>
-        const engagementId = 23;
+        const engagementId = 67919;
         const pageSize = 20;
         let currentPage = 1;
-        let allTests = [];
-        let filteredTests = [];
-        let products = [];
-        let editingTestId = null;
-        let deletingTestId = null;
-        const excludedProductNames = ['crm', 'drm', 'cvv'];
+        let allTasks = [];
+        let filteredTasks = [];
+        let editingTaskId = null;
+        let deletingTaskId = null;
+        let currentUserId = null;
 
         // Toast notification function
         function showToast(message, type = 'success') {
@@ -498,10 +437,21 @@
             }
         }
 
-        // Initialize CSRF token on page load
+        // Fetch current user ID from /api/v2/user_profile/
+        async function getCurrentUserId() {
+            const data = await fetchWithAuth('https://demo.defectdojo.org/api/v2/user_profile/');
+            if (data && data.results && data.results.length > 0) {
+                return data.results[0].id;
+            }
+            showToast('Failed to fetch user profile.', 'error');
+            return null;
+        }
+
+        // Initialize CSRF token and user ID on page load
         document.addEventListener('DOMContentLoaded', async () => {
             try {
                 window.csrfToken = await getCsrfToken();
+                currentUserId = await getCurrentUserId();
                 init();
             } catch (error) {
                 // Error already shown via toast
@@ -534,77 +484,23 @@
             }
         }
 
-        async function loadProducts() {
-            const data = await fetchWithAuth('https://demo.defectdojo.org/api/v2/products/');
-            if (data && data.results) {
-                products = data.results;
-                updateProductDropdowns();
-            }
-        }
-
-        async function loadTests() {
+        async function loadTasks() {
             const data = await fetchWithAuth(`https://demo.defectdojo.org/api/v2/tests/?engagement=${engagementId}`);
             if (data && data.results) {
-                allTests = data.results.filter(test => test.test_type_name === 'products');
-                filteredTests = [...allTests];
+                allTasks = data.results.filter(test => test.tags && test.tags.includes('documentation'));
+                filteredTasks = [...allTasks];
                 updateTable();
-                updateProductDropdowns();
             }
-        }
-
-        function updateProductDropdowns(searchQuery = '') {
-            // Get products already used in tests under this engagement
-            const usedProductIds = new Set(allTests.map(test => test.product).filter(id => id));
-            console.log('Used Product IDs:', [...usedProductIds]);
-
-            // Filter products: exclude used products, CRM/DRM/CVV, and apply search query
-            const availableProducts = products.filter(product => 
-                !usedProductIds.has(product.id) &&
-                !excludedProductNames.includes(product.name.toLowerCase()) &&
-                (searchQuery === '' || product.name.toLowerCase().includes(searchQuery.toLowerCase()))
-            );
-
-            console.log('Excluded Products (CRM/DRM/CVV):', products.filter(p => excludedProductNames.includes(p.name.toLowerCase())).map(p => p.name));
-            console.log('Available Products for Modal:', availableProducts.map(p => p.name));
-
-            const modalProduct = document.getElementById('modal-product');
-            modalProduct.innerHTML = '<option value="">Select Product</option>';
-
-            availableProducts.forEach(product => {
-                const option = document.createElement('option');
-                option.value = product.id;
-                option.textContent = product.name;
-                modalProduct.appendChild(option);
-            });
-        }
-
-        function setProductName() {
-            const productId = document.getElementById('modal-product').value;
-            const product = products.find(p => p.id == productId);
-            const titleInput = document.getElementById('modal-title');
-            titleInput.value = product ? product.name : '';
         }
 
         function applyFilters() {
             const titleFilter = document.getElementById('filter-title').value.toLowerCase();
             const descriptionFilter = document.getElementById('filter-description').value.toLowerCase();
-            const sonarFilter = document.getElementById('filter-sonar').value;
-            const contrastFilter = document.getElementById('filter-contrast').value;
-            const dtFilter = document.getElementById('filter-dt').value;
-            const jiraFilter = document.getElementById('filter-jira').value.toLowerCase();
 
-            filteredTests = allTests.filter(test => {
-                const matchesTitle = !titleFilter || (test.title && test.title.toLowerCase().includes(titleFilter));
-                const matchesDescription = !descriptionFilter || (test.description && test.description.toLowerCase().includes(descriptionFilter));
-                const matchesSonar = !sonarFilter || test.version === sonarFilter;
-                const matchesContrast = !contrastFilter || test.build_id === contrastFilter;
-                const matchesDT = !dtFilter || test.commit_hash === dtFilter;
-                const [jiraProject, ...jiraComponents] = test.branch_tag ? test.branch_tag.split(',').map(s => s.trim()) : ['', ''];
-                const matchesJira = !jiraFilter || 
-                    (jiraProject && jiraProject.toLowerCase().includes(jiraFilter)) || 
-                    (jiraComponents.some(comp => comp && comp.toLowerCase().includes(jiraFilter)));
-
-                return matchesTitle && matchesDescription && matchesSonar && matchesContrast && matchesDT && matchesJira;
+            filteredTasks = allTasks.filter(task => {
+                const matchesTitle = !titleFilter || (task.title && task.title.toLowerCase().includes(titleFilter));
+                const matchesDescription = !descriptionFilter || (task.description && task.description.toLowerCase().includes(descriptionFilter));
+                return matchesTitle && matchesDescription;
             });
 
             currentPage = 1;
@@ -612,40 +508,41 @@
         }
 
         function updateTable() {
-            const tbody = document.getElementById('tests-body');
+            const tbody = document.getElementById('tasks-body');
             tbody.innerHTML = '';
 
             const start = (currentPage - 1) * pageSize;
             const end = start + pageSize;
-            const paginatedTests = filteredTests.slice(start, end);
+            const paginatedTasks = filteredTasks.slice(start, end);
 
-            paginatedTests.forEach(test => {
-                const [jiraProject, ...jiraComponents] = test.branch_tag ? test.branch_tag.split(',').map(s => s.trim()) : ['', ''];
-                const componentsHtml = jiraComponents.filter(comp => comp).join('<br>');
+            paginatedTasks.forEach(task => {
                 // Format description as bullet points with bold text before colon
-                const descriptionHtml = test.description
-                    ? `<ul style="margin: 0; padding-left: 20px;">${test.description
+                const descriptionHtml = task.description
+                    ? `<ul style="margin: 0; padding-left: 20px;">${task.description
                           .split('\n')
                           .map(line => {
                               const trimmedLine = line.trim();
                               if (!trimmedLine) return `<li> </li>`;
-                              // Bold text before the first colon
                               return `<li>${trimmedLine.replace(/([^:]+)(?=:)/, '<strong>$1</strong>')}</li>`;
                           })
                           .join('')}</ul>`
                     : '';
+                // Format document link as "View" hyperlink
+                const documentLinkHtml = task.commit_hash
+                    ? `<a href="${task.commit_hash}" target="_blank">View</a>`
+                    : '';
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${test.title || ''}</td>
+                    <td>${task.title || ''}</td>
                     <td>${descriptionHtml}</td>
-                    <td>${test.version || ''}</td>
-                    <td>${test.build_id || ''}</td>
-                    <td>${test.commit_hash || ''}</td>
-                    <td>${jiraProject || ''}</td>
-                    <td>${componentsHtml || ''}</td>
+                    <td>${documentLinkHtml}</td>
                     <td class="action-cell">
-                        <button class="edit-button" onclick="openModal(${test.id})">Edit</button>
-                        <button class="delete-button" onclick="deleteTest(${test.id})">Delete</button>
+                        ${currentUserId === 2 || currentUserId === 5
+                            ? `
+                                <button class="edit-button" onclick="openModal(${task.id})">Edit</button>
+                                <button class="delete-button" onclick="deleteTask(${task.id})">Delete</button>
+                            `
+                            : ''}
                     </td>
                 `;
                 tbody.appendChild(row);
@@ -655,7 +552,7 @@
         }
 
         function updatePagination() {
-            const totalPages = Math.ceil(filteredTests.length / pageSize);
+            const totalPages = Math.ceil(filteredTasks.length / pageSize);
             const pagination = document.getElementById('pagination');
             pagination.innerHTML = '';
 
@@ -695,179 +592,120 @@
             pagination.appendChild(nextButton);
         }
 
-        function openModal(testId = null) {
-            editingTestId = testId;
+        function openModal(taskId = null) {
+            editingTaskId = taskId;
             const modalTitle = document.getElementById('modal-title-text');
             const submitButton = document.getElementById('modal-submit');
-            const modalProduct = document.getElementById('modal-product');
-            const productSearch = document.getElementById('product-search');
 
-            // Clear search and update dropdown
-            productSearch.value = '';
-            updateProductDropdowns();
+            if (taskId) {
+                const task = allTasks.find(t => t.id === taskId);
+                if (!task) return;
 
-            // Toggle visibility of Search Product and Product fields
-            document.getElementById('product-search').parentElement.style.display = testId ? 'none' : 'block';
-            document.getElementById('modal-product').parentElement.style.display = testId ? 'none' : 'block';
-
-            // Toggle required attribute for Product field
-            modalProduct.required = !testId;
-
-            if (testId) {
-                const test = allTests.find(t => t.id === testId);
-                if (!test) return;
-
-                modalTitle.textContent = 'Edit Test';
+                modalTitle.textContent = 'Edit Task';
                 submitButton.textContent = 'Update';
-                modalProduct.value = test.product;
-                document.getElementById('modal-title').value = test.title || '';
-                document.getElementById('modal-description').value = test.description || '';
-                document.getElementById('modal-sonar').value = test.version || 'Yes';
-                document.getElementById('modal-contrast').value = test.build_id || 'Yes';
-                document.getElementById('modal-dt').value = test.commit_hash || 'Yes';
-                document.getElementById('modal-branch-tag').value = test.branch_tag || '';
+                document.getElementById('modal-title').value = task.title || '';
+                document.getElementById('modal-description').value = task.description || '';
+                document.getElementById('modal-document-link').value = task.commit_hash || '';
             } else {
-                modalTitle.textContent = 'Add New Test';
+                modalTitle.textContent = 'Add New Task';
                 submitButton.textContent = 'Submit';
-                modalProduct.disabled = false;
                 clearModal();
             }
 
-            // Add search event listener only for new test modal
-            productSearch.oninput = testId ? null : () => updateProductDropdowns(productSearch.value);
-
-            document.getElementById('new-test-modal').style.display = 'flex';
+            document.getElementById('new-task-modal').style.display = 'flex';
         }
 
         function closeModal() {
-            document.getElementById('new-test-modal').style.display = 'none';
-            editingTestId = null;
+            document.getElementById('new-task-modal').style.display = 'none';
+            editingTaskId = null;
             clearModal();
         }
 
         function clearModal() {
-            document.getElementById('product-search').value = '';
-            document.getElementById('product-search').parentElement.style.display = 'block';
-            document.getElementById('modal-product').value = '';
-            document.getElementById('modal-product').parentElement.style.display = 'block';
-            document.getElementById('modal-product').disabled = false;
-            document.getElementById('modal-product').required = true;
             document.getElementById('modal-title').value = '';
             document.getElementById('modal-description').value = '';
-            document.getElementById('modal-sonar').value = 'Yes';
-            document.getElementById('modal-contrast').value = 'Yes';
-            document.getElementById('modal-dt').value = 'Yes';
-            document.getElementById('modal-branch-tag').value = '';
+            document.getElementById('modal-document-link').value = '';
             clearErrors();
-            updateProductDropdowns(); // Reset dropdown
         }
 
         function clearErrors() {
-            document.getElementById('modal-product-error').textContent = '';
             document.getElementById('modal-title-error').textContent = '';
         }
 
-        async function submitTest() {
-            const productId = document.getElementById('modal-product').value;
+        async function submitTask() {
             const title = document.getElementById('modal-title').value;
             const description = document.getElementById('modal-description').value;
-            const sonar = document.getElementById('modal-sonar').value;
-            const contrast = document.getElementById('modal-contrast').value;
-            const dt = document.getElementById('modal-dt').value;
-            const branchTag = document.getElementById('modal-branch-tag').value;
+            const documentLink = document.getElementById('modal-document-link').value;
 
             let valid = true;
             clearErrors();
 
-            // Validate product only for new tests
-            if (!editingTestId && !productId) {
-                document.getElementById('modal-product-error').textContent = 'Product is required';
-                showToast('Product is required', 'error');
-                valid = false;
-            }
             if (!title) {
-                document.getElementById('modal-title-error').textContent = 'Product Name is required';
-                showToast('Product Name is required', 'error');
+                document.getElementById('modal-title-error').textContent = 'Task Title is required';
+                showToast('Task Title is required', 'error');
                 valid = false;
-            }
-
-            // Check for duplicate title (case-insensitive) only for new tests
-            if (!editingTestId) {
-                const titleLower = title.toLowerCase();
-                const isDuplicate = allTests.some(test => 
-                    test.title && 
-                    test.title.toLowerCase() === titleLower
-                );
-                if (isDuplicate) {
-                    document.getElementById('modal-title-error').textContent = 'A test with this title already exists';
-                    showToast('A test with this title already exists', 'error');
-                    valid = false;
-                }
             }
 
             if (!valid) return;
 
-            const testData = {
+            const taskData = {
                 engagement: engagementId,
                 test_type: 208,
                 environment: 6,
                 title,
                 description,
+                commit_hash: documentLink,
                 target_start: new Date().toISOString().split('T')[0],
                 target_end: new Date().toISOString().split('T')[0],
-                version: sonar,
-                build_id: contrast,
-                commit_hash: dt,
-                branch_tag: branchTag,
-                product: editingTestId ? parseInt(document.getElementById('modal-product').value) : parseInt(productId),
+                tags: ['documentation'],
             };
 
             let response;
-            if (editingTestId) {
-                // Update existing test (PUT)
-                response = await fetchWithAuth(`https://demo.defectdojo.org/api/v2/tests/${editingTestId}/`, {
+            if (editingTaskId) {
+                // Update existing task (PUT)
+                response = await fetchWithAuth(`https://demo.defectdojo.org/api/v2/tests/${editingTaskId}/`, {
                     method: 'PUT',
-                    body: JSON.stringify({ ...testData, id: editingTestId }),
+                    body: JSON.stringify({ ...taskData, id: editingTaskId }),
                 });
             } else {
-                // Create new test (POST)
+                // Create new task (POST)
                 response = await fetchWithAuth('https://demo.defectdojo.org/api/v2/tests/', {
                     method: 'POST',
-                    body: JSON.stringify(testData),
+                    body: JSON.stringify(taskData),
                 });
             }
 
             if (response) {
-                showToast(editingTestId ? 'Test updated successfully!' : 'Test added successfully!', 'success');
+                showToast(editingTaskId ? 'Task updated successfully!' : 'Task added successfully!', 'success');
                 closeModal();
-                loadTests();
+                loadTasks();
             } else {
-                showToast(editingTestId ? 'Failed to update test.' : 'Failed to add test.', 'error');
+                showToast(editingTaskId ? 'Failed to update task.' : 'Failed to add task.', 'error');
             }
         }
 
-        function deleteTest(testId) {
-            deletingTestId = testId;
+        function deleteTask(taskId) {
+            deletingTaskId = taskId;
             document.getElementById('delete-confirm-modal').style.display = 'flex';
         }
 
         async function confirmDelete() {
-            const testId = deletingTestId;
+            const taskId = deletingTaskId;
             closeDeleteModal();
-            const response = await fetchWithAuth(`https://demo.defectdojo.org/api/v2/tests/${testId}/`, {
+            const response = await fetchWithAuth(`https://demo.defectdojo.org/api/v2/tests/${taskId}/`, {
                 method: 'DELETE',
             });
             if (response) {
-                showToast('Test deleted successfully!', 'success');
-                loadTests();
+                showToast('Task deleted successfully!', 'success');
+                loadTasks();
             } else {
-                showToast('Failed to delete test.', 'error');
+                showToast('Failed to delete task.', 'error');
             }
         }
 
         function closeDeleteModal() {
             document.getElementById('delete-confirm-modal').style.display = 'none';
-            deletingTestId = null;
+            deletingTaskId = null;
         }
 
         function showLoader() {
@@ -880,8 +718,7 @@
 
         // Initialize
         async function init() {
-            await loadProducts();
-            await loadTests();
+            await loadTasks();
         }
     </script>
 </body>
