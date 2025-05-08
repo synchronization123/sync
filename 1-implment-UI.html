@@ -4,87 +4,31 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Patch and Test Case Management</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        /* CSS for layout, modals, toasts, and color coding */
+        /* Custom CSS for additional styling */
         body {
-            font-family: Arial, sans-serif;
-            margin: 0;
+            background-color: #f8f9fa;
             padding: 20px;
-            background-color: #f4f4f9;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .btn {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin: 5px;
-        }
-        .btn-primary { background-color: #007bff; color: white; }
-        .btn-success { background-color: #28a745; color: white; }
-        .btn-info { background-color: #17a2b8; color: white; }
-        .table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
         }
         .table th, .table td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
+            vertical-align: middle;
         }
-        .table th { background-color: #007bff; color: white; }
-        .table tr:nth-child(even) { background-color: #f2f2f2; }
-        .filter-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .filter-container input, .filter-container select {
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
+        .status-pass { color: #28a745; font-weight: bold; }
+        .status-fail { color: #dc3545; font-weight: bold; }
+        .status-pending { color: #ffc107; font-weight: bold; }
+        .status-not-started { color: #6c757d; font-weight: bold; }
+        .status-certified { color: #28a745; font-weight: bold; }
+        .status-not-certified { color: #dc3545; font-weight: bold; }
         .modal-content {
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            width: 90%;
-            max-width: 600px;
             max-height: 80vh;
             overflow-y: auto;
         }
-        .modal-content h2 { margin-top: 0; }
-        .close-btn {
-            float: right;
-            font-size: 20px;
-            cursor: pointer;
-        }
-        .toast {
+        .toast-container {
             position: fixed;
             bottom: 20px;
             right: 20px;
-            background-color: #333;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 4px;
-            display: none;
             z-index: 2000;
         }
         .loading {
@@ -104,54 +48,78 @@
             color: white;
             font-size: 24px;
         }
-        .status-pass { color: #28a745; font-weight: bold; }
-        .status-fail { color: #dc3545; font-weight: bold; }
-        .status-pending { color: #ffc107; font-weight: bold; }
-        .status-not-started { color: #6c757d; font-weight: bold; }
-        .pagination {
+        .filter-container {
             display: flex;
-            justify-content: center;
+            flex-wrap: wrap;
             gap: 10px;
-            margin-top: 20px;
+            margin-bottom: 20px;
         }
-        .pagination button { padding: 8px 16px; }
+        .filter-container .form-control, .filter-container .form-select {
+            max-width: 200px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Patch and Test Case Management</h1>
+        <h1 class="mb-4">Patch and Test Case Management</h1>
 
         <!-- Add New Patch Form -->
         <!-- START ADD NEW PATCH -->
-        <div>
+        <div class="mb-3">
             <button class="btn btn-primary" onclick="openAddPatchModal()">Add New Patch</button>
         </div>
-        <div id="addPatchModal" class="modal">
-            <div class="modal-content">
-                <span class="close-btn" onclick="closeModal('addPatchModal')">&times;</span>
-                <h2>Add New Patch</h2>
-                <form id="addPatchForm">
-                    <input type="hidden" name="csrfmiddlewaretoken" id="csrfToken">
-                    <label>Name: <input type="text" name="name" value="A-1234" required></label><br>
-                    <label>Target Start: <input type="date" name="target_start" required></label><br>
-                    <label>Target End: <input type="date" name="target_end" required></label><br>
-                    <label>Status: 
-                        <select name="status">
-                            <option value="Not Started">Not Started</option>
-                            <option value="Completed">Completed</option>
-                            <option value="Pending">Pending</option>
-                        </select>
-                    </label><br>
-                    <label>Engagement Type: 
-                        <select name="engagement_type">
-                            <option value="Interactive">Interactive</option>
-                        </select>
-                    </label><br>
-                    <label>Lead: <input type="text" name="lead"></label><br>
-                    <label>Product: <input type="text" name="product"></label><br>
-                    <label>Tags: <input type="text" name="tags" value="rmm"></label><br>
-                    <button type="submit" class="btn btn-success">Save</button>
-                </form>
+        <div class="modal fade" id="addPatchModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Add New Patch</h5>
+                        <button type="button" class="btn-close" onclick="closeModal('addPatchModal')"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="addPatchForm">
+                            <input type="hidden" name="csrfmiddlewaretoken" id="csrfToken">
+                            <div class="mb-3">
+                                <label class="form-label">Name</label>
+                                <input type="text" class="form-control" name="name" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Target Start</label>
+                                <input type="date" class="form-control" name="target_start" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Target End</label>
+                                <input type="date" class="form-control" name="target_end" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Status</label>
+                                <select class="form-select" name="status">
+                                    <option value="Not Started">Not Started</option>
+                                    <option value="Completed">Completed</option>
+                                    <option value="Pending">Pending</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Engagement Type</label>
+                                <select class="form-select" name="engagement_type">
+                                    <option value="Interactive">Interactive</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Lead</label>
+                                <input type="text" class="form-control" name="lead">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Product</label>
+                                <input type="text" class="form-control" name="product">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Tags</label>
+                                <input type="text" class="form-control" name="tags" placeholder="e.g., rmm">
+                            </div>
+                            <button type="submit" class="btn btn-success">Save</button>
+                        </form>
+                    </div>
+                </div>
             </div>
         </div>
         <!-- END ADD NEW PATCH -->
@@ -159,19 +127,19 @@
         <!-- Filters -->
         <!-- START FILTERS -->
         <div class="filter-container">
-            <input type="text" id="filterBuild" placeholder="Build/Patch">
-            <input type="text" id="filterBuildID" placeholder="Build ID">
-            <input type="text" id="filterLead" placeholder="Lead">
-            <input type="text" id="filterProduct" placeholder="Product">
-            <input type="date" id="filterDate" placeholder="Date">
-            <input type="date" id="filterStartDate" placeholder="Start Date">
-            <input type="date" id="filterCompletionDate" placeholder="Completion Date">
-            <select id="filterBuildStatus">
+            <input type="text" class="form-control" id="filterBuild" placeholder="Build/Patch">
+            <input type="text" class="form-control" id="filterBuildID" placeholder="Build ID">
+            <input type="text" class="form-control" id="filterLead" placeholder="Lead">
+            <input type="text" class="form-control" id="filterProduct" placeholder="Product">
+            <input type="date" class="form-control" id="filterDate" placeholder="Date">
+            <input type="date" class="form-control" id="filterStartDate" placeholder="Start Date">
+            <input type="date" class="form-control" id="filterCompletionDate" placeholder="Completion Date">
+            <select class="form-select" id="filterBuildStatus">
                 <option value="">Build Status</option>
                 <option value="Completed">Completed</option>
                 <option value="Pending">Pending</option>
             </select>
-            <select id="filterCertification">
+            <select class="form-select" id="filterCertification">
                 <option value="">Certification</option>
                 <option value="Certified">Certified</option>
                 <option value="Not Certified">Not Certified</option>
@@ -182,187 +150,295 @@
 
         <!-- Engagement Table -->
         <!-- START ENGAGEMENT TABLE -->
-        <div>Total Count: <span id="totalEngagements">0</span></div>
-        <table class="table" id="engagementTable">
-            <thead>
-                <tr>
-                    <th>Build/Patch</th>
-                    <th>Build ID</th>
-                    <th>Lead</th>
-                    <th>Product</th>
-                    <th>Date</th>
-                    <th>Start Date</th>
-                    <th>Completion Date</th>
-                    <th>Total Test Cases</th>
-                    <th>Completed</th>
-                    <th>Passed</th>
-                    <th>Failed</th>
-                    <th>Build Status</th>
-                    <th>Certification</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
-        <div class="pagination" id="engagementPagination"></div>
+        <div class="mb-3">Total Count: <span id="totalEngagements">0</span></div>
+        <div class="table-responsive">
+            <table class="table table-striped table-bordered" id="engagementTable">
+                <thead class="table-primary">
+                    <tr>
+                        <th>Build/Patch</th>
+                        <th>Build ID</th>
+                        <th>Lead</th>
+                        <th>Product</th>
+                        <th>Date</th>
+                        <th>Start Date</th>
+                        <th>Completion Date</th>
+                        <th>Total Test Cases</th>
+                        <th>Completed</th>
+                        <th>Passed</th>
+                        <th>Failed</th>
+                        <th>Build Status</th>
+                        <th>Certification</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <nav aria-label="Engagement pagination">
+            <ul class="pagination justify-content-center" id="engagementPagination"></ul>
+        </nav>
         <!-- END ENGAGEMENT TABLE -->
 
         <!-- Import Changelog Modal -->
         <!-- START IMPORT CHANGELOG MODAL -->
-        <div id="importChangelogModal" class="modal">
-            <div class="modal-content">
-                <span class="close-btn" onclick="closeModal('importChangelogModal')">&times;</span>
-                <h2>Import Changelog</h2>
-                <form id="importChangelogForm">
-                    <input type="hidden" name="csrfmiddlewaretoken" id="csrfTokenChangelog">
-                    <label>Bitbucket Repo: 
-                        <input type="text" name="project_name" placeholder="Project Name" required> / 
-                        <input type="text" name="repo_name" placeholder="Repo Name" required>
-                    </label><br>
-                    <label>Start Push ID: <input type="text" name="start_push_id" required></label><br>
-                    <label>End Push ID: <input type="text" name="end_push_id" required></label><br>
-                    <button type="submit" class="btn btn-success">Send Request</button>
-                </form>
+        <div class="modal fade" id="importChangelogModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Import Changelog</h5>
+                        <button type="button" class="btn-close" onclick="closeModal('importChangelogModal')"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="importChangelogForm">
+                            <input type="hidden" name="csrfmiddlewaretoken" id="csrfTokenChangelog">
+                            <div class="mb-3">
+                                <label class="form-label">Bitbucket Repo</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" name="project_name" placeholder="Project Name" required>
+                                    <span class="input-group-text">/</span>
+                                    <input type="text" class="form-control" name="repo_name" placeholder="Repo Name" required>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Start Push ID</label>
+                                <input type="text" class="form-control" name="start_push_id" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">End Push ID</label>
+                                <input type="text" class="form-control" name="end_push_id" required>
+                            </div>
+                            <button type="submit" class="btn btn-success">Send Request</button>
+                        </form>
+                    </div>
+                </div>
             </div>
         </div>
         <!-- END IMPORT CHANGELOG MODAL -->
 
         <!-- Test Cases Modal -->
         <!-- START TEST CASES MODAL -->
-        <div id="testCasesModal" class="modal">
-            <div class="modal-content">
-                <span class="close-btn" onclick="closeModal('testCasesModal')">&times;</span>
-                <h2>Test Cases</h2>
-                <div class="filter-container">
-                    <input type="text" id="filterTestID" placeholder="Search by ID">
-                    <select id="filterTestStatus">
-                        <option value="">Test Case Status</option>
-                        <option value="All">All</option>
-                        <option value="Active">Active</option>
-                        <option value="InActive">InActive</option>
-                        <option value="Retired">Retired</option>
-                    </select>
-                    <select id="filterCategory"></select>
-                    <select id="filterModality">
-                        <option value="">Modality</option>
-                        <option value="Web">Web</option>
-                        <option value="Mobile">Mobile</option>
-                        <option value="Thick">Thick</option>
-                    </select>
-                    <button class="btn btn-primary" onclick="openAddTestCaseModal()">Add New Test Case</button>
+        <div class="modal fade" id="testCasesModal" tabindex="-1">
+            <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Test Cases</h5>
+                        <button type="button" class="btn-close" onclick="closeModal('testCasesModal')"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="filter-container">
+                            <input type="text" class="form-control" id="filterTestID" placeholder="Search by ID">
+                            <select class="form-select" id="filterTestStatus">
+                                <option value="">Test Case Status</option>
+                                <option value="All">All</option>
+                                <option value="Active">Active</option>
+                                <option value="InActive">InActive</option>
+                                <option value="Retired">Retired</option>
+                            </select>
+                            <select class="form-select" id="filterCategory"></select>
+                            <select class="form-select" id="filterModality">
+                                <option value="">Modality</option>
+                                <option value="Web">Web</option>
+                                <option value="Mobile">Mobile</option>
+                                <option value="Thick">Thick</option>
+                            </select>
+                            <button class="btn btn-primary" onclick="openAddTestCaseModal()">Add New Test Case</button>
+                        </div>
+                        <div class="mb-3">Total Count: <span id="totalTestCases">0</span></div>
+                        <div class="table-responsive">
+                            <table class="table table-striped table-bordered" id="testCasesTable">
+                                <thead class="table-primary">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Category</th>
+                                        <th>Test Case Title</th>
+                                        <th>Test Case Description</th>
+                                        <th>Modality</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        <nav aria-label="Test cases pagination">
+                            <ul class="pagination justify-content-center" id="testCasesPagination"></ul>
+                        </nav>
+                    </div>
                 </div>
-                <div>Total Count: <span id="totalTestCases">0</span></div>
-                <table class="table" id="testCasesTable">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Category</th>
-                            <th>Test Case Title</th>
-                            <th>Test Case Description</th>
-                            <th>Modality</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-                <div class="pagination" id="testCasesPagination"></div>
             </div>
         </div>
         <!-- END TEST CASES MODAL -->
 
         <!-- Add New Test Case Modal -->
         <!-- START ADD NEW TEST CASE MODAL -->
-        <div id="addTestCaseModal" class="modal">
-            <div class="modal-content">
-                <span class="close-btn" onclick="closeModal('addTestCaseModal')">&times;</span>
-                <h2>Add New Test Case</h2>
-                <form id="addTestCaseForm">
-                    <input type="hidden" name="csrfmiddlewaretoken" id="csrfTokenTestCase">
-                    <label>ID: <input type="text" name="id" required></label><br>
-                    <label>Category: <input type="text" name="category" required></label><br>
-                    <label>Test Case Title: <input type="text" name="title" required></label><br>
-                    <label>Test Case Description: <textarea name="description" required></textarea></label><br>
-                    <label>Modality: 
-                        <select name="modality" required>
-                            <option value="Web">Web</option>
-                            <option value="Mobile">Mobile</option>
-                            <option value="Thick">Thick</option>
-                        </select>
-                    </label><br>
-                    <label>Test Type Name: <input type="text" name="test_type_name" value="Contrast Scan" readonly></label><br>
-                    <label>Test Type: <input type="number" name="test_type" value="41" readonly></label><br>
-                    <label>Environment: <input type="number" name="environment" value="6" readonly></label><br>
-                    <label>Target Start: <input type="date" name="target_start" required></label><br>
-                    <label>Target End: <input type="date" name="target_end" required></label><br>
-                    <button type="submit" class="btn btn-success">Save</button>
-                </form>
+        <div class="modal fade" id="addTestCaseModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Add New Test Case</h5>
+                        <button type="button" class="btn-close" onclick="closeModal('addTestCaseModal')"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="addTestCaseForm">
+                            <input type="hidden" name="csrfmiddlewaretoken" id="csrfTokenTestCase">
+                            <div class="mb-3">
+                                <label class="form-label">ID</label>
+                                <input type="text" class="form-control" name="id" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Category</label>
+                                <input type="text" class="form-control" name="category" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Test Case Title</label>
+                                <input type="text" class="form-control" name="title" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Test Case Description</label>
+                                <textarea class="form-control" name="description" required></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Modality</label>
+                                <select class="form-select" name="modality" required>
+                                    <option value="Web">Web</option>
+                                    <option value="Mobile">Mobile</option>
+                                    <option value="Thick">Thick</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Test Type Name</label>
+                                <input type="text" class="form-control" name="test_type_name" value="Contrast Scan" readonly>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Test Type</label>
+                                <input type="number" class="form-control" name="test_type" value="41" readonly>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Environment</label>
+                                <input type="number" class="form-control" name="environment" value="6" readonly>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Target Start</label>
+                                <input type="date" class="form-control" name="target_start" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Target End</label>
+                                <input type="date" class="form-control" name="target_end" required>
+                            </div>
+                            <button type="submit" class="btn btn-success">Save</button>
+                        </form>
+                    </div>
+                </div>
             </div>
         </div>
         <!-- END ADD NEW TEST CASE MODAL -->
 
         <!-- Mapping Modal -->
         <!-- START MAPPING MODAL -->
-        <div id="mappingModal" class="modal">
-            <div class="modal-content">
-                <span class="close-btn" onclick="closeModal('mappingModal')">&times;</span>
-                <h2>Mapping</h2>
-                <label>Engagement: 
-                    <select id="engagementSelect" onchange="loadJiraTestCases()"></select>
-                </label>
-                <table class="table" id="jiraTable">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Jira</th>
-                            <th>Assigned To</th>
-                            <th>Analysis Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-                <div id="mappingTestCases" style="display: none;">
-                    <h3>Select Test Cases</h3>
-                    <div class="filter-container">
-                        <input type="text" id="filterMappingTestID" placeholder="Search by ID">
-                        <select id="filterMappingCategory"></select>
-                        <select id="filterMappingModality">
-                            <option value="">Modality</option>
-                            <option value="Web">Web</option>
-                            <option value="Mobile">Mobile</option>
-                            <option value="Thick">Thick</option>
-                        </select>
+        <div class="modal fade" id="mappingModal" tabindex="-1">
+            <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Mapping</h5>
+                        <button type="button" class="btn-close" onclick="closeModal('mappingModal')"></button>
                     </div>
-                    <table class="table" id="mappingTestCasesTable">
-                        <thead>
-                            <tr>
-                                <th><input type="checkbox" id="selectAllTests" onclick="toggleSelectAll()"></th>
-                                <th>ID</th>
-                                <th>Category</th>
-                                <th>Test Case Title</th>
-                                <th>Modality</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                    <button class="btn btn-success" onclick="mapTestCases()">Map</button>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Engagement</label>
+                            <select class="form-select" id="engagementSelect" onchange="loadJiraTestCases()"></select>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-striped table-bordered" id="jiraTable">
+                                <thead class="table-primary">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Jira</th>
+                                        <th>Assigned To</th>
+                                        <th>Analysis Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        <div id="mappingTestCases" style="display: none;">
+                            <h5>Select Test Cases</h5>
+                            <div class="filter-container">
+                                <input type="text" class="form-control" id="filterMappingTestID" placeholder="Search by ID">
+                                <select class="form-select" id="filterMappingCategory"></select>
+                                <select class="form-select" id="filterMappingModality">
+                                    <option value="">Modality</option>
+                                    <option value="Web">Web</option>
+                                    <option value="Mobile">Mobile</option>
+                                    <option value="Thick">Thick</option>
+                                </select>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-striped table-bordered" id="mappingTestCasesTable">
+                                    <thead class="table-primary">
+                                        <tr>
+                                            <th><input type="checkbox" id="selectAllTests" onclick="toggleSelectAll()"></th>
+                                            <th>ID</th>
+                                            <th>Category</th>
+                                            <th>Test Case Title</th>
+                                            <th>Modality</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <button class="btn btn-success" onclick="mapTestCases()">Map</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
         <!-- END MAPPING MODAL -->
 
-        <!-- Toast Notification -->
-        <div id="toast" class="toast"></div>
+        <!-- Toast Container -->
+        <div class="toast-container">
+            <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-body"></div>
+            </div>
+        </div>
 
         <!-- Loading Modal -->
         <div id="loading" class="loading"></div>
     </div>
 
+    <!-- Bootstrap JS and Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // JavaScript for dynamic functionality
         let currentPage = 1;
         let testCasesPage = 1;
         const itemsPerPage = 10;
         const testCasesPerPage = 10;
+        let currentBuildId = null;
+
+        // Modal controls
+        function openModal(modalId) {
+            const modal = new bootstrap.Modal(document.getElementById(modalId));
+            modal.show();
+        }
+
+        function closeModal(modalId) {
+            const modal = bootstrap.Modal.getInstance(document.getElementById(modalId));
+            if (modal) modal.hide();
+        }
+
+        function showToast(message) {
+            const toastEl = document.getElementById('toast');
+            toastEl.querySelector('.toast-body').textContent = message;
+            const toast = new bootstrap.Toast(toastEl);
+            toast.show();
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'flex';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
 
         // Fetch CSRF token
         async function fetchCsrfToken() {
@@ -383,30 +459,6 @@
             }
         }
 
-        // Modal controls
-        function openModal(modalId) {
-            document.getElementById(modalId).style.display = 'flex';
-        }
-
-        function closeModal(modalId) {
-            document.getElementById(modalId).style.display = 'none';
-        }
-
-        function showToast(message) {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.style.display = 'block';
-            setTimeout(() => toast.style.display = 'none', 3000);
-        }
-
-        function showLoading() {
-            document.getElementById('loading').style.display = 'flex';
-        }
-
-        function hideLoading() {
-            document.getElementById('loading').style.display = 'none';
-        }
-
         // Add Patch Modal
         function openAddPatchModal() {
             const today = new Date().toISOString().split('T')[0];
@@ -416,59 +468,16 @@
             openModal('addPatchModal');
         }
 
-        // Simulated API data
-        let engagements = [
-            {
-                id: 123,
-                build_patch: 'Patch',
-                build_id: 'A-1234',
-                lead: 'John Doe',
-                product: 'Product X',
-                created: '2025-05-08',
-                target_start: '2025-05-08',
-                target_end: '2025-05-09',
-                total_test_cases: 10,
-                completed: 5,
-                passed: 4,
-                failed: 1,
-                status: 'Pending',
-                commit_hash: 'Pending',
-                tags: ['rmm']
-            }
-        ];
-
-        let testCases = [
-            {
-                id: 'TC001',
-                category: 'Security',
-                title: 'Test Authentication',
-                description: 'Verify user authentication with valid credentials.',
-                modality: 'Web',
-                test_type_name: 'Contrast Scan',
-                test_type: 41,
-                environment: 6,
-                target_start: '2025-05-08',
-                target_end: '2025-05-08',
-                tags: ['master_test_cases']
-            }
-        ];
-
-        let jiraTestCases = [
-            {
-                id: 'JIRA001',
-                title: 'Fix Login Bug',
-                assigned_to: 'John Doe',
-                analysis_status: 'Not Started',
-                tags: ['rmm_jiras']
-            }
-        ];
-
         // Load Engagements
         async function loadEngagements(page = 1) {
             showLoading();
             try {
-                // Simulated API call
-                const filteredEngagements = engagements.filter(e => {
+                // Replace with actual API call
+                const response = await fetch('/api/engagements', {
+                    headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
+                });
+                const data = await response.json();
+                const filteredEngagements = data.filter(e => {
                     return (
                         (!document.getElementById('filterBuild').value || e.build_patch.includes(document.getElementById('filterBuild').value)) &&
                         (!document.getElementById('filterBuildID').value || e.build_id.includes(document.getElementById('filterBuildID').value)) &&
@@ -490,22 +499,22 @@
                 paginatedEngagements.forEach(e => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
-                        <td>${e.build_patch}</td>
+                        <td>${e.build_patch || 'Patch'}</td>
                         <td><a href="#" onclick="openImportChangelogModal('${e.build_id}')">${e.build_id}</a></td>
-                        <td>${e.lead}</td>
-                        <td>${e.product}</td>
-                        <td>${e.created}</td>
-                        <td>${e.target_start}</td>
-                        <td>${e.target_end}</td>
-                        <td><a href="#" onclick="openTestCasesModal()">${e.total_test_cases}</a></td>
-                        <td>${e.completed}</td>
-                        <td class="status-pass">${e.passed}</td>
-                        <td class="status-fail">${e.failed}</td>
-                        <td class="status-${e.status.toLowerCase().replace(' ', '-')}">${e.status}</td>
-                        <td class="status-${e.commit_hash.toLowerCase().replace(' ', '-')}">${e.commit_hash}</td>
+                        <td>${e.lead || ''}</td>
+                        <td>${e.product || ''}</td>
+                        <td>${e.created || ''}</td>
+                        <td>${e.target_start || ''}</td>
+                        <td>${e.target_end || ''}</td>
+                        <td><a href="#" onclick="openTestCasesModal()">${e.total_test_cases || 0}</a></td>
+                        <td>${e.completed || 0}</td>
+                        <td class="status-pass">${e.passed || 0}</td>
+                        <td class="status-fail">${e.failed || 0}</td>
+                        <td class="status-${(e.status || '').toLowerCase().replace(' ', '-')}">${e.status || ''}</td>
+                        <td class="status-${(e.commit_hash || '').toLowerCase().replace(' ', '-')}">${e.commit_hash || ''}</td>
                         <td>
-                            <button class="btn btn-info" onclick="openTestCasesModal()">Test Cases</button>
-                            <button class="btn btn-primary" onclick="openMappingModal()">Mapping</button>
+                            <button class="btn btn-info btn-sm" onclick="openTestCasesModal()">Test Cases</button>
+                            <button class="btn btn-primary btn-sm" onclick="openMappingModal()">Mapping</button>
                         </td>
                     `;
                     tbody.appendChild(row);
@@ -526,16 +535,16 @@
             const container = document.getElementById(containerId);
             container.innerHTML = '';
             for (let i = 1; i <= totalPages; i++) {
-                const btn = document.createElement('button');
-                btn.textContent = i;
-                btn.className = i === currentPage ? 'btn btn-primary' : 'btn';
-                btn.onclick = () => callback(i);
-                container.appendChild(btn);
+                const li = document.createElement('li');
+                li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+                li.innerHTML = `<a class="page-link" href="#" onclick="${callback.name}(${i}); return false;">${i}</a>`;
+                container.appendChild(li);
             }
         }
 
         // Import Changelog Modal
         function openImportChangelogModal(buildId) {
+            currentBuildId = buildId;
             openModal('importChangelogModal');
             document.getElementById('importChangelogForm').onsubmit = async (e) => {
                 e.preventDefault();
@@ -543,12 +552,17 @@
                 try {
                     const formData = new FormData(e.target);
                     const data = Object.fromEntries(formData);
-                    // Simulated API call
-                    engagements = engagements.map(eng => {
-                        if (eng.build_id === buildId) {
-                            return { ...eng, branch_tag: data.project_name, build_id: data.repo_name };
-                        }
-                        return eng;
+                    // Replace with actual API call
+                    await fetch('/api/changelog', {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': document.getElementById('csrfTokenChangelog').value },
+                        body: JSON.stringify({
+                            build_id: currentBuildId,
+                            project_name: data.project_name,
+                            repo_name: data.repo_name,
+                            start_push_id: data.start_push_id,
+                            end_push_id: data.end_push_id
+                        })
                     });
                     showToast('Changelog request sent');
                     closeModal('importChangelogModal');
@@ -571,7 +585,11 @@
         async function loadTestCases(page = 1) {
             showLoading();
             try {
-                // Simulated API call for engagement 123 with tags master_test_cases
+                // Replace with actual API call for engagement 1233 with tags master_test_cases
+                const response = await fetch('/api/test-cases?engagement_id=1233&tags=master_test_cases', {
+                    headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
+                });
+                const testCases = await response.json();
                 const filteredTestCases = testCases.filter(tc => {
                     return (
                         (!document.getElementById('filterTestID').value || tc.id.includes(document.getElementById('filterTestID').value)) &&
@@ -587,14 +605,14 @@
                 const tbody = document.querySelector('#testCasesTable tbody');
                 tbody.innerHTML = '';
                 paginatedTestCases.forEach(tc => {
-                    const shortDesc = tc.description.split(' ').slice(0, 5).join(' ') + (tc.description.split(' ').length > 5 ? '...' : '');
+                    const shortDesc = tc.description ? tc.description.split(' ').slice(0, 5).join(' ') + (tc.description.split(' ').length > 5 ? '...' : '') : '';
                     const row = document.createElement('tr');
                     row.innerHTML = `
-                        <td>${tc.id}</td>
-                        <td>${tc.category}</td>
-                        <td>${tc.title}</td>
-                        <td>${shortDesc} <a href="#" onclick="alert('${tc.description}')">See more</a></td>
-                        <td>${tc.modality}</td>
+                        <td>${tc.id || ''}</td>
+                        <td>${tc.category || ''}</td>
+                        <td>${tc.title || ''}</td>
+                        <td>${shortDesc} <a href="#" onclick="alert('${tc.description || ''}')">See more</a></td>
+                        <td>${tc.modality || ''}</td>
                     `;
                     tbody.appendChild(row);
                 });
@@ -608,16 +626,24 @@
             }
         }
 
-        function loadCategories() {
-            const categories = [...new Set(testCases.map(tc => tc.category))];
-            const select = document.getElementById('filterCategory');
-            select.innerHTML = '<option value="">Category</option>';
-            categories.forEach(cat => {
-                const option = document.createElement('option');
-                option.value = cat;
-                option.textContent = cat;
-                select.appendChild(option);
-            });
+        async function loadCategories() {
+            try {
+                // Replace with actual API call
+                const response = await fetch('/api/test-cases/categories', {
+                    headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
+                });
+                const categories = await response.json();
+                const select = document.getElementById('filterCategory');
+                select.innerHTML = '<option value="">Category</option>';
+                categories.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat;
+                    option.textContent = cat;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                showToast('Failed to load categories');
+            }
         }
 
         // Add New Test Case Modal
@@ -633,7 +659,13 @@
                     const formData = new FormData(e.target);
                     const data = Object.fromEntries(formData);
                     data.tags = ['master_test_cases'];
-                    testCases.push(data);
+                    data.engagement_id = 1233;
+                    // Replace with actual API call
+                    await fetch('/api/test-cases', {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': document.getElementById('csrfTokenTestCase').value },
+                        body: JSON.stringify(data)
+                    });
                     showToast('Test case added');
                     closeModal('addTestCaseModal');
                     loadTestCases(testCasesPage);
@@ -654,9 +686,13 @@
         async function loadEngagementSelect() {
             showLoading();
             try {
-                // Simulated API call for active engagements
+                // Replace with actual API call for active engagements
+                const response = await fetch('/api/engagements?active=true', {
+                    headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
+                });
+                const engagements = await response.json();
                 const select = document.getElementById('engagementSelect');
-                select.innerHTML = '<option value="">Select Engagement</option>';
+                select irritate.innerHTML = '<option value="">Select Engagement</option>';
                 engagements.forEach(eng => {
                     const option = document.createElement('option');
                     option.value = eng.id;
@@ -679,17 +715,21 @@
                     document.getElementById('mappingTestCases').style.display = 'none';
                     return;
                 }
-                // Simulated API call for test cases with rmm_jiras tags
+                // Replace with actual API call for test cases with rmm_jiras tags
+                const response = await fetch(`/api/test-cases?engagement_id=${engagementId}&tags=rmm_jiras`, {
+                    headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
+                });
+                const jiraTestCases = await response.json();
                 const tbody = document.querySelector('#jiraTable tbody');
                 tbody.innerHTML = '';
                 jiraTestCases.forEach(jira => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
-                        <td>${jira.id}</td>
-                        <td>${jira.title}</td>
-                        <td>${jira.assigned_to}</td>
-                        <td class="status-${jira.analysis_status.toLowerCase().replace(' ', '-')}">${jira.analysis_status}</td>
-                        <td><button class="btn btn-primary" onclick="openMappingTestCases('${jira.id}')">Map</button></td>
+                        <td>${jira.id || ''}</td>
+                        <td>${jira.title || ''}</td>
+                        <td>${jira.assigned_to || ''}</td>
+                        <td class="status-${(jira.analysis_status || '').toLowerCase().replace(' ', '-')}">${jira.analysis_status || 'Not Started'}</td>
+                        <td><button class="btn btn-primary btn-sm" onclick="openMappingTestCases('${jira.id}')">Map</button></td>
                     `;
                     tbody.appendChild(row);
                 });
@@ -704,18 +744,29 @@
             document.getElementById('mappingTestCases').style.display = 'block';
             showLoading();
             try {
-                // Simulated API call for test cases with master_test_cases tags for engagement 123
-                const filteredTestCases = testCases.filter(tc => tc.tags.includes('master_test_cases'));
+                // Replace with actual API call for test cases with master_test_cases tags for engagement 1233
+                const response = await fetch('/api/test-cases?engagement_id=1233&tags=master_test_cases', {
+                    headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
+                });
+                const testCases = await response.json();
+                const filteredTestCases = testCases.filter(tc => {
+                    return (
+                        (!document.getElementById('filterMappingTestID').value || tc.id.includes(document.getElementById('filterMappingTestID').value)) &&
+                        (!document.getElementById('filterMappingCategory').value || tc.category === document.getElementById('filterMappingCategory').value) &&
+                        (!document.getElementById('filterMappingModality').value || tc.modality === document.getElementById('filterMappingModality').value)
+                    );
+                });
+
                 const tbody = document.querySelector('#mappingTestCasesTable tbody');
                 tbody.innerHTML = '';
                 filteredTestCases.forEach(tc => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
                         <td><input type="checkbox" value="${tc.id}"></td>
-                        <td>${tc.id}</td>
-                        <td>${tc.category}</td>
-                        <td>${tc.title}</td>
-                        <td>${tc.modality}</td>
+                        <td>${tc.id || ''}</td>
+                        <td>${tc.category || ''}</td>
+                        <td>${tc.title || ''}</td>
+                        <td>${tc.modality || ''}</td>
                     `;
                     tbody.appendChild(row);
                 });
@@ -727,16 +778,24 @@
             }
         }
 
-        function loadMappingCategories() {
-            const categories = [...new Set(testCases.map(tc => tc.category))];
-            const select = document.getElementById('filterMappingCategory');
-            select.innerHTML = '<option value="">Category</option>';
-            categories.forEach(cat => {
-                const option = document.createElement('option');
-                option.value = cat;
-                option.textContent = cat;
-                select.appendChild(option);
-            });
+        async function loadMappingCategories() {
+            try {
+                // Replace with actual API call
+                const response = await fetch('/api/test-cases/categories', {
+                    headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
+                });
+                const categories = await response.json();
+                const select = document.getElementById('filterMappingCategory');
+                select.innerHTML = '<option value="">Category</option>';
+                categories.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat;
+                    option.textContent = cat;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                showToast('Failed to load categories');
+            }
         }
 
         function toggleSelectAll() {
@@ -753,13 +812,12 @@
                     showToast('No test cases selected');
                     return;
                 }
-                // Simulated API call to store test IDs in engagement's commit_hash
                 const engagementId = document.getElementById('engagementSelect').value;
-                engagements = engagements.map(eng => {
-                    if (eng.id == engagementId) {
-                        return { ...eng, commit_hash: selectedTests.join(',') };
-                    }
-                    return eng;
+                // Replace with actual API call
+                await fetch(`/api/engagements/${engagementId}/map-tests`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': document.getElementById('csrfToken').value },
+                    body: JSON.stringify({ test_ids: selectedTests })
                 });
                 showToast('Test cases mapped');
                 document.getElementById('mappingTestCases').style.display = 'none';
@@ -778,18 +836,18 @@
             try {
                 const formData = new FormData(e.target);
                 const data = Object.fromEntries(formData);
-                data.tags = data.tags.split(',').map(tag => tag.trim());
-                data.id = engagements.length + 1;
-                data.total_test_cases = 0;
-                data.completed = 0;
-                data.passed = 0;
-                data.failed = 0;
+                data.tags = data.tags ? data.tags.split(',').map(tag => tag.trim()) : ['rmm'];
                 data.build_patch = 'Patch';
                 data.created = new Date().toISOString().split('T')[0];
                 if (data.commit_hash === 'Certified' || data.commit_hash === 'Not Certified') {
                     data.status = 'Completed';
                 }
-                engagements.push(data);
+                // Replace with actual API call
+                await fetch('/api/engagements', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': document.getElementById('csrfToken').value },
+                    body: JSON.stringify(data)
+                });
                 showToast('Patch added successfully');
                 closeModal('addPatchModal');
                 loadEngagements(currentPage);
