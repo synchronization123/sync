@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patch and Test Case Management</title>
+    <style>
+        /* CSS for layout, modals, toasts, and color coding */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f9;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn-primary { background-color: #007bff; color: white; }
+        .btn-success { background-color: #28a745; color: white; }
+        .btn-info { background-color: #17a2b8; color: white; }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .table th, .table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .table th { background-color: #007bff; color: white; }
+        .table tr:nth-child(even) { background-color: #f2f2f2; }
+        .filter-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .filter-container input, .filter-container select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .modal-content h2 { margin-top: 0; }
+        .close-btn {
+            float: right;
+            font-size: 20px;
+            cursor: pointer;
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            display: none;
+            z-index: 2000;
+        }
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1500;
+        }
+        .loading::after {
+            content: 'Loading...';
+            color: white;
+            font-size: 24px;
+        }
+        .status-pass { color: #28a745; font-weight: bold; }
+        .status-fail { color: #dc3545; font-weight: bold; }
+        .status-pending { color: #ffc107; font-weight: bold; }
+        .status-not-started { color: #6c757d; font-weight: bold; }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .pagination button { padding: 8px 16px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Patch and Test Case Management</h1>
+
+        <!-- Add New Patch Form -->
+        <!-- START ADD NEW PATCH -->
+        <div>
+            <button class="btn btn-primary" onclick="openAddPatchModal()">Add New Patch</button>
+        </div>
+        <div id="addPatchModal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn" onclick="closeModal('addPatchModal')">&times;</span>
+                <h2>Add New Patch</h2>
+                <form id="addPatchForm">
+                    <input type="hidden" name="csrfmiddlewaretoken" id="csrfToken">
+                    <label>Name: <input type="text" name="name" value="A-1234" required></label><br>
+                    <label>Target Start: <input type="date" name="target_start" required></label><br>
+                    <label>Target End: <input type="date" name="target_end" required></label><br>
+                    <label>Status: 
+                        <select name="status">
+                            <option value="Not Started">Not Started</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Pending">Pending</option>
+                        </select>
+                    </label><br>
+                    <label>Engagement Type: 
+                        <select name="engagement_type">
+                            <option value="Interactive">Interactive</option>
+                        </select>
+                    </label><br>
+                    <label>Lead: <input type="text" name="lead"></label><br>
+                    <label>Product: <input type="text" name="product"></label><br>
+                    <label>Tags: <input type="text" name="tags" value="rmm"></label><br>
+                    <button type="submit" class="btn btn-success">Save</button>
+                </form>
+            </div>
+        </div>
+        <!-- END ADD NEW PATCH -->
+
+        <!-- Filters -->
+        <!-- START FILTERS -->
+        <div class="filter-container">
+            <input type="text" id="filterBuild" placeholder="Build/Patch">
+            <input type="text" id="filterBuildID" placeholder="Build ID">
+            <input type="text" id="filterLead" placeholder="Lead">
+            <input type="text" id="filterProduct" placeholder="Product">
+            <input type="date" id="filterDate" placeholder="Date">
+            <input type="date" id="filterStartDate" placeholder="Start Date">
+            <input type="date" id="filterCompletionDate" placeholder="Completion Date">
+            <select id="filterBuildStatus">
+                <option value="">Build Status</option>
+                <option value="Completed">Completed</option>
+                <option value="Pending">Pending</option>
+            </select>
+            <select id="filterCertification">
+                <option value="">Certification</option>
+                <option value="Certified">Certified</option>
+                <option value="Not Certified">Not Certified</option>
+                <option value="Pending">Pending</option>
+            </select>
+        </div>
+        <!-- END FILTERS -->
+
+        <!-- Engagement Table -->
+        <!-- START ENGAGEMENT TABLE -->
+        <div>Total Count: <span id="totalEngagements">0</span></div>
+        <table class="table" id="engagementTable">
+            <thead>
+                <tr>
+                    <th>Build/Patch</th>
+                    <th>Build ID</th>
+                    <th>Lead</th>
+                    <th>Product</th>
+                    <th>Date</th>
+                    <th>Start Date</th>
+                    <th>Completion Date</th>
+                    <th>Total Test Cases</th>
+                    <th>Completed</th>
+                    <th>Passed</th>
+                    <th>Failed</th>
+                    <th>Build Status</th>
+                    <th>Certification</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <div class="pagination" id="engagementPagination"></div>
+        <!-- END ENGAGEMENT TABLE -->
+
+        <!-- Import Changelog Modal -->
+        <!-- START IMPORT CHANGELOG MODAL -->
+        <div id="importChangelogModal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn" onclick="closeModal('importChangelogModal')">&times;</span>
+                <h2>Import Changelog</h2>
+                <form id="importChangelogForm">
+                    <input type="hidden" name="csrfmiddlewaretoken" id="csrfTokenChangelog">
+                    <label>Bitbucket Repo: 
+                        <input type="text" name="project_name" placeholder="Project Name" required> / 
+                        <input type="text" name="repo_name" placeholder="Repo Name" required>
+                    </label><br>
+                    <label>Start Push ID: <input type="text" name="start_push_id" required></label><br>
+                    <label>End Push ID: <input type="text" name="end_push_id" required></label><br>
+                    <button type="submit" class="btn btn-success">Send Request</button>
+                </form>
+            </div>
+        </div>
+        <!-- END IMPORT CHANGELOG MODAL -->
+
+        <!-- Test Cases Modal -->
+        <!-- START TEST CASES MODAL -->
+        <div id="testCasesModal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn" onclick="closeModal('testCasesModal')">&times;</span>
+                <h2>Test Cases</h2>
+                <div class="filter-container">
+                    <input type="text" id="filterTestID" placeholder="Search by ID">
+                    <select id="filterTestStatus">
+                        <option value="">Test Case Status</option>
+                        <option value="All">All</option>
+                        <option value="Active">Active</option>
+                        <option value="InActive">InActive</option>
+                        <option value="Retired">Retired</option>
+                    </select>
+                    <select id="filterCategory"></select>
+                    <select id="filterModality">
+                        <option value="">Modality</option>
+                        <option value="Web">Web</option>
+                        <option value="Mobile">Mobile</option>
+                        <option value="Thick">Thick</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="openAddTestCaseModal()">Add New Test Case</button>
+                </div>
+                <div>Total Count: <span id="totalTestCases">0</span></div>
+                <table class="table" id="testCasesTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Category</th>
+                            <th>Test Case Title</th>
+                            <th>Test Case Description</th>
+                            <th>Modality</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+                <div class="pagination" id="testCasesPagination"></div>
+            </div>
+        </div>
+        <!-- END TEST CASES MODAL -->
+
+        <!-- Add New Test Case Modal -->
+        <!-- START ADD NEW TEST CASE MODAL -->
+        <div id="addTestCaseModal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn" onclick="closeModal('addTestCaseModal')">&times;</span>
+                <h2>Add New Test Case</h2>
+                <form id="addTestCaseForm">
+                    <input type="hidden" name="csrfmiddlewaretoken" id="csrfTokenTestCase">
+                    <label>ID: <input type="text" name="id" required></label><br>
+                    <label>Category: <input type="text" name="category" required></label><br>
+                    <label>Test Case Title: <input type="text" name="title" required></label><br>
+                    <label>Test Case Description: <textarea name="description" required></textarea></label><br>
+                    <label>Modality: 
+                        <select name="modality" required>
+                            <option value="Web">Web</option>
+                            <option value="Mobile">Mobile</option>
+                            <option value="Thick">Thick</option>
+                        </select>
+                    </label><br>
+                    <label>Test Type Name: <input type="text" name="test_type_name" value="Contrast Scan" readonly></label><br>
+                    <label>Test Type: <input type="number" name="test_type" value="41" readonly></label><br>
+                    <label>Environment: <input type="number" name="environment" value="6" readonly></label><br>
+                    <label>Target Start: <input type="date" name="target_start" required></label><br>
+                    <label>Target End: <input type="date" name="target_end" required></label><br>
+                    <button type="submit" class="btn btn-success">Save</button>
+                </form>
+            </div>
+        </div>
+        <!-- END ADD NEW TEST CASE MODAL -->
+
+        <!-- Mapping Modal -->
+        <!-- START MAPPING MODAL -->
+        <div id="mappingModal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn" onclick="closeModal('mappingModal')">&times;</span>
+                <h2>Mapping</h2>
+                <label>Engagement: 
+                    <select id="engagementSelect" onchange="loadJiraTestCases()"></select>
+                </label>
+                <table class="table" id="jiraTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Jira</th>
+                            <th>Assigned To</th>
+                            <th>Analysis Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+                <div id="mappingTestCases" style="display: none;">
+                    <h3>Select Test Cases</h3>
+                    <div class="filter-container">
+                        <input type="text" id="filterMappingTestID" placeholder="Search by ID">
+                        <select id="filterMappingCategory"></select>
+                        <select id="filterMappingModality">
+                            <option value="">Modality</option>
+                            <option value="Web">Web</option>
+                            <option value="Mobile">Mobile</option>
+                            <option value="Thick">Thick</option>
+                        </select>
+                    </div>
+                    <table class="table" id="mappingTestCasesTable">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="selectAllTests" onclick="toggleSelectAll()"></th>
+                                <th>ID</th>
+                                <th>Category</th>
+                                <th>Test Case Title</th>
+                                <th>Modality</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                    <button class="btn btn-success" onclick="mapTestCases()">Map</button>
+                </div>
+            </div>
+        </div>
+        <!-- END MAPPING MODAL -->
+
+        <!-- Toast Notification -->
+        <div id="toast" class="toast"></div>
+
+        <!-- Loading Modal -->
+        <div id="loading" class="loading"></div>
+    </div>
+
+    <script>
+        // JavaScript for dynamic functionality
+        let currentPage = 1;
+        let testCasesPage = 1;
+        const itemsPerPage = 10;
+        const testCasesPerPage = 10;
+
+        // Fetch CSRF token
+        async function fetchCsrfToken() {
+            showLoading();
+            try {
+                const response = await fetch('https://dojo.com/api/key-v2');
+                const text = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
+                const csrfToken = doc.querySelector('input[name="csrfmiddlewaretoken"]').value;
+                document.querySelectorAll('[name="csrfmiddlewaretoken"]').forEach(input => {
+                    input.value = csrfToken;
+                });
+            } catch (error) {
+                showToast('Failed to fetch CSRF token');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Modal controls
+        function openModal(modalId) {
+            document.getElementById(modalId).style.display = 'flex';
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 3000);
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'flex';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        // Add Patch Modal
+        function openAddPatchModal() {
+            const today = new Date().toISOString().split('T')[0];
+            const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+            document.querySelector('#addPatchForm [name="target_start"]').value = today;
+            document.querySelector('#addPatchForm [name="target_end"]').value = tomorrow;
+            openModal('addPatchModal');
+        }
+
+        // Simulated API data
+        let engagements = [
+            {
+                id: 123,
+                build_patch: 'Patch',
+                build_id: 'A-1234',
+                lead: 'John Doe',
+                product: 'Product X',
+                created: '2025-05-08',
+                target_start: '2025-05-08',
+                target_end: '2025-05-09',
+                total_test_cases: 10,
+                completed: 5,
+                passed: 4,
+                failed: 1,
+                status: 'Pending',
+                commit_hash: 'Pending',
+                tags: ['rmm']
+            }
+        ];
+
+        let testCases = [
+            {
+                id: 'TC001',
+                category: 'Security',
+                title: 'Test Authentication',
+                description: 'Verify user authentication with valid credentials.',
+                modality: 'Web',
+                test_type_name: 'Contrast Scan',
+                test_type: 41,
+                environment: 6,
+                target_start: '2025-05-08',
+                target_end: '2025-05-08',
+                tags: ['master_test_cases']
+            }
+        ];
+
+        let jiraTestCases = [
+            {
+                id: 'JIRA001',
+                title: 'Fix Login Bug',
+                assigned_to: 'John Doe',
+                analysis_status: 'Not Started',
+                tags: ['rmm_jiras']
+            }
+        ];
+
+        // Load Engagements
+        async function loadEngagements(page = 1) {
+            showLoading();
+            try {
+                // Simulated API call
+                const filteredEngagements = engagements.filter(e => {
+                    return (
+                        (!document.getElementById('filterBuild').value || e.build_patch.includes(document.getElementById('filterBuild').value)) &&
+                        (!document.getElementById('filterBuildID').value || e.build_id.includes(document.getElementById('filterBuildID').value)) &&
+                        (!document.getElementById('filterLead').value || e.lead.includes(document.getElementById('filterLead').value)) &&
+                        (!document.getElementById('filterProduct').value || e.product.includes(document.getElementById('filterProduct').value)) &&
+                        (!document.getElementById('filterDate').value || e.created === document.getElementById('filterDate').value) &&
+                        (!document.getElementById('filterStartDate').value || e.target_start === document.getElementById('filterStartDate').value) &&
+                        (!document.getElementById('filterCompletionDate').value || e.target_end === document.getElementById('filterCompletionDate').value) &&
+                        (!document.getElementById('filterBuildStatus').value || e.status === document.getElementById('filterBuildStatus').value) &&
+                        (!document.getElementById('filterCertification').value || e.commit_hash === document.getElementById('filterCertification').value)
+                    );
+                });
+
+                const start = (page - 1) * itemsPerPage;
+                const paginatedEngagements = filteredEngagements.slice(start, start + itemsPerPage);
+
+                const tbody = document.querySelector('#engagementTable tbody');
+                tbody.innerHTML = '';
+                paginatedEngagements.forEach(e => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${e.build_patch}</td>
+                        <td><a href="#" onclick="openImportChangelogModal('${e.build_id}')">${e.build_id}</a></td>
+                        <td>${e.lead}</td>
+                        <td>${e.product}</td>
+                        <td>${e.created}</td>
+                        <td>${e.target_start}</td>
+                        <td>${e.target_end}</td>
+                        <td><a href="#" onclick="openTestCasesModal()">${e.total_test_cases}</a></td>
+                        <td>${e.completed}</td>
+                        <td class="status-pass">${e.passed}</td>
+                        <td class="status-fail">${e.failed}</td>
+                        <td class="status-${e.status.toLowerCase().replace(' ', '-')}">${e.status}</td>
+                        <td class="status-${e.commit_hash.toLowerCase().replace(' ', '-')}">${e.commit_hash}</td>
+                        <td>
+                            <button class="btn btn-info" onclick="openTestCasesModal()">Test Cases</button>
+                            <button class="btn btn-primary" onclick="openMappingModal()">Mapping</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+                document.getElementById('totalEngagements').textContent = filteredEngagements.length;
+                renderPagination(filteredEngagements.length, page, 'engagementPagination', loadEngagements);
+            } catch (error) {
+                showToast('Failed to load engagements');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Render Pagination
+        function renderPagination(totalItems, currentPage, containerId, callback) {
+            const totalPages = Math.ceil(totalItems / itemsPerPage);
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            for (let i = 1; i <= totalPages; i++) {
+                const btn = document.createElement('button');
+                btn.textContent = i;
+                btn.className = i === currentPage ? 'btn btn-primary' : 'btn';
+                btn.onclick = () => callback(i);
+                container.appendChild(btn);
+            }
+        }
+
+        // Import Changelog Modal
+        function openImportChangelogModal(buildId) {
+            openModal('importChangelogModal');
+            document.getElementById('importChangelogForm').onsubmit = async (e) => {
+                e.preventDefault();
+                showLoading();
+                try {
+                    const formData = new FormData(e.target);
+                    const data = Object.fromEntries(formData);
+                    // Simulated API call
+                    engagements = engagements.map(eng => {
+                        if (eng.build_id === buildId) {
+                            return { ...eng, branch_tag: data.project_name, build_id: data.repo_name };
+                        }
+                        return eng;
+                    });
+                    showToast('Changelog request sent');
+                    closeModal('importChangelogModal');
+                    loadEngagements(currentPage);
+                } catch (error) {
+                    showToast('Failed to send changelog request');
+                } finally {
+                    hideLoading();
+                }
+            };
+        }
+
+        // Test Cases Modal
+        function openTestCasesModal() {
+            openModal('testCasesModal');
+            loadTestCases();
+            loadCategories();
+        }
+
+        async function loadTestCases(page = 1) {
+            showLoading();
+            try {
+                // Simulated API call for engagement 123 with tags master_test_cases
+                const filteredTestCases = testCases.filter(tc => {
+                    return (
+                        (!document.getElementById('filterTestID').value || tc.id.includes(document.getElementById('filterTestID').value)) &&
+                        (!document.getElementById('filterTestStatus').value || document.getElementById('filterTestStatus').value === 'All' || tc.status === document.getElementById('filterTestStatus').value) &&
+                        (!document.getElementById('filterCategory').value || tc.category === document.getElementById('filterCategory').value) &&
+                        (!document.getElementById('filterModality').value || tc.modality === document.getElementById('filterModality').value)
+                    );
+                });
+
+                const start = (page - 1) * testCasesPerPage;
+                const paginatedTestCases = filteredTestCases.slice(start, start + testCasesPerPage);
+
+                const tbody = document.querySelector('#testCasesTable tbody');
+                tbody.innerHTML = '';
+                paginatedTestCases.forEach(tc => {
+                    const shortDesc = tc.description.split(' ').slice(0, 5).join(' ') + (tc.description.split(' ').length > 5 ? '...' : '');
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${tc.id}</td>
+                        <td>${tc.category}</td>
+                        <td>${tc.title}</td>
+                        <td>${shortDesc} <a href="#" onclick="alert('${tc.description}')">See more</a></td>
+                        <td>${tc.modality}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+                document.getElementById('totalTestCases').textContent = filteredTestCases.length;
+                renderPagination(filteredTestCases.length, page, 'testCasesPagination', loadTestCases);
+            } catch (error) {
+                showToast('Failed to load test cases');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function loadCategories() {
+            const categories = [...new Set(testCases.map(tc => tc.category))];
+            const select = document.getElementById('filterCategory');
+            select.innerHTML = '<option value="">Category</option>';
+            categories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat;
+                select.appendChild(option);
+            });
+        }
+
+        // Add New Test Case Modal
+        function openAddTestCaseModal() {
+            const today = new Date().toISOString().split('T')[0];
+            document.querySelector('#addTestCaseForm [name="target_start"]').value = today;
+            document.querySelector('#addTestCaseForm [name="target_end"]').value = today;
+            openModal('addTestCaseModal');
+            document.getElementById('addTestCaseForm').onsubmit = async (e) => {
+                e.preventDefault();
+                showLoading();
+                try {
+                    const formData = new FormData(e.target);
+                    const data = Object.fromEntries(formData);
+                    data.tags = ['master_test_cases'];
+                    testCases.push(data);
+                    showToast('Test case added');
+                    closeModal('addTestCaseModal');
+                    loadTestCases(testCasesPage);
+                } catch (error) {
+                    showToast('Failed to add test case');
+                } finally {
+                    hideLoading();
+                }
+            };
+        }
+
+        // Mapping Modal
+        function openMappingModal() {
+            openModal('mappingModal');
+            loadEngagementSelect();
+        }
+
+        async function loadEngagementSelect() {
+            showLoading();
+            try {
+                // Simulated API call for active engagements
+                const select = document.getElementById('engagementSelect');
+                select.innerHTML = '<option value="">Select Engagement</option>';
+                engagements.forEach(eng => {
+                    const option = document.createElement('option');
+                    option.value = eng.id;
+                    option.textContent = `${eng.build_id} - ${eng.product}`;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                showToast('Failed to load engagements');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function loadJiraTestCases() {
+            showLoading();
+            try {
+                const engagementId = document.getElementById('engagementSelect').value;
+                if (!engagementId) {
+                    document.querySelector('#jiraTable tbody').innerHTML = '';
+                    document.getElementById('mappingTestCases').style.display = 'none';
+                    return;
+                }
+                // Simulated API call for test cases with rmm_jiras tags
+                const tbody = document.querySelector('#jiraTable tbody');
+                tbody.innerHTML = '';
+                jiraTestCases.forEach(jira => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${jira.id}</td>
+                        <td>${jira.title}</td>
+                        <td>${jira.assigned_to}</td>
+                        <td class="status-${jira.analysis_status.toLowerCase().replace(' ', '-')}">${jira.analysis_status}</td>
+                        <td><button class="btn btn-primary" onclick="openMappingTestCases('${jira.id}')">Map</button></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                showToast('Failed to load Jira test cases');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function openMappingTestCases(jiraId) {
+            document.getElementById('mappingTestCases').style.display = 'block';
+            showLoading();
+            try {
+                // Simulated API call for test cases with master_test_cases tags for engagement 123
+                const filteredTestCases = testCases.filter(tc => tc.tags.includes('master_test_cases'));
+                const tbody = document.querySelector('#mappingTestCasesTable tbody');
+                tbody.innerHTML = '';
+                filteredTestCases.forEach(tc => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td><input type="checkbox" value="${tc.id}"></td>
+                        <td>${tc.id}</td>
+                        <td>${tc.category}</td>
+                        <td>${tc.title}</td>
+                        <td>${tc.modality}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                loadMappingCategories();
+            } catch (error) {
+                showToast('Failed to load test cases');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function loadMappingCategories() {
+            const categories = [...new Set(testCases.map(tc => tc.category))];
+            const select = document.getElementById('filterMappingCategory');
+            select.innerHTML = '<option value="">Category</option>';
+            categories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat;
+                select.appendChild(option);
+            });
+        }
+
+        function toggleSelectAll() {
+            const checkboxes = document.querySelectorAll('#mappingTestCasesTable input[type="checkbox"]');
+            const selectAll = document.getElementById('selectAllTests');
+            checkboxes.forEach(cb => cb.checked = selectAll.checked);
+        }
+
+        async function mapTestCases() {
+            showLoading();
+            try {
+                const selectedTests = Array.from(document.querySelectorAll('#mappingTestCasesTable input[type="checkbox"]:checked')).map(cb => cb.value);
+                if (selectedTests.length === 0) {
+                    showToast('No test cases selected');
+                    return;
+                }
+                // Simulated API call to store test IDs in engagement's commit_hash
+                const engagementId = document.getElementById('engagementSelect').value;
+                engagements = engagements.map(eng => {
+                    if (eng.id == engagementId) {
+                        return { ...eng, commit_hash: selectedTests.join(',') };
+                    }
+                    return eng;
+                });
+                showToast('Test cases mapped');
+                document.getElementById('mappingTestCases').style.display = 'none';
+                loadJiraTestCases();
+            } catch (error) {
+                showToast('Failed to map test cases');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Add Patch Form Submission
+        document.getElementById('addPatchForm').onsubmit = async (e) => {
+            e.preventDefault();
+            showLoading();
+            try {
+                const formData = new FormData(e.target);
+                const data = Object.fromEntries(formData);
+                data.tags = data.tags.split(',').map(tag => tag.trim());
+                data.id = engagements.length + 1;
+                data.total_test_cases = 0;
+                data.completed = 0;
+                data.passed = 0;
+                data.failed = 0;
+                data.build_patch = 'Patch';
+                data.created = new Date().toISOString().split('T')[0];
+                if (data.commit_hash === 'Certified' || data.commit_hash === 'Not Certified') {
+                    data.status = 'Completed';
+                }
+                engagements.push(data);
+                showToast('Patch added successfully');
+                closeModal('addPatchModal');
+                loadEngagements(currentPage);
+            } catch (error) {
+                showToast('Failed to add patch');
+            } finally {
+                hideLoading();
+            }
+        };
+
+        // Filter Listeners
+        document.querySelectorAll('.filter-container input, .filter-container select').forEach(element => {
+            element.addEventListener('change', () => loadEngagements(1));
+        });
+
+        // Initialize
+        fetchCsrfToken();
+        loadEngagements();
+    </script>
+</body>
+</html>
