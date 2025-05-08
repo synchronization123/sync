@@ -179,42 +179,6 @@
         </nav>
         <!-- END ENGAGEMENT TABLE -->
 
-        <!-- Import Changelog Modal -->
-        <!-- START IMPORT CHANGELOG MODAL -->
-        <div class="modal fade" id="importChangelogModal" tabindex="-1">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Import Changelog</h5>
-                        <button type="button" class="btn-close" onclick="closeModal('importChangelogModal')"></button>
-                    </div>
-                    <div class="modal-body">
-                        <form id="importChangelogForm">
-                            <input type="hidden" name="csrfmiddlewaretoken" id="csrfTokenChangelog">
-                            <div class="mb-3">
-                                <label class="form-label">Bitbucket Repo</label>
-                                <div class="input-group">
-                                    <input type="text" class="form-control" name="project_name" placeholder="Project Name" required>
-                                    <span class="input-group-text">/</span>
-                                    <input type="text" class="form-control" name="repo_name" placeholder="Repo Name" required>
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Start Push ID</label>
-                                <input type="text" class="form-control" name="start_push_id" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">End Push ID</label>
-                                <input type="text" class="form-control" name="end_push_id" required>
-                            </div>
-                            <button type="submit" class="btn btn-success">Send Request</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <!-- END IMPORT CHANGELOG MODAL -->
-
         <!-- Test Cases Modal -->
         <!-- START TEST CASES MODAL -->
         <div class="modal fade" id="testCasesModal" tabindex="-1">
@@ -408,11 +372,11 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // JavaScript for dynamic functionality
+        const BASE_URL = 'https://demo.defectdojo.org';
         let currentPage = 1;
         let testCasesPage = 1;
         const itemsPerPage = 10;
         const testCasesPerPage = 10;
-        let currentBuildId = null;
 
         // Modal controls
         function openModal(modalId) {
@@ -459,7 +423,7 @@
             }
         }
 
-        // Add Patch Modal
+        // Open Add Patch Modal
         function openAddPatchModal() {
             const today = new Date().toISOString().split('T')[0];
             const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
@@ -472,17 +436,42 @@
         async function loadEngagements(page = 1) {
             showLoading();
             try {
-                // Replace with actual API call
-                const response = await fetch('/api/engagements', {
+                const response = await fetch(`${BASE_URL}/api/v2/engagements`, {
                     headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
                 });
                 const data = await response.json();
-                const filteredEngagements = data.filter(e => {
+                const engagements = data.results || [];
+                
+                // Fetch test case counts for each engagement
+                const enrichedEngagements = await Promise.all(engagements.map(async (e) => {
+                    const testResponse = await fetch(`${BASE_URL}/api/v2/tests/?engagement=${e.id}&tags=rmm_jiras`, {
+                        headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
+                    });
+                    const tests = await testResponse.json();
+                    const totalTests = tests.count || 0;
+                    const completedTests = tests.results?.filter(t => t.branch_tag === 'Completed').length || 0;
+                    const passedTests = tests.results?.filter(t => t.branch_tag === 'Passed').length || 0;
+                    const failedTests = tests.results?.filter(t => t.branch_tag === 'Failed').length || 0;
+                    return {
+                        ...e,
+                        build_patch: e.build_patch || 'Patch',
+                        build_id: e.name || e.id,
+                        lead: e.lead?.name || '',
+                        product: e.product?.name || '',
+                        created: e.created?.split('T')[0] || '',
+                        total_test_cases: totalTests,
+                        completed: completedTests,
+                        passed: passedTests,
+                        failed: failedTests
+                    };
+                }));
+
+                const filteredEngagements = enrichedEngagements.filter(e => {
                     return (
-                        (!document.getElementById('filterBuild').value || e.build_patch.includes(document.getElementById('filterBuild').value)) &&
-                        (!document.getElementById('filterBuildID').value || e.build_id.includes(document.getElementById('filterBuildID').value)) &&
-                        (!document.getElementById('filterLead').value || e.lead.includes(document.getElementById('filterLead').value)) &&
-                        (!document.getElementById('filterProduct').value || e.product.includes(document.getElementById('filterProduct').value)) &&
+                        (!document.getElementById('filterBuild').value || e.build_patch.toLowerCase().includes(document.getElementById('filterBuild').value.toLowerCase())) &&
+                        (!document.getElementById('filterBuildID').value || e.build_id.toLowerCase().includes(document.getElementById('filterBuildID').value.toLowerCase())) &&
+                        (!document.getElementById('filterLead').value || e.lead.toLowerCase().includes(document.getElementById('filterLead').value.toLowerCase())) &&
+                        (!document.getElementById('filterProduct').value || e.product.toLowerCase().includes(document.getElementById('filterProduct').value.toLowerCase())) &&
                         (!document.getElementById('filterDate').value || e.created === document.getElementById('filterDate').value) &&
                         (!document.getElementById('filterStartDate').value || e.target_start === document.getElementById('filterStartDate').value) &&
                         (!document.getElementById('filterCompletionDate').value || e.target_end === document.getElementById('filterCompletionDate').value) &&
@@ -499,22 +488,22 @@
                 paginatedEngagements.forEach(e => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
-                        <td>${e.build_patch || 'Patch'}</td>
-                        <td><a href="#" onclick="openImportChangelogModal('${e.build_id}')">${e.build_id}</a></td>
-                        <td>${e.lead || ''}</td>
-                        <td>${e.product || ''}</td>
-                        <td>${e.created || ''}</td>
+                        <td>${e.build_patch}</td>
+                        <td>${e.build_id}</td>
+                        <td>${e.lead}</td>
+                        <td>${e.product}</td>
+                        <td>${e.created}</td>
                         <td>${e.target_start || ''}</td>
                         <td>${e.target_end || ''}</td>
-                        <td><a href="#" onclick="openTestCasesModal()">${e.total_test_cases || 0}</a></td>
-                        <td>${e.completed || 0}</td>
-                        <td class="status-pass">${e.passed || 0}</td>
-                        <td class="status-fail">${e.failed || 0}</td>
-                        <td class="status-${(e.status || '').toLowerCase().replace(' ', '-')}">${e.status || ''}</td>
-                        <td class="status-${(e.commit_hash || '').toLowerCase().replace(' ', '-')}">${e.commit_hash || ''}</td>
+                        <td><a href="#" onclick="openTestCasesModal()">${e.total_test_cases}</a></td>
+                        <td>${e.completed}</td>
+                        <td class="status-pass">${e.passed}</td>
+                        <td class="status-fail">${e.failed}</td>
+                        <td class="status-${(e.status || '').toLowerCase().replace(' ', '-') || 'not-started'}">${e.status || 'Not Started'}</td>
+                        <td class="status-${(e.commit_hash || '').toLowerCase().replace(' ', '-') || 'pending'}">${e.commit_hash || 'Pending'}</td>
                         <td>
                             <button class="btn btn-info btn-sm" onclick="openTestCasesModal()">Test Cases</button>
-                            <button class="btn btn-primary btn-sm" onclick="openMappingModal()">Mapping</button>
+                            <button class="btn btn-primary btn-sm" onclick="openMappingModal(${e.id})">Mapping</button>
                         </td>
                     `;
                     tbody.appendChild(row);
@@ -524,6 +513,7 @@
                 renderPagination(filteredEngagements.length, page, 'engagementPagination', loadEngagements);
             } catch (error) {
                 showToast('Failed to load engagements');
+                console.error(error);
             } finally {
                 hideLoading();
             }
@@ -542,39 +532,6 @@
             }
         }
 
-        // Import Changelog Modal
-        function openImportChangelogModal(buildId) {
-            currentBuildId = buildId;
-            openModal('importChangelogModal');
-            document.getElementById('importChangelogForm').onsubmit = async (e) => {
-                e.preventDefault();
-                showLoading();
-                try {
-                    const formData = new FormData(e.target);
-                    const data = Object.fromEntries(formData);
-                    // Replace with actual API call
-                    await fetch('/api/changelog', {
-                        method: 'POST',
-                        headers: { 'X-CSRFToken': document.getElementById('csrfTokenChangelog').value },
-                        body: JSON.stringify({
-                            build_id: currentBuildId,
-                            project_name: data.project_name,
-                            repo_name: data.repo_name,
-                            start_push_id: data.start_push_id,
-                            end_push_id: data.end_push_id
-                        })
-                    });
-                    showToast('Changelog request sent');
-                    closeModal('importChangelogModal');
-                    loadEngagements(currentPage);
-                } catch (error) {
-                    showToast('Failed to send changelog request');
-                } finally {
-                    hideLoading();
-                }
-            };
-        }
-
         // Test Cases Modal
         function openTestCasesModal() {
             openModal('testCasesModal');
@@ -585,14 +542,15 @@
         async function loadTestCases(page = 1) {
             showLoading();
             try {
-                // Replace with actual API call for engagement 1233 with tags master_test_cases
-                const response = await fetch('/api/test-cases?engagement_id=1233&tags=master_test_cases', {
+                const response = await fetch(`${BASE_URL}/api/v2/tests/?engagement=1233&tags=master_test_cases`, {
                     headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
                 });
-                const testCases = await response.json();
+                const data = await response.json();
+                const testCases = data.results || [];
+                
                 const filteredTestCases = testCases.filter(tc => {
                     return (
-                        (!document.getElementById('filterTestID').value || tc.id.includes(document.getElementById('filterTestID').value)) &&
+                        (!document.getElementById('filterTestID').value || tc.id.toString().includes(document.getElementById('filterTestID').value)) &&
                         (!document.getElementById('filterTestStatus').value || document.getElementById('filterTestStatus').value === 'All' || tc.status === document.getElementById('filterTestStatus').value) &&
                         (!document.getElementById('filterCategory').value || tc.category === document.getElementById('filterCategory').value) &&
                         (!document.getElementById('filterModality').value || tc.modality === document.getElementById('filterModality').value)
@@ -621,6 +579,7 @@
                 renderPagination(filteredTestCases.length, page, 'testCasesPagination', loadTestCases);
             } catch (error) {
                 showToast('Failed to load test cases');
+                console.error(error);
             } finally {
                 hideLoading();
             }
@@ -628,11 +587,11 @@
 
         async function loadCategories() {
             try {
-                // Replace with actual API call
-                const response = await fetch('/api/test-cases/categories', {
+                const response = await fetch(`${BASE_URL}/api/v2/tests/?engagement=1233`, {
                     headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
                 });
-                const categories = await response.json();
+                const data = await response.json();
+                const categories = [...new Set(data.results?.map(tc => tc.category).filter(Boolean))];
                 const select = document.getElementById('filterCategory');
                 select.innerHTML = '<option value="">Category</option>';
                 categories.forEach(cat => {
@@ -643,6 +602,7 @@
                 });
             } catch (error) {
                 showToast('Failed to load categories');
+                console.error(error);
             }
         }
 
@@ -652,33 +612,11 @@
             document.querySelector('#addTestCaseForm [name="target_start"]').value = today;
             document.querySelector('#addTestCaseForm [name="target_end"]').value = today;
             openModal('addTestCaseModal');
-            document.getElementById('addTestCaseForm').onsubmit = async (e) => {
-                e.preventDefault();
-                showLoading();
-                try {
-                    const formData = new FormData(e.target);
-                    const data = Object.fromEntries(formData);
-                    data.tags = ['master_test_cases'];
-                    data.engagement_id = 1233;
-                    // Replace with actual API call
-                    await fetch('/api/test-cases', {
-                        method: 'POST',
-                        headers: { 'X-CSRFToken': document.getElementById('csrfTokenTestCase').value },
-                        body: JSON.stringify(data)
-                    });
-                    showToast('Test case added');
-                    closeModal('addTestCaseModal');
-                    loadTestCases(testCasesPage);
-                } catch (error) {
-                    showToast('Failed to add test case');
-                } finally {
-                    hideLoading();
-                }
-            };
         }
 
         // Mapping Modal
-        function openMappingModal() {
+        function openMappingModal(engagementId) {
+            currentEngagementId = engagementId;
             openModal('mappingModal');
             loadEngagementSelect();
         }
@@ -686,21 +624,26 @@
         async function loadEngagementSelect() {
             showLoading();
             try {
-                // Replace with actual API call for active engagements
-                const response = await fetch('/api/engagements?active=true', {
+                const response = await fetch(`${BASE_URL}/api/v2/engagements?active=true`, {
                     headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
                 });
-                const engagements = await response.json();
+                const data = await response.json();
+                const engagements = data.results || [];
                 const select = document.getElementById('engagementSelect');
-                select irritate.innerHTML = '<option value="">Select Engagement</option>';
+                select.innerHTML = '<option value="">Select Engagement</option>';
                 engagements.forEach(eng => {
                     const option = document.createElement('option');
                     option.value = eng.id;
-                    option.textContent = `${eng.build_id} - ${eng.product}`;
+                    option.textContent = `${eng.name || eng.id} - ${eng.product?.name || ''}`;
                     select.appendChild(option);
                 });
+                if (currentEngagementId) {
+                    select.value = currentEngagementId;
+                    loadJiraTestCases();
+                }
             } catch (error) {
                 showToast('Failed to load engagements');
+                console.error(error);
             } finally {
                 hideLoading();
             }
@@ -715,11 +658,12 @@
                     document.getElementById('mappingTestCases').style.display = 'none';
                     return;
                 }
-                // Replace with actual API call for test cases with rmm_jiras tags
-                const response = await fetch(`/api/test-cases?engagement_id=${engagementId}&tags=rmm_jiras`, {
+                const response = await fetch(`${BASE_URL}/api/v2/tests/?engagement=${engagementId}&tags=rmm_jiras`, {
                     headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
                 });
-                const jiraTestCases = await response.json();
+                const data = await response.json();
+                const jiraTestCases = data.results || [];
+                
                 const tbody = document.querySelector('#jiraTable tbody');
                 tbody.innerHTML = '';
                 jiraTestCases.forEach(jira => {
@@ -727,31 +671,34 @@
                     row.innerHTML = `
                         <td>${jira.id || ''}</td>
                         <td>${jira.title || ''}</td>
-                        <td>${jira.assigned_to || ''}</td>
-                        <td class="status-${(jira.analysis_status || '').toLowerCase().replace(' ', '-')}">${jira.analysis_status || 'Not Started'}</td>
-                        <td><button class="btn btn-primary btn-sm" onclick="openMappingTestCases('${jira.id}')">Map</button></td>
+                        <td>${jira.lead?.name || ''}</td>
+                        <td class="status-${(jira.analysis_status || 'Not Started').toLowerCase().replace(' ', '-') || 'not-started'}">${jira.analysis_status || 'Not Started'}</td>
+                        <td><button class="btn btn-primary btn-sm" onclick="openMappingTestCases(${jira.id})">Map</button></td>
                     `;
                     tbody.appendChild(row);
                 });
             } catch (error) {
                 showToast('Failed to load Jira test cases');
+                console.error(error);
             } finally {
                 hideLoading();
             }
         }
 
         async function openMappingTestCases(jiraId) {
+            currentJiraId = jiraId;
             document.getElementById('mappingTestCases').style.display = 'block';
             showLoading();
             try {
-                // Replace with actual API call for test cases with master_test_cases tags for engagement 1233
-                const response = await fetch('/api/test-cases?engagement_id=1233&tags=master_test_cases', {
+                const response = await fetch(`${BASE_URL}/api/v2/tests/?engagement=1233&tags=master_test_cases`, {
                     headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
                 });
-                const testCases = await response.json();
+                const data = await response.json();
+                const testCases = data.results || [];
+                
                 const filteredTestCases = testCases.filter(tc => {
                     return (
-                        (!document.getElementById('filterMappingTestID').value || tc.id.includes(document.getElementById('filterMappingTestID').value)) &&
+                        (!document.getElementById('filterMappingTestID').value || tc.id.toString().includes(document.getElementById('filterMappingTestID').value)) &&
                         (!document.getElementById('filterMappingCategory').value || tc.category === document.getElementById('filterMappingCategory').value) &&
                         (!document.getElementById('filterMappingModality').value || tc.modality === document.getElementById('filterMappingModality').value)
                     );
@@ -773,6 +720,7 @@
                 loadMappingCategories();
             } catch (error) {
                 showToast('Failed to load test cases');
+                console.error(error);
             } finally {
                 hideLoading();
             }
@@ -780,11 +728,11 @@
 
         async function loadMappingCategories() {
             try {
-                // Replace with actual API call
-                const response = await fetch('/api/test-cases/categories', {
+                const response = await fetch(`${BASE_URL}/api/v2/tests/?engagement=1233`, {
                     headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
                 });
-                const categories = await response.json();
+                const data = await response.json();
+                const categories = [...new Set(data.results?.map(tc => tc.category).filter(Boolean))];
                 const select = document.getElementById('filterMappingCategory');
                 select.innerHTML = '<option value="">Category</option>';
                 categories.forEach(cat => {
@@ -795,6 +743,7 @@
                 });
             } catch (error) {
                 showToast('Failed to load categories');
+                console.error(error);
             }
         }
 
@@ -813,17 +762,21 @@
                     return;
                 }
                 const engagementId = document.getElementById('engagementSelect').value;
-                // Replace with actual API call
-                await fetch(`/api/engagements/${engagementId}/map-tests`, {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': document.getElementById('csrfToken').value },
-                    body: JSON.stringify({ test_ids: selectedTests })
+                // Update the test's commit_hash with selected test IDs
+                await fetch(`${BASE_URL}/api/v2/tests/${currentJiraId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'X-CSRFToken': document.getElementById('csrfToken').value,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ commit_hash: selectedTests.join(',') })
                 });
                 showToast('Test cases mapped');
                 document.getElementById('mappingTestCases').style.display = 'none';
                 loadJiraTestCases();
             } catch (error) {
                 showToast('Failed to map test cases');
+                console.error(error);
             } finally {
                 hideLoading();
             }
@@ -837,15 +790,15 @@
                 const formData = new FormData(e.target);
                 const data = Object.fromEntries(formData);
                 data.tags = data.tags ? data.tags.split(',').map(tag => tag.trim()) : ['rmm'];
-                data.build_patch = 'Patch';
-                data.created = new Date().toISOString().split('T')[0];
                 if (data.commit_hash === 'Certified' || data.commit_hash === 'Not Certified') {
                     data.status = 'Completed';
                 }
-                // Replace with actual API call
-                await fetch('/api/engagements', {
+                await fetch(`${BASE_URL}/api/v2/engagements`, {
                     method: 'POST',
-                    headers: { 'X-CSRFToken': document.getElementById('csrfToken').value },
+                    headers: {
+                        'X-CSRFToken': document.getElementById('csrfToken').value,
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify(data)
                 });
                 showToast('Patch added successfully');
@@ -853,6 +806,35 @@
                 loadEngagements(currentPage);
             } catch (error) {
                 showToast('Failed to add patch');
+                console.error(error);
+            } finally {
+                hideLoading();
+            }
+        };
+
+        // Add Test Case Form Submission
+        document.getElementById('addTestCaseForm').onsubmit = async (e) => {
+            e.preventDefault();
+            showLoading();
+            try {
+                const formData = new FormData(e.target);
+                const data = Object.fromEntries(formData);
+                data.tags = ['master_test_cases'];
+                data.engagement = 1233;
+                await fetch(`${BASE_URL}/api/v2/tests`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': document.getElementById('csrfTokenTestCase').value,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+                showToast('Test case added');
+                closeModal('addTestCaseModal');
+                loadTestCases(testCasesPage);
+            } catch (error) {
+                showToast('Failed to add test case');
+                console.error(error);
             } finally {
                 hideLoading();
             }
