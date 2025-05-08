@@ -57,6 +57,17 @@
         .filter-container .form-control, .filter-container .form-select {
             max-width: 200px;
         }
+        .searchable-select {
+            position: relative;
+        }
+        .searchable-select input {
+            width: 100%;
+        }
+        .searchable-select .dropdown-menu {
+            width: 100%;
+            max-height: 200px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
@@ -104,13 +115,15 @@
                                     <option value="Interactive">Interactive</option>
                                 </select>
                             </div>
-                            <div class="mb-3">
+                            <div class="mb-3 searchable-select">
                                 <label class="form-label">Lead</label>
-                                <input type="text" class="form-control" name="lead">
+                                <input type="text" class="form-control" id="leadSearch" placeholder="Search Lead">
+                                <select class="form-select" name="lead" id="leadSelect"></select>
                             </div>
-                            <div class="mb-3">
+                            <div class="mb-3 searchable-select">
                                 <label class="form-label">Product</label>
-                                <input type="text" class="form-control" name="product">
+                                <input type="text" class="form-control" id="productSearch" placeholder="Search Product">
+                                <select class="form-select" name="product" id="productSelect"></select>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Tags</label>
@@ -129,8 +142,14 @@
         <div class="filter-container">
             <input type="text" class="form-control" id="filterBuild" placeholder="Build/Patch">
             <input type="text" class="form-control" id="filterBuildID" placeholder="Build ID">
-            <input type="text" class="form-control" id="filterLead" placeholder="Lead">
-            <input type="text" class="form-control" id="filterProduct" placeholder="Product">
+            <div class="searchable-select">
+                <input type="text" class="form-control" id="filterLeadSearch" placeholder="Lead">
+                <select class="form-select" id="filterLead"></select>
+            </div>
+            <div class="searchable-select">
+                <input type="text" class="form-control" id="filterProductSearch" placeholder="Product">
+                <select class="form-select" id="filterProduct"></select>
+            </div>
             <input type="date" class="form-control" id="filterDate" placeholder="Date">
             <input type="date" class="form-control" id="filterStartDate" placeholder="Start Date">
             <input type="date" class="form-control" id="filterCompletionDate" placeholder="Completion Date">
@@ -220,7 +239,7 @@
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
-                            </table>
+                            </table     </table>
                         </div>
                         <nav aria-label="Test cases pagination">
                             <ul class="pagination justify-content-center" id="testCasesPagination"></ul>
@@ -243,6 +262,11 @@
                     <div class="modal-body">
                         <form id="addTestCaseForm">
                             <input type="hidden" name="csrfmiddlewaretoken" id="csrfTokenTestCase">
+                            <input type="hidden" name="test_type_name" value="Contrast Scan">
+                            <input type="hidden" name="test_type" value="41">
+                            <input type="hidden" name="environment" value="6">
+                            <input type="hidden" name="target_start" id="testTargetStart">
+                            <input type="hidden" name="target_end" id="testTargetEnd">
                             <div class="mb-3">
                                 <label class="form-label">ID</label>
                                 <input type="text" class="form-control" name="id" required>
@@ -266,26 +290,6 @@
                                     <option value="Mobile">Mobile</option>
                                     <option value="Thick">Thick</option>
                                 </select>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Test Type Name</label>
-                                <input type="text" class="form-control" name="test_type_name" value="Contrast Scan" readonly>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Test Type</label>
-                                <input type="number" class="form-control" name="test_type" value="41" readonly>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Environment</label>
-                                <input type="number" class="form-control" name="environment" value="6" readonly>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Target Start</label>
-                                <input type="date" class="form-control" name="target_start" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Target End</label>
-                                <input type="date" class="form-control" name="target_end" required>
                             </div>
                             <button type="submit" class="btn btn-success">Save</button>
                         </form>
@@ -377,6 +381,10 @@
         let testCasesPage = 1;
         const itemsPerPage = 10;
         const testCasesPerPage = 10;
+        let currentEngagementId = null;
+        let currentJiraId = null;
+        let users = [];
+        let products = [];
 
         // Modal controls
         function openModal(modalId) {
@@ -418,10 +426,121 @@
                 });
             } catch (error) {
                 showToast('Failed to fetch CSRF token');
+                console.error(error);
             } finally {
                 hideLoading();
             }
         }
+
+        // Fetch Users
+        async function fetchUsers() {
+            try {
+                const response = await fetch(`${BASE_URL}/api/v2/users`, {
+                    headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
+                });
+                const data = await response.json();
+                users = data.results || [];
+                populateLeadSelect();
+                populateFilterLeadSelect();
+            } catch (error) {
+                showToast('Failed to fetch users');
+                console.error(error);
+            }
+        }
+
+        // Fetch Products
+        async function fetchProducts() {
+            try {
+                const response = await fetch(`${BASE_URL}/api/v2/products`, {
+                    headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
+                });
+                const data = await response.json();
+                products = data.results || [];
+                populateProductSelect();
+                populateFilterProductSelect();
+            } catch (error) {
+                showToast('Failed to fetch products');
+                console.error(error);
+            }
+        }
+
+        // Populate Lead Select
+        function populateLeadSelect(search = '') {
+            const select = document.getElementById('leadSelect');
+            select.innerHTML = '<option value="">Select Lead</option>';
+            const filteredUsers = users.filter(u => 
+                `${u.first_name} ${u.last_name}`.toLowerCase().includes(search.toLowerCase())
+            );
+            filteredUsers.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.id;
+                option.textContent = `${user.first_name} ${user.last_name}`;
+                select.appendChild(option);
+            });
+        }
+
+        // Populate Filter Lead Select
+        function populateFilterLeadSelect(search = '') {
+            const select = document.getElementById('filterLead');
+            select.innerHTML = '<option value="">Select Lead</option>';
+            const filteredUsers = users.filter(u => 
+                `${u.first_name} ${u.last_name}`.toLowerCase().includes(search.toLowerCase())
+            );
+            filteredUsers.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.id;
+                option.textContent = `${user.first_name} ${user.last_name}`;
+                select.appendChild(option);
+            });
+        }
+
+        // Populate Product Select
+        function populateProductSelect(search = '') {
+            const select = document.getElementById('productSelect');
+            select.innerHTML = '<option value="">Select Product</option>';
+            const filteredProducts = products.filter(p => 
+                p.name.toLowerCase().includes(search.toLowerCase())
+            );
+            filteredProducts.forEach(product => {
+                const option = document.createElement('option');
+                option.value = product.id;
+                option.textContent = product.name;
+                select.appendChild(option);
+            });
+        }
+
+        // Populate Filter Product Select
+        function populateFilterProductSelect(search = '') {
+            const select = document.getElementById('filterProduct');
+            select.innerHTML = '<option value="">Select Product</option>';
+            const filteredProducts = products.filter(p => 
+                p.name.toLowerCase().includes(search.toLowerCase())
+            );
+            filteredProducts.forEach(product => {
+                const option = document.createElement('option');
+                option.value = product.id;
+                option.textContent = product.name;
+                select.appendChild(option);
+            });
+        }
+
+        // Real-time search for Lead
+        document.getElementById('leadSearch').addEventListener('input', (e) => {
+            populateLeadSelect(e.target.value);
+        });
+
+        document.getElementById('filterLeadSearch').addEventListener('input', (e) => {
+            populateFilterLeadSelect(e.target.value);
+        });
+
+        // Real-time search for Product
+        document.getElementById('productSearch').addEventListener('input', (e) => {
+            populateProductSelect(e.target.value);
+        });
+
+        document.getElementById('filterProductSearch').addEventListener('input', (e) => {
+            populateFilterProductSelect(e.target.value);
+        });
 
         // Open Add Patch Modal
         function openAddPatchModal() {
@@ -429,6 +548,8 @@
             const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
             document.querySelector('#addPatchForm [name="target_start"]').value = today;
             document.querySelector('#addPatchForm [name="target_end"]').value = tomorrow;
+            populateLeadSelect();
+            populateProductSelect();
             openModal('addPatchModal');
         }
 
@@ -441,7 +562,7 @@
                 });
                 const data = await response.json();
                 const engagements = data.results || [];
-                
+
                 // Fetch test case counts for each engagement
                 const enrichedEngagements = await Promise.all(engagements.map(async (e) => {
                     const testResponse = await fetch(`${BASE_URL}/api/v2/tests/?engagement=${e.id}&tags=rmm_jiras`, {
@@ -456,8 +577,10 @@
                         ...e,
                         build_patch: e.build_patch || 'Patch',
                         build_id: e.name || e.id,
-                        lead: e.lead?.name || '',
+                        lead: e.lead ? `${e.lead.first_name} ${e.lead.last_name}` : '',
+                        lead_id: e.lead?.id || '',
                         product: e.product?.name || '',
+                        product_id: e.product?.id || '',
                         created: e.created?.split('T')[0] || '',
                         total_test_cases: totalTests,
                         completed: completedTests,
@@ -470,8 +593,8 @@
                     return (
                         (!document.getElementById('filterBuild').value || e.build_patch.toLowerCase().includes(document.getElementById('filterBuild').value.toLowerCase())) &&
                         (!document.getElementById('filterBuildID').value || e.build_id.toLowerCase().includes(document.getElementById('filterBuildID').value.toLowerCase())) &&
-                        (!document.getElementById('filterLead').value || e.lead.toLowerCase().includes(document.getElementById('filterLead').value.toLowerCase())) &&
-                        (!document.getElementById('filterProduct').value || e.product.toLowerCase().includes(document.getElementById('filterProduct').value.toLowerCase())) &&
+                        (!document.getElementById('filterLead').value || e.lead_id.toString() === document.getElementById('filterLead').value) &&
+                        (!document.getElementById('filterProduct').value || e.product_id.toString() === document.getElementById('filterProduct').value) &&
                         (!document.getElementById('filterDate').value || e.created === document.getElementById('filterDate').value) &&
                         (!document.getElementById('filterStartDate').value || e.target_start === document.getElementById('filterStartDate').value) &&
                         (!document.getElementById('filterCompletionDate').value || e.target_end === document.getElementById('filterCompletionDate').value) &&
@@ -547,7 +670,7 @@
                 });
                 const data = await response.json();
                 const testCases = data.results || [];
-                
+
                 const filteredTestCases = testCases.filter(tc => {
                     return (
                         (!document.getElementById('filterTestID').value || tc.id.toString().includes(document.getElementById('filterTestID').value)) &&
@@ -609,8 +732,8 @@
         // Add New Test Case Modal
         function openAddTestCaseModal() {
             const today = new Date().toISOString().split('T')[0];
-            document.querySelector('#addTestCaseForm [name="target_start"]').value = today;
-            document.querySelector('#addTestCaseForm [name="target_end"]').value = today;
+            document.getElementById('testTargetStart').value = today;
+            document.getElementById('testTargetEnd').value = today;
             openModal('addTestCaseModal');
         }
 
@@ -624,7 +747,7 @@
         async function loadEngagementSelect() {
             showLoading();
             try {
-                const response = await fetch(`${BASE_URL}/api/v2/engagements?active=true`, {
+                const response = await fetch(`${BASE_URL}/api/v2/engagements?tags=patches`, {
                     headers: { 'X-CSRFToken': document.getElementById('csrfToken').value }
                 });
                 const data = await response.json();
@@ -663,7 +786,7 @@
                 });
                 const data = await response.json();
                 const jiraTestCases = data.results || [];
-                
+
                 const tbody = document.querySelector('#jiraTable tbody');
                 tbody.innerHTML = '';
                 jiraTestCases.forEach(jira => {
@@ -671,7 +794,7 @@
                     row.innerHTML = `
                         <td>${jira.id || ''}</td>
                         <td>${jira.title || ''}</td>
-                        <td>${jira.lead?.name || ''}</td>
+                        <td>${jira.lead ? `${jira.lead.first_name} ${jira.lead.last_name}` : ''}</td>
                         <td class="status-${(jira.analysis_status || 'Not Started').toLowerCase().replace(' ', '-') || 'not-started'}">${jira.analysis_status || 'Not Started'}</td>
                         <td><button class="btn btn-primary btn-sm" onclick="openMappingTestCases(${jira.id})">Map</button></td>
                     `;
@@ -695,7 +818,7 @@
                 });
                 const data = await response.json();
                 const testCases = data.results || [];
-                
+
                 const filteredTestCases = testCases.filter(tc => {
                     return (
                         (!document.getElementById('filterMappingTestID').value || tc.id.toString().includes(document.getElementById('filterMappingTestID').value)) &&
@@ -761,8 +884,6 @@
                     showToast('No test cases selected');
                     return;
                 }
-                const engagementId = document.getElementById('engagementSelect').value;
-                // Update the test's commit_hash with selected test IDs
                 await fetch(`${BASE_URL}/api/v2/tests/${currentJiraId}`, {
                     method: 'PATCH',
                     headers: {
@@ -846,8 +967,13 @@
         });
 
         // Initialize
-        fetchCsrfToken();
-        loadEngagements();
+        async function initialize() {
+            await fetchCsrfToken();
+            await fetchUsers();
+            await fetchProducts();
+            loadEngagements();
+        }
+        initialize();
     </script>
 </body>
 </html>
