@@ -1,0 +1,32 @@
+import os
+import pandas as pd
+
+# Path to your folder containing all xlsx files
+folder_path = 'path_to_your_folder'  # change this to your folder path
+
+# List to hold dataframes
+merged_data = []
+
+# Loop through all .xlsx files in the folder
+for filename in os.listdir(folder_path):
+    if filename.endswith('.xlsx'):
+        file_path = os.path.join(folder_path, filename)
+        try:
+            df = pd.read_excel(file_path)
+            # Check if required columns are present
+            if {'component.name', 'analysis.state'}.issubset(df.columns):
+                filtered = df[['component.name', 'analysis.state']].copy()
+                filtered['filename'] = filename
+                merged_data.append(filtered)
+        except Exception as e:
+            print(f"Error reading {filename}: {e}")
+
+# Combine all filtered data
+if merged_data:
+    final_df = pd.concat(merged_data, ignore_index=True)
+    # Reorder columns
+    final_df = final_df[['filename', 'component.name', 'analysis.state']]
+    final_df.to_excel('final.xlsx', index=False)
+    print("Merged data saved to final.xlsx")
+else:
+    print("No matching data found in any file.")
