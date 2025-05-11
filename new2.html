@@ -1,0 +1,1849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DefectDojo Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-5-theme/1.3.0/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+  <style>
+    body {
+      background-color: #f5f5f5;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .container-fluid {
+      padding: 20px;
+    }
+    .filter-section {
+      background-color: #fff;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .filter-section .btn-link {
+      color: #007bff;
+      text-decoration: none;
+    }
+    .filter-section .btn-link:hover {
+      color: #0056b3;
+    }
+    .table-container {
+      background-color: #fff;
+      border-radius: 8px;
+      padding: 15px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .table th, .table td {
+      vertical-align: middle;
+    }
+    .select2-container--bootstrap-5 .select2-selection {
+      height: 38px;
+      padding: 6px 12px;
+    }
+    .pagination-section {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 15px;
+    }
+    .toast-container {
+      z-index: 1055;
+    }
+    .nav-tabs .nav-link {
+      color: #007bff;
+    }
+    .nav-tabs .nav-link.active {
+      color: #0056b3;
+      background-color: #fff;
+      border-bottom: 2px solid #007bff;
+    }
+    .modal-fullscreen .modal-content {
+      border-radius: 0;
+    }
+    .modal-table-container {
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+    .description-textarea {
+      width: 100%;
+      min-height: 100px;
+      resize: vertical;
+    }
+  </style>
+</head>
+<body>
+  <div class="container-fluid">
+    <!-- Tabs Navigation -->
+    <ul class="nav nav-tabs mb-3" id="dashboardTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="engagements-tab" data-bs-toggle="tab" data-bs-target="#engagements" type="button" role="tab" aria-controls="engagements" aria-selected="true">Engagements</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="test-cases-tab" data-bs-toggle="tab" data-bs-target="#test-cases" type="button" role="tab" aria-controls="test-cases" aria-selected="false">Test Cases</button>
+      </li>
+	        <li class="nav-item" role="presentation">
+        <button class="nav-link" id="engagement-tests-tab" data-bs-toggle="tab" data-bs-target="#engagement-tests" type="button" role="tab" aria-controls="engagement-tests" aria-selected="false">engagement-tests</button>
+      </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="dashboardTabContent">
+      <!-- Engagements Tab -->
+      <div class="tab-pane fade show active" id="engagements" role="tabpanel" aria-labelledby="engagements-tab">
+        <!-- Engagements Filter Section -->
+        <div class="filter-section">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="mb-0">Filters</h5>
+            <button class="btn btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#engagementsFilterCollapse" aria-expanded="true" aria-controls="engagementsFilterCollapse">
+              <i class="bi bi-chevron-down"></i> Toggle Filters
+            </button>
+          </div>
+          <div class="collapse show" id="engagementsFilterCollapse">
+            <div class="row g-3">
+              <div class="col-md-2">
+                <label for="engFilterCreated" class="form-label">Created</label>
+                <input type="date" class="form-control" id="engFilterCreated">
+              </div>
+              <div class="col-md-2">
+                <label for="engFilterName" class="form-label">Name</label>
+                <input type="text" class="form-control" id="engFilterName" placeholder="Enter name">
+              </div>
+              <div class="col-md-2">
+                <label for="engFilterTargetStart" class="form-label">Start Date</label>
+                <input type="date" class="form-control" id="engFilterTargetStart">
+              </div>
+              <div class="col-md-2">
+                <label for="engFilterTargetEnd" class="form-label">End Date</label>
+                <input type="date" class="form-control" id="engFilterTargetEnd">
+              </div>
+              <div class="col-md-2">
+                <label for="engFilterAssignedTo" class="form-label">Assigned To</label>
+                <select class="form-select" id="engFilterAssignedTo">
+                  <option value="">All</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label for="engFilterComponent" class="form-label">Component</label>
+                <select class="form-select" id="engFilterComponent">
+                  <option value="">All</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label for="engFilterStatus" class="form-label">Status</label>
+                <select class="form-select" id="engFilterStatus">
+                  <option value="">All</option>
+                  <option value="Not Started">Not Started</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="On Hold">On Hold</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label for="engFilterCertification" class="form-label">Certification</label>
+                <select class="form-select" id="engFilterCertification">
+                  <option value="">All</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Certified">Certified</option>
+                  <option value="Not Certified">Not Certified</option>
+                  <option value="Certified with Exception">Certified with Exception</option>
+                </select>
+              </div>
+              <div class="col-md-12 d-flex justify-content-end">
+                <button class="btn btn-primary me-2" id="engApplyFilters">Apply Filters</button>
+                <button class="btn btn-secondary" id="engResetFilters">Reset Filters</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Engagements Table Section -->
+        <div class="table-container">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5>Total Count: <span id="engTotalCount">0</span></h5>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-striped table-hover">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Created</th>
+                  <th>Name</th>
+                  <th>Details</th>
+                  <th>Start Date</th>
+                  <th>End Date</th>
+                  <th>Assigned To</th>
+                  <th>Component</th>
+                  <th>Status</th>
+                  <th>Certification</th>
+                </tr>
+              </thead>
+              <tbody id="engTableBody"></tbody>
+            </table>
+          </div>
+          <div class="pagination-section">
+            <div id="engPaginationStatus">Page 1 of 1 (0 results)</div>
+            <div>
+              <button class="btn btn-outline-primary btn-sm me-1" id="engFirstPage">First</button>
+              <button class="btn btn-outline-primary btn-sm me-1" id="engPrevPage">Previous</button>
+              <button class="btn btn-outline-primary btn-sm me-1" id="engNextPage">Next</button>
+              <button class="btn btn-outline-primary btn-sm" id="engLastPage">Last</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Test Cases Tab -->
+      <div class="tab-pane fade" id="test-cases" role="tabpanel" aria-labelledby="test-cases-tab">
+        <!-- Test Cases Filter Section -->
+        <div class="filter-section">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="mb-0">Filters</h5>
+            <button class="btn btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#testCasesFilterCollapse" aria-expanded="true" aria-controls="testCasesFilterCollapse">
+              <i class="bi bi-chevron-down"></i> Toggle Filters
+            </button>
+          </div>
+          <div class="collapse show" id="testCasesFilterCollapse">
+            <div class="row g-3">
+              <div class="col-md-3">
+                <label for="testFilterCreated" class="form-label">Created</label>
+                <input type="date" class="form-control" id="testFilterCreated">
+              </div>
+              <div class="col-md-3">
+                <label for="testFilterTitle" class="form-label">Title</label>
+                <input type="text" class="form-control" id="testFilterTitle" placeholder="Enter title">
+              </div>
+              <div class="col-md-3">
+                <label for="testFilterCategory" class="form-label">Category</label>
+                <select class="form-select" id="testFilterCategory">
+                  <option value="">All</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label for="testFilterModality" class="form-label">Modality</label>
+                <select class="form-select" id="testFilterModality">
+                  <option value="">All</option>
+                </select>
+              </div>
+              <div class="col-md-12 d-flex justify-content-end">
+                <button class="btn btn-primary me-2" id="testApplyFilters">Apply Filters</button>
+                <button class="btn btn-secondary" id="testResetFilters">Reset Filters</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Test Cases Table Section -->
+        <div class="table-container">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5>Total Count: <span id="testTotalCount">0</span></h5>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-striped table-hover">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Title</th>
+                  <th>Description</th>
+                  <th>Category</th>
+                  <th>Modality</th>
+                </tr>
+              </thead>
+              <tbody id="testTableBody"></tbody>
+            </table>
+          </div>
+          <div class="pagination-section">
+            <div id="testPaginationStatus">Page 1 of 1 (0 results)</div>
+            <div>
+              <button class="btn btn-outline-primary btn-sm me-1" id="testFirstPage">First</button>
+              <button class="btn btn-outline-primary btn-sm me-1" id="testPrevPage">Previous</button>
+              <button class="btn btn-outline-primary btn-sm me-1" id="testNextPage">Next</button>
+              <button class="btn btn-outline-primary btn-sm" id="testLastPage">Last</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Jira Modal -->
+  <div class="modal fade" id="jiraModal" tabindex="-1" aria-labelledby="jiraModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="jiraModalLabel">Jira - Tests for Engagement</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <!-- Jira Filter Section -->
+          <div class="filter-section">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h5 class="mb-0">Filters</h5>
+              <button class="btn btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#jiraFilterCollapse" aria-expanded="true" aria-controls="jiraFilterCollapse">
+                <i class="bi bi-chevron-down"></i> Toggle Filters
+              </button>
+            </div>
+            <div class="collapse show" id="jiraFilterCollapse">
+              <div class="row g-3">
+                <div class="col-md-4">
+                  <label for="jiraFilterTitle" class="form-label">Title</label>
+                  <input type="text" class="form-control" id="jiraFilterTitle" placeholder="Enter title">
+                </div>
+                <div class="col-md-4">
+                  <label for="jiraFilterStatus" class="form-label">Status</label>
+                  <select class="form-select" id="jiraFilterStatus">
+                    <option value="">All</option>
+                    <option value="Not Started">Not Started</option>
+                    <option value="Pass">Pass</option>
+                    <option value="Fail">Fail</option>
+                    <option value="NA">NA</option>
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <label for="jiraFilterAssignedTo" class="form-label">Assigned To</label>
+                  <select class="form-select" id="jiraFilterAssignedTo">
+                    <option value="">All</option>
+                  </select>
+                </div>
+                <div class="col-md-12 d-flex justify-content-end">
+                  <button class="btn btn-primary me-2" id="jiraApplyFilters">Apply Filters</button>
+                  <button class="btn btn-secondary" id="jiraResetFilters">Reset Filters</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Jira Table Section -->
+          <div class="table-container modal-table-container">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5>Total Count: <span id="jiraTotalCount">0</span></h5>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Title</th>
+                    <th>Description</th>
+                    <th>Status</th>
+                    <th>Assigned To</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="jiraTableBody"></tbody>
+              </table>
+            </div>
+            <div class="pagination-section">
+              <div id="jiraPaginationStatus">Page 1 of 1 (0 results)</div>
+              <div>
+                <button class="btn btn-outline-primary btn-sm me-1" id="jiraFirstPage">First</button>
+                <button class="btn btn-outline-primary btn-sm me-1" id="jiraPrevPage">Previous</button>
+                <button class="btn btn-outline-primary btn-sm me-1" id="jiraNextPage">Next</button>
+                <button class="btn btn-outline-primary btn-sm" id="jiraLastPage">Last</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Test Case Jira Mapping Modal -->
+  <div class="modal fade" id="mappingModal" tabindex="-1" aria-labelledby="mappingModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="mappingModalLabel">Test Case Jira Mapping</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <!-- Jira Test Title -->
+          <h2 class="text-center mb-4" id="mappingJiraTestTitle">Test mapping for Jira: Loading...</h2>
+
+          <!-- Mapping Filter Section -->
+          <div class="filter-section">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h5 class="mb-0">Filters</h5>
+              <button class="btn btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#mappingFilterCollapse" aria-expanded="true" aria-controls="mappingFilterCollapse">
+                <i class="bi bi-chevron-down"></i> Toggle Filters
+              </button>
+            </div>
+            <div class="collapse show" id="mappingFilterCollapse">
+              <div class="row g-3">
+                <div class="col-md-2">
+                  <label for="mappingFilterCreated" class="form-label">Created</label>
+                  <input type="date" class="form-control" id="mappingFilterCreated">
+                </div>
+                <div class="col-md-2">
+                  <label for="mappingFilterTitle" class="form-label">Title</label>
+                  <input type="text" class="form-control" id="mappingFilterTitle" placeholder="Enter title">
+                </div>
+                <div class="col-md-2">
+                  <label for="mappingFilterCategory" class="form-label">Category</label>
+                  <select class="form-select" id="mappingFilterCategory">
+                    <option value="">All</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label for="mappingFilterModality" class="form-label">Modality</label>
+                  <select class="form-select" id="mappingFilterModality">
+                    <option value="">All</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label for="mappingFilterMap" class="form-label">Map</label>
+                  <select class="form-select" id="mappingFilterMap">
+                    <option value="">All</option>
+                    <option value="NA">NA</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                  </select>
+                </div>
+                <div class="col-md-12 d-flex justify-content-end">
+                  <button class="btn btn-primary me-2" id="mappingApplyFilters">Apply Filters</button>
+                  <button class="btn btn-secondary me-2" id="mappingResetFilters">Reset Filters</button>
+                  <button class="btn btn-success" id="mappingSaveTests">Save</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mapping Table Section -->
+          <div class="table-container modal-table-container">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5>Total Count: <span id="mappingTotalCount">0</span></h5>
+              <div>
+                <input type="checkbox" id="mappingSelectAll" class="form-check-input me-2">
+                <label for="mappingSelectAll" class="form-check-label">Select All</label>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Title</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th>Modality</th>
+                    <th>Map</th>
+                  </tr>
+                </thead>
+                <tbody id="mappingTableBody"></tbody>
+              </table>
+            </div>
+            <div class="pagination-section">
+              <div id="mappingPaginationStatus">Page 1 of 1 (0 results)</div>
+              <div>
+                <button class="btn btn-outline-primary btn-sm me-1" id="mappingFirstPage">First</button>
+                <button class="btn btn-outline-primary btn-sm me-1" id="mappingPrevPage">Previous</button>
+                <button class="btn btn-outline-primary btn-sm me-1" id="mappingNextPage">Next</button>
+                <button class="btn btn-outline-primary btn-sm" id="mappingLastPage">Last</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+  <script>
+    // Shared Variables and Functions
+    let usersCache = {};
+    let csrfToken = null;
+
+    async function fetchCsrfToken() {
+      try {
+        const response = await fetch('https://demo.defectdojo.org/api/key-v2');
+        if (!response.ok) {
+          showToast(`Failed to fetch CSRF token page: ${response.status}`, 'error');
+          return;
+        }
+        const html = await response.text();
+        
+        // Try multiple patterns to find the CSRF token
+        const patterns = [
+          /name="csrfmiddlewaretoken"\s+value="([^"]+)"/,
+          /name="csrf_token"\s+value="([^"]+)"/,
+          /<meta name="csrf-token" content="([^"]+)"/,
+          /var\s+csrf_token\s*=\s*['"]([^'"]+)['"]/
+        ];
+
+        for (const pattern of patterns) {
+          const match = html.match(pattern);
+          if (match) {
+            csrfToken = match[1];
+            console.log('CSRF token fetched:', csrfToken);
+            return;
+          }
+        }
+
+        console.error('CSRF token not found. HTML response:', html);
+        showToast('CSRF token not found in API key page. Check console for HTML.', 'error');
+      } catch (error) {
+        console.error('Error fetching CSRF token:', error);
+        showToast('Error fetching CSRF token: ' + error.message, 'error');
+      }
+    }
+
+    async function fetchAllUsers() {
+      try {
+        const response = await fetch('https://demo.defectdojo.org/api/v2/users/');
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Users API response:', data);
+          const users = Array.isArray(data) ? data : data.results || [];
+          users.forEach(user => {
+            usersCache[user.id] = { id: user.id, name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Unknown' };
+          });
+        } else {
+          showToast('Failed to fetch users', 'error');
+        }
+      } catch (error) {
+        console.error('Error fetching users:', error);
+      }
+    }
+
+    function showToast(message, type = 'info') {
+      const toastContainer = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : type === 'warning' ? 'warning' : type === 'success' ? 'success' : type} border-0`;
+      toast.setAttribute('role', 'alert');
+      toast.innerHTML = `
+        <div class="d-flex">
+          <div class="toast-body">${message}</div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+      `;
+      toastContainer.appendChild(toast);
+      const bsToast = new bootstrap.Toast(toast, { autohide: true, delay: 5000 });
+      bsToast.show();
+      toast.addEventListener('hidden.bs.toast', () => toast.remove());
+    }
+
+    // Engagements Tab Logic
+    let engAllEngagements = [];
+    let engFilteredEngagements = [];
+    let engProductsCache = {};
+    let engCurrentPage = 1;
+    const engPageSize = 10;
+
+    async function engFetchEngagements() {
+      try {
+        const response = await fetch('https://demo.defectdojo.org/api/v2/engagements/?limit=100');
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Engagements API response:', data);
+          engAllEngagements = Array.isArray(data) ? data : data.results || [];
+          if (engAllEngagements.length === 0) {
+            showToast('No engagements found', 'warning');
+          }
+          await engEnrichEngagementsWithNames();
+          engFilteredEngagements = [...engAllEngagements];
+          engApplyFilters();
+        } else {
+          showToast(`Failed to fetch engagements: ${response.status}`, 'error');
+        }
+      } catch (error) {
+        console.error('Error fetching engagements:', error);
+        showToast('Error fetching engagements: ' + error.message, 'error');
+      }
+    }
+
+    async function engEnrichEngagementsWithNames() {
+      await fetchAllUsers();
+      await engFetchAllProducts();
+      engAllEngagements.forEach(e => {
+        e.lead_name = e.lead ? usersCache[e.lead]?.name || 'Unassigned' : 'Unassigned';
+        e.product_name = engProductsCache[e.product]?.name || 'Unknown';
+      });
+    }
+
+    async function engFetchAllProducts() {
+      try {
+        const response = await fetch('https://demo.defectdojo.org/api/v2/products/?limit=100');
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Products API response:', data);
+          const products = Array.isArray(data) ? data : data.results || [];
+          products.forEach(product => {
+            engProductsCache[product.id] = { id: product.id, name: product.name || 'Unknown' };
+          });
+        } else {
+          showToast('Failed to fetch products', 'error');
+        }
+      } catch (error) {
+        console.error('Error fetching products:', error);
+      }
+    }
+
+    async function engPopulateFilterDropdowns() {
+      const assignedToSelect = document.getElementById('engFilterAssignedTo');
+      assignedToSelect.innerHTML = '<option value="">All</option>';
+      Object.values(usersCache).forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.id;
+        option.textContent = user.name;
+        assignedToSelect.appendChild(option);
+      });
+
+      const componentSelect = document.getElementById('engFilterComponent');
+      componentSelect.innerHTML = '<option value="">All</option>';
+      Object.values(engProductsCache).forEach(product => {
+        const option = document.createElement('option');
+        option.value = product.id;
+        option.textContent = product.name;
+        componentSelect.appendChild(option);
+      });
+
+      $('#engFilterAssignedTo, #engFilterComponent').select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        placeholder: 'Search...',
+        allowClear: true
+      });
+    }
+
+    function engApplyFilters() {
+      const created = document.getElementById('engFilterCreated').value;
+      const name = document.getElementById('engFilterName').value.toLowerCase();
+      const targetStart = document.getElementById('engFilterTargetStart').value;
+      const targetEnd = document.getElementById('engFilterTargetEnd').value;
+      const assignedTo = document.getElementById('engFilterAssignedTo').value;
+      const component = document.getElementById('engFilterComponent').value;
+      const status = document.getElementById('engFilterStatus').value;
+      const certification = document.getElementById('engFilterCertification').value;
+
+      engFilteredEngagements = engAllEngagements.filter(e => {
+        if (created && e.created?.slice(0, 10) !== created) return false;
+        if (name && e.name?.toLowerCase().includes(name) === false) return false;
+        if (targetStart && e.target_start?.slice(0, 10) !== targetStart) return false;
+        if (targetEnd && e.target_end?.slice(0, 10) !== targetEnd) return false;
+        if (assignedTo && e.lead != assignedTo) return false;
+        if (component && e.product != component) return false;
+        if (status && e.status !== status) return false;
+        if (certification && e.build_id !== certification) return false;
+        return true;
+      });
+
+      engCurrentPage = 1;
+      engRenderTable();
+    }
+
+    function engResetFilters() {
+      document.getElementById('engFilterCreated').value = '';
+      document.getElementById('engFilterName').value = '';
+      document.getElementById('engFilterTargetStart').value = '';
+      document.getElementById('engFilterTargetEnd').value = '';
+      $('#engFilterAssignedTo').val('').trigger('change');
+      $('#engFilterComponent').val('').trigger('change');
+      document.getElementById('engFilterStatus').value = '';
+      document.getElementById('engFilterCertification').value = '';
+      engApplyFilters();
+    }
+
+    function engRenderTable() {
+      const start = (engCurrentPage - 1) * engPageSize;
+      const pagedData = engFilteredEngagements.slice(start, start + engPageSize);
+      const totalPages = Math.ceil(engFilteredEngagements.length / engPageSize);
+
+      document.getElementById('engTotalCount').textContent = engFilteredEngagements.length;
+
+      const tableBody = document.getElementById('engTableBody');
+      tableBody.innerHTML = pagedData.map(e => `
+        <tr>
+          <td>${e.id || 'N/A'}</td>
+          <td>${e.created?.slice(0, 10) || 'N/A'}</td>
+          <td><a href="#" class="jira-link" data-engagement-id="${e.id}">${e.name || 'N/A'}</a></td>
+          <td>${e.description || ''}</td>
+          <td>${e.target_start?.slice(0, 10) || 'N/A'}</td>
+          <td>${e.target_end?.slice(0, 10) || 'N/A'}</td>
+          <td>${e.lead_name || 'Unassigned'}</td>
+          <td>${e.product_name || 'Unknown'}</td>
+          <td>${e.status || 'N/A'}</td>
+          <td>${e.build_id || 'Pending'}</td>
+        </tr>
+      `).join('');
+
+      document.getElementById('engPaginationStatus').textContent = `Page ${engCurrentPage} of ${totalPages} (${engFilteredEngagements.length} results)`;
+      document.getElementById('engFirstPage').disabled = engCurrentPage === 1;
+      document.getElementById('engPrevPage').disabled = engCurrentPage === 1;
+      document.getElementById('engNextPage').disabled = engCurrentPage === totalPages;
+      document.getElementById('engLastPage').disabled = engCurrentPage === totalPages;
+
+      // Attach click handlers for Jira links
+      document.querySelectorAll('.jira-link').forEach(link => {
+        link.addEventListener('click', (event) => {
+          event.preventDefault();
+          const engagementId = link.getAttribute('data-engagement-id');
+          jiraFetchTests(engagementId);
+          const modal = new bootstrap.Modal(document.getElementById('jiraModal'), {
+            backdrop: 'static',
+            keyboard: false
+          });
+          modal.show();
+        });
+      });
+    }
+
+    // Test Cases Tab Logic
+    let testAllTests = [];
+    let testFilteredTests = [];
+    let testCategoryCache = {};
+    let testModalityCache = {};
+    let testCurrentPage = 1;
+    const testPageSize = 10;
+
+    async function testFetchTests() {
+      try {
+        const response = await fetch('https://demo.defectdojo.org/api/v2/tests/?engagement=1&tags=owasp&limit=100');
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Tests API response:', data);
+          testAllTests = Array.isArray(data) ? data : data.results || [];
+          if (testAllTests.length === 0) {
+            showToast('No test cases found for engagement 1 with tag "owasp"', 'warning');
+          }
+          testPopulateCaches();
+          testFilteredTests = [...testAllTests];
+          testApplyFilters();
+        } else {
+          showToast(`Failed to fetch test cases: ${response.status}`, 'error');
+        }
+      } catch (error) {
+        console.error('Error fetching test cases:', error);
+        showToast('Error fetching test cases: ' + error.message, 'error');
+      }
+    }
+
+    function testPopulateCaches() {
+      testCategoryCache = {};
+      testModalityCache = {};
+      testAllTests.forEach(test => {
+        if (test.build_id) {
+          testCategoryCache[test.build_id] = test.build_id;
+        }
+        if (test.commit_hash) {
+          testModalityCache[test.commit_hash] = test.commit_hash;
+        }
+      });
+    }
+
+    async function testPopulateFilterDropdowns() {
+      const categorySelect = document.getElementById('testFilterCategory');
+      categorySelect.innerHTML = '<option value="">All</option>';
+      Object.values(testCategoryCache).forEach(category => {
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = category;
+        categorySelect.appendChild(option);
+      });
+
+      const modalitySelect = document.getElementById('testFilterModality');
+      modalitySelect.innerHTML = '<option value="">All</option>';
+      Object.values(testModalityCache).forEach(modality => {
+        const option = document.createElement('option');
+        option.value = modality;
+        option.textContent = modality;
+        modalitySelect.appendChild(option);
+      });
+
+      $('#testFilterCategory, #testFilterModality').select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        placeholder: 'Search...',
+        allowClear: true
+      });
+    }
+
+    function testApplyFilters() {
+      const created = document.getElementById('testFilterCreated').value;
+      const title = document.getElementById('testFilterTitle').value.toLowerCase();
+      const category = document.getElementById('testFilterCategory').value;
+      const modality = document.getElementById('testFilterModality').value;
+
+      testFilteredTests = testAllTests.filter(t => {
+        if (created && t.created?.slice(0, 10) !== created) return false;
+        if (title && t.title?.toLowerCase().includes(title) === false) return false;
+        if (category && t.build_id !== category) return false;
+        if (modality && t.commit_hash !== modality) return false;
+        return true;
+      });
+
+      testCurrentPage = 1;
+      testRenderTable();
+    }
+
+    function testResetFilters() {
+      document.getElementById('testFilterCreated').value = '';
+      document.getElementById('testFilterTitle').value = '';
+      $('#testFilterCategory').val('').trigger('change');
+      $('#testFilterModality').val('').trigger('change');
+      testApplyFilters();
+    }
+
+    function testRenderTable() {
+      const start = (testCurrentPage - 1) * testPageSize;
+      const pagedData = testFilteredTests.slice(start, start + testPageSize);
+      const totalPages = Math.ceil(testFilteredTests.length / testPageSize);
+
+      document.getElementById('testTotalCount').textContent = testFilteredTests.length;
+
+      const tableBody = document.getElementById('testTableBody');
+      tableBody.innerHTML = pagedData.map(t => `
+        <tr>
+        <td>${t.id || 'N/A'}</td>
+        <td>${t.title || 'N/A'}</td>
+        <td>${t.description || ''}</td>
+        <td>${t.build_id || 'N/A'}</td>
+        <td>${t.commit_hash || 'N/A'}</td>
+        </tr>
+        `).join('');
+
+      document.getElementById('testPaginationStatus').textContent = `Page ${testCurrentPage} of ${totalPages} (${testFilteredTests.length} results)`;
+      document.getElementById('testFirstPage').disabled = testCurrentPage === 1;
+      document.getElementById('testPrevPage').disabled = testCurrentPage === 1;
+      document.getElementById('testNextPage').disabled = testCurrentPage === totalPages;
+      document.getElementById('testLastPage').disabled = testCurrentPage === totalPages;
+    }
+
+    // Jira Modal Logic
+    let jiraAllTests = [];
+    let jiraFilteredTests = [];
+    let jiraCurrentPage = 1;
+    const jiraPageSize = 10;
+    let currentEngagementId = null;
+
+    async function jiraFetchTests(engagementId) {
+      try {
+        currentEngagementId = engagementId;
+        const response = await fetch(`https://demo.defectdojo.org/api/v2/tests/?engagement=${engagementId}&tags=pci_jira&limit=100`);
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Jira Tests API response:', data);
+          jiraAllTests = Array.isArray(data) ? data : data.results || [];
+          if (jiraAllTests.length === 0) {
+            showToast(`No test cases found for engagement ${engagementId} with tag "pci_jira"`, 'warning');
+          }
+          jiraFilteredTests = [...jiraAllTests];
+          jiraApplyFilters();
+          await jiraPopulateFilterDropdowns();
+        } else {
+          showToast(`Failed to fetch Jira test cases: ${response.status}`, 'error');
+        }
+      } catch (error) {
+        console.error('Error fetching Jira test cases:', error);
+        showToast('Error fetching Jira test cases: ' + error.message, 'error');
+      }
+    }
+
+    async function jiraSaveTest(testId, updates) {
+      if (!csrfToken) {
+        showToast('CSRF token not available. Please try again.', 'error');
+        return;
+      }
+      try {
+        const response = await fetch(`https://demo.defectdojo.org/api/v2/tests/${testId}/`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+          },
+          body: JSON.stringify(updates)
+        });
+        if (response.ok) {
+          showToast('Test updated successfully', 'success');
+          const test = jiraAllTests.find(t => t.id == testId);
+          Object.assign(test, updates);
+          jiraApplyFilters();
+        } else {
+          showToast(`Failed to update test: ${response.status}`, 'error');
+        }
+      } catch (error) {
+        console.error('Error saving test:', error);
+        showToast('Error saving test: ' + error.message, 'error');
+      }
+    }
+
+    async function jiraPopulateFilterDropdowns() {
+      const assignedToSelect = document.getElementById('jiraFilterAssignedTo');
+      assignedToSelect.innerHTML = '<option value="">All</option>';
+      Object.values(usersCache).forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.id;
+        option.textContent = user.name;
+        assignedToSelect.appendChild(option);
+      });
+
+      $('#jiraFilterAssignedTo').select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        placeholder: 'Search...',
+        allowClear: true
+      });
+    }
+
+    function jiraApplyFilters() {
+      const title = document.getElementById('jiraFilterTitle').value.toLowerCase();
+      const status = document.getElementById('jiraFilterStatus').value;
+      const assignedTo = document.getElementById('jiraFilterAssignedTo').value;
+
+      jiraFilteredTests = jiraAllTests.filter(t => {
+        if (title && t.title?.toLowerCase().includes(title) === false) return false;
+        if (status && t.build_id !== status) return false;
+        if (assignedTo && t.lead != assignedTo) return false;
+        return true;
+      });
+
+      jiraCurrentPage = 1;
+      jiraRenderTable();
+    }
+
+    function jiraResetFilters() {
+      document.getElementById('jiraFilterTitle').value = '';
+      document.getElementById('jiraFilterStatus').value = '';
+      $('#jiraFilterAssignedTo').val('').trigger('change');
+      jiraApplyFilters();
+    }
+
+    function jiraRenderTable() {
+      const start = (jiraCurrentPage - 1) * jiraPageSize;
+      const pagedData = jiraFilteredTests.slice(start, start + jiraPageSize);
+      const totalPages = Math.ceil(jiraFilteredTests.length / jiraPageSize);
+
+      document.getElementById('jiraTotalCount').textContent = jiraFilteredTests.length;
+
+      const tableBody = document.getElementById('jiraTableBody');
+      tableBody.innerHTML = pagedData.map(t => `
+        <tr>
+          <td>${t.id || 'N/A'}</td>
+          <td>${t.title || 'N/A'}</td>
+          <td><textarea class="description-textarea jira-description" data-test-id="${t.id}">${t.description || ''}</textarea></td>
+          <td>
+            <select class="form-select jira-status-select" data-test-id="${t.id}">
+              <option value="Not Started" ${t.build_id === 'Not Started' ? 'selected' : ''}>Not Started</option>
+              <option value="Pass" ${t.build_id === 'Pass' ? 'selected' : ''}>Pass</option>
+              <option value="Fail" ${t.build_id === 'Fail' ? 'selected' : ''}>Fail</option>
+              <option value="NA" ${t.build_id === 'NA' ? 'selected' : ''}>NA</option>
+            </select>
+          </td>
+          <td>
+            <select class="form-select jira-assigned-to-select" data-test-id="${t.id}">
+              <option value="">Unassigned</option>
+              ${Object.values(usersCache).map(user => `
+                <option value="${user.id}" ${t.lead == user.id ? 'selected' : ''}>${user.name}</option>
+              `).join('')}
+            </select>
+          </td>
+          <td>
+            <button class="btn btn-primary btn-sm mapping-link" data-test-id="${t.id}">Map</button>
+          </td>
+        </tr>
+      `).join('');
+
+      document.getElementById('jiraPaginationStatus').textContent = `Page ${jiraCurrentPage} of ${totalPages} (${jiraFilteredTests.length} results)`;
+      document.getElementById('jiraFirstPage').disabled = jiraCurrentPage === 1;
+      document.getElementById('jiraPrevPage').disabled = jiraCurrentPage === 1;
+      document.getElementById('jiraNextPage').disabled = jiraCurrentPage === totalPages;
+      document.getElementById('jiraLastPage').disabled = jiraCurrentPage === totalPages;
+
+      $('.jira-assigned-to-select').select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        placeholder: 'Search...',
+        allowClear: true
+      });
+
+      document.querySelectorAll('.jira-description').forEach(textarea => {
+        textarea.addEventListener('change', (event) => {
+          const testId = event.target.getAttribute('data-test-id');
+          const newDescription = event.target.value;
+          jiraSaveTest(testId, { description: newDescription });
+        });
+      });
+
+      document.querySelectorAll('.jira-status-select').forEach(select => {
+        select.addEventListener('change', (event) => {
+          const testId = event.target.getAttribute('data-test-id');
+          const newStatus = event.target.value;
+          jiraSaveTest(testId, { build_id: newStatus });
+        });
+      });
+
+      document.querySelectorAll('.jira-assigned-to-select').forEach(select => {
+        $(select).on('change', (event) => {
+          const testId = event.target.getAttribute('data-test-id');
+          const newLead = event.target.value || null;
+          jiraSaveTest(testId, { lead: newLead });
+        });
+      });
+
+      document.querySelectorAll('.mapping-link').forEach(button => {
+        button.addEventListener('click', (event) => {
+          const testId = button.getAttribute('data-test-id');
+          mappingFetchTests(testId);
+          const modal = new bootstrap.Modal(document.getElementById('mappingModal'), {
+            backdrop: 'static',
+            keyboard: false
+          });
+          modal.show();
+        });
+      });
+    }
+
+    // Test Case Jira Mapping Modal Logic
+    let mappingAllTests = [];
+    let mappingFilteredTests = [];
+    let mappingCategoryCache = {};
+    let mappingModalityCache = {};
+    let mappingCurrentPage = 1;
+    const mappingPageSize = 10;
+    let currentJiraTestId = null;
+    let currentJiraTestTitle = '';
+    let mappingSelections = {};
+
+    async function mappingFetchTests(jiraTestId) {
+      try {
+        currentJiraTestId = jiraTestId;
+        const jiraTest = jiraAllTests.find(t => t.id == jiraTestId);
+        if (!jiraTest || !jiraTest.engagement) {
+          showToast('Jira test or engagement ID not found', 'error');
+          document.getElementById('mappingJiraTestTitle').textContent = 'Test mapping for Jira: Not Found';
+          return;
+        }
+        currentJiraTestTitle = jiraTest.title || 'Untitled';
+        document.getElementById('mappingJiraTestTitle').textContent = `Test mapping for Jira: ${currentJiraTestTitle}`;
+        const response = await fetch(`https://demo.defectdojo.org/api/v2/tests/?engagement=1&tags=owasp&limit=100`);
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Mapping Tests API response:', data);
+          mappingAllTests = Array.isArray(data) ? data : data.results || [];
+          if (mappingAllTests.length === 0) {
+            showToast(`No test cases found for engagement ${jiraTest.engagement} with tag "owasp"`, 'warning');
+          }
+          mappingPopulateCaches();
+          mappingFilteredTests = [...mappingAllTests];
+          const mappedIds = jiraTest.commit_hash ? jiraTest.commit_hash.split(',').map(id => id.trim()) : [];
+          mappingSelections = {};
+          mappingAllTests.forEach(t => {
+            mappingSelections[t.id] = mappedIds.includes(t.id.toString()) ? 'Yes' : 'NA';
+          });
+          mappingApplyFilters();
+          await mappingPopulateFilterDropdowns();
+        } else {
+          showToast(`Failed to fetch mapping test cases: ${response.status}`, 'error');
+        }
+      } catch (error) {
+        console.error('Error fetching mapping test cases:', error);
+        showToast('Error fetching mapping test cases: ' + error.message, 'error');
+        document.getElementById('mappingJiraTestTitle').textContent = 'Test mapping for Jira: Error';
+      }
+    }
+
+    function mappingPopulateCaches() {
+      mappingCategoryCache = {};
+      mappingModalityCache = {};
+      mappingAllTests.forEach(test => {
+        if (test.build_id) {
+          mappingCategoryCache[test.build_id] = test.build_id;
+        }
+        if (test.commit_hash) {
+          mappingModalityCache[test.commit_hash] = test.commit_hash;
+        }
+      });
+    }
+
+    async function mappingPopulateFilterDropdowns() {
+      const categorySelect = document.getElementById('mappingFilterCategory');
+      categorySelect.innerHTML = '<option value="">All</option>';
+      Object.values(mappingCategoryCache).forEach(category => {
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = category;
+        categorySelect.appendChild(option);
+      });
+
+      const modalitySelect = document.getElementById('mappingFilterModality');
+      modalitySelect.innerHTML = '<option value="">All</option>';
+      Object.values(mappingModalityCache).forEach(modality => {
+        const option = document.createElement('option');
+        option.value = modality;
+        option.textContent = modality;
+        modalitySelect.appendChild(option);
+      });
+
+      $('#mappingFilterCategory, #mappingFilterModality').select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        placeholder: 'Search...',
+        allowClear: true
+      });
+    }
+
+    function mappingApplyFilters() {
+      const created = document.getElementById('mappingFilterCreated').value;
+      const title = document.getElementById('mappingFilterTitle').value.toLowerCase();
+      const category = document.getElementById('mappingFilterCategory').value;
+      const modality = document.getElementById('mappingFilterModality').value;
+      const map = document.getElementById('mappingFilterMap').value;
+
+      mappingFilteredTests = mappingAllTests.filter(t => {
+        if (created && t.created?.slice(0, 10) !== created) return false;
+        if (title && t.title?.toLowerCase().includes(title) === false) return false;
+        if (category && t.build_id !== category) return false;
+        if (modality && t.commit_hash !== modality) return false;
+        if (map && mappingSelections[t.id] !== map) return false;
+        return true;
+      });
+
+      mappingCurrentPage = 1;
+      mappingRenderTable();
+    }
+
+    function mappingResetFilters() {
+      document.getElementById('mappingFilterCreated').value = '';
+      document.getElementById('mappingFilterTitle').value = '';
+      $('#mappingFilterCategory').val('').trigger('change');
+      $('#mappingFilterModality').val('').trigger('change');
+      document.getElementById('mappingFilterMap').value = '';
+      mappingApplyFilters();
+    }
+
+    async function mappingSaveTests() {
+      if (!csrfToken) {
+        showToast('CSRF token not available. Please try again.', 'error');
+        return;
+      }
+      try {
+        // Get IDs of tests marked as Yes
+        const mappedIds = Object.entries(mappingSelections)
+          .filter(([_, value]) => value === 'Yes')
+          .map(([id]) => id);
+        const commitHash = mappedIds.join(',');
+
+        // Update Jira test's commit_hash
+        const jiraTest = jiraAllTests.find(t => t.id == currentJiraTestId);
+        if (jiraTest) {
+          const updateData = {
+            id: jiraTest.id,
+            title: jiraTest.title || 'Jira Test',
+            test_type_name: jiraTest.test_type_name || 'Manual',
+            target_start: jiraTest.target_start || new Date().toISOString().slice(0, 10),
+            target_end: jiraTest.target_end || new Date().toISOString().slice(0, 10),
+            engagement: jiraTest.engagement || 1,
+            lead: jiraTest.lead || null,
+            test_type: jiraTest.test_type || 1,
+            environment: jiraTest.environment || 'Production',
+            commit_hash: commitHash
+          };
+          const response = await fetch(`https://demo.defectdojo.org/api/v2/tests/${currentJiraTestId}/`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify(updateData)
+          });
+          if (response.ok) {
+            showToast('Jira test updated successfully', 'success');
+            jiraTest.commit_hash = commitHash;
+          } else {
+            showToast(`Failed to update Jira test: ${response.status}`, 'error');
+            return;
+          }
+        } else {
+          showToast('Jira test not found', 'error');
+          return;
+        }
+
+        // Fetch existing pci_jira_owasp tests for the engagement
+        const existingTestsResponse = await fetch(`https://demo.defectdojo.org/api/v2/tests/?tags=pci_jira_owasp&commit_hash__startswith=${currentJiraTestId}_&engagement=${jiraTest.engagement}`);
+        if (!existingTestsResponse.ok) {
+          showToast(`Failed to check existing tests: ${existingTestsResponse.status}`, 'error');
+          return;
+        }
+        const existingTestsData = await existingTestsResponse.json();
+        const existingTests = Array.isArray(existingTestsData) ? existingTestsData : existingTestsData.results || [];
+
+        // Handle deletion for NA/No selections
+        const allOwaspTestIds = mappingAllTests.map(t => t.id.toString());
+        const testsToDelete = allOwaspTestIds.filter(id => !mappedIds.includes(id));
+        for (const owaspTestId of testsToDelete) {
+          const uniqueCommitHash = `${currentJiraTestId}_${owaspTestId}`;
+          const testToDelete = existingTests.find(t => t.commit_hash === uniqueCommitHash);
+          if (testToDelete) {
+            const deleteResponse = await fetch(`https://demo.defectdojo.org/api/v2/tests/${testToDelete.id}/`, {
+              method: 'DELETE',
+              headers: {
+                'X-CSRFToken': csrfToken
+              }
+            });
+            if (deleteResponse.ok || deleteResponse.status === 204) {
+              showToast(`Deleted test for OWASP test ${owaspTestId}`, 'success');
+            } else {
+              showToast(`Failed to delete test for OWASP test ${owaspTestId}: ${deleteResponse.status}`, 'error');
+            }
+          }
+        }
+
+        // Create new tests for Yes selections, avoiding duplicates
+        for (const owaspTestId of mappedIds) {
+          const uniqueCommitHash = `${currentJiraTestId}_${owaspTestId}`;
+          // Check for duplicate
+          const existingTest = existingTests.find(t => t.commit_hash === uniqueCommitHash);
+          if (existingTest) {
+            console.log(`Skipping creation for OWASP test ${owaspTestId}: Test with commit_hash ${uniqueCommitHash} already exists`);
+            continue; // Skip if test already exists
+          }
+
+          const owaspTest = mappingAllTests.find(t => t.id.toString() === owaspTestId);
+          if (owaspTest) {
+            const testData = {
+              title: owaspTest.title || 'Mapped Test',
+              test_type_name: owaspTest.test_type_name || 'Manual',
+              target_start: owaspTest.target_start || new Date().toISOString().slice(0, 10),
+              target_end: owaspTest.target_end || new Date().toISOString().slice(0, 10),
+              engagement: jiraTest.engagement,
+              lead: owaspTest.lead || null,
+              test_type: owaspTest.test_type || 1,
+              environment: owaspTest.environment || 'Production',
+              description: owaspTest.description || '',
+              tags: ['pci_jira_owasp'],
+              commit_hash: uniqueCommitHash
+            };
+
+            // Create new test
+            const createResponse = await fetch('https://demo.defectdojo.org/api/v2/tests/', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+              },
+              body: JSON.stringify(testData)
+            });
+            if (createResponse.ok) {
+              showToast(`Created test for OWASP test ${owaspTestId}`, 'success');
+            } else {
+              showToast(`Failed to create test for OWASP test ${owaspTestId}: ${createResponse.status}`, 'error');
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error saving mapping tests:', error);
+        showToast('Error saving mapping tests: ' + error.message, 'error');
+      }
+    }
+
+    function mappingRenderTable() {
+      const start = (mappingCurrentPage - 1) * mappingPageSize;
+      const pagedData = mappingFilteredTests.slice(start, start + mappingPageSize);
+      const totalPages = Math.ceil(mappingFilteredTests.length / mappingPageSize);
+
+      document.getElementById('mappingTotalCount').textContent = mappingFilteredTests.length;
+
+      const tableBody = document.getElementById('mappingTableBody');
+      tableBody.innerHTML = pagedData.map(t => `
+        <tr>
+          <td>${t.id || 'N/A'}</td>
+          <td>${t.title || 'N/A'}</td>
+          <td>${t.description || ''}</td>
+          <td>${t.build_id || 'N/A'}</td>
+          <td>${t.commit_hash || 'N/A'}</td>
+          <td>
+            <select class="form-select mapping-select" data-test-id="${t.id}">
+              <option value="NA" ${mappingSelections[t.id] === 'NA' ? 'selected' : ''}>NA</option>
+              <option value="Yes" ${mappingSelections[t.id] === 'Yes' ? 'selected' : ''}>Yes</option>
+              <option value="No" ${mappingSelections[t.id] === 'No' ? 'selected' : ''}>No</option>
+            </select>
+          </td>
+        </tr>
+      `).join('');
+
+      document.getElementById('mappingPaginationStatus').textContent = `Page ${mappingCurrentPage} of ${totalPages} (${mappingFilteredTests.length} results)`;
+      document.getElementById('mappingFirstPage').disabled = mappingCurrentPage === 1;
+      document.getElementById('mappingPrevPage').disabled = mappingCurrentPage === 1;
+      document.getElementById('mappingNextPage').disabled = mappingCurrentPage === totalPages;
+      document.getElementById('mappingLastPage').disabled = mappingCurrentPage === totalPages;
+
+      document.querySelectorAll('.mapping-select').forEach(select => {
+        select.addEventListener('change', (event) => {
+          const testId = event.target.getAttribute('data-test-id');
+          mappingSelections[testId] = event.target.value;
+          mappingApplyFilters();
+        });
+      });
+
+      // Update Select All checkbox state
+      const selectAllCheckbox = document.getElementById('mappingSelectAll');
+      const allSelected = mappingAllTests.every(t => mappingSelections[t.id] === 'Yes');
+      selectAllCheckbox.checked = allSelected;
+    }
+
+    // Initialize Application
+    document.addEventListener('DOMContentLoaded', async () => {
+      await fetchCsrfToken();
+      await fetchAllUsers();
+
+      // Engagements Tab Initialization
+      await engFetchAllProducts();
+      await engPopulateFilterDropdowns();
+      await engFetchEngagements();
+
+      document.getElementById('engFirstPage').onclick = () => { engCurrentPage = 1; engRenderTable(); };
+      document.getElementById('engPrevPage').onclick = () => { if (engCurrentPage > 1) engCurrentPage--; engRenderTable(); };
+      document.getElementById('engNextPage').onclick = () => {
+        const totalPages = Math.ceil(engFilteredEngagements.length / engPageSize);
+        if (engCurrentPage < totalPages) engCurrentPage++;
+        engRenderTable();
+      };
+      document.getElementById('engLastPage').onclick = () => {
+        engCurrentPage = Math.ceil(engFilteredEngagements.length / engPageSize);
+        engRenderTable();
+      };
+      document.getElementById('engApplyFilters').onclick = engApplyFilters;
+      document.getElementById('engResetFilters').onclick = engResetFilters;
+
+      // Test Cases Tab Initialization
+      await testFetchTests();
+      await testPopulateFilterDropdowns();
+
+      document.getElementById('testFirstPage').onclick = () => { testCurrentPage = 1; testRenderTable(); };
+      document.getElementById('testPrevPage').onclick = () => { if (testCurrentPage > 1) testCurrentPage--; testRenderTable(); };
+      document.getElementById('testNextPage').onclick = () => {
+        const totalPages = Math.ceil(testFilteredTests.length / testPageSize);
+        if (testCurrentPage < totalPages) testCurrentPage++;
+        testRenderTable();
+      };
+      document.getElementById('testLastPage').onclick = () => {
+        testCurrentPage = Math.ceil(testFilteredTests.length / testPageSize);
+        testRenderTable();
+      };
+      document.getElementById('testApplyFilters').onclick = testApplyFilters;
+      document.getElementById('testResetFilters').onclick = testResetFilters;
+
+      // Jira Modal Initialization
+      document.getElementById('jiraFirstPage').onclick = () => { jiraCurrentPage = 1; jiraRenderTable(); };
+      document.getElementById('jiraPrevPage').onclick = () => { if (jiraCurrentPage > 1) jiraCurrentPage--; jiraRenderTable(); };
+      document.getElementById('jiraNextPage').onclick = () => {
+        const totalPages = Math.ceil(jiraFilteredTests.length / jiraPageSize);
+        if (jiraCurrentPage < totalPages) jiraCurrentPage++;
+        jiraRenderTable();
+      };
+      document.getElementById('jiraLastPage').onclick = () => {
+        jiraCurrentPage = Math.ceil(jiraFilteredTests.length / jiraPageSize);
+        jiraRenderTable();
+      };
+      document.getElementById('jiraApplyFilters').onclick = jiraApplyFilters;
+      document.getElementById('jiraResetFilters').onclick = jiraResetFilters;
+
+      // Mapping Modal Initialization
+      document.getElementById('mappingFirstPage').onclick = () => { mappingCurrentPage = 1; mappingRenderTable(); };
+      document.getElementById('mappingPrevPage').onclick = () => { if (mappingCurrentPage > 1) mappingCurrentPage--; mappingRenderTable(); };
+      document.getElementById('mappingNextPage').onclick = () => {
+        const totalPages = Math.ceil(mappingFilteredTests.length / mappingPageSize);
+        if (mappingCurrentPage < totalPages) mappingCurrentPage++;
+        mappingRenderTable();
+      };
+      document.getElementById('mappingLastPage').onclick = () => {
+        mappingCurrentPage = Math.ceil(mappingFilteredTests.length / mappingPageSize);
+        mappingRenderTable();
+      };
+      document.getElementById('mappingApplyFilters').onclick = mappingApplyFilters;
+      document.getElementById('mappingResetFilters').onclick = mappingResetFilters;
+      document.getElementById('mappingSaveTests').onclick = mappingSaveTests;
+
+      // Select All Checkbox Handler
+      document.getElementById('mappingSelectAll').addEventListener('change', (event) => {
+        const isChecked = event.target.checked;
+        mappingAllTests.forEach(t => {
+          mappingSelections[t.id] = isChecked ? 'Yes' : 'NA';
+        });
+        mappingApplyFilters();
+      });
+    });
+  </script>
+  
+  
+  <!-- Engagement-Tests Tab -->
+<div class="tab-pane fade" id="engagement-tests" role="tabpanel" aria-labelledby="engagement-tests-tab">
+  <!-- Engagement-Tests Filter Section -->
+  <div class="filter-section">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="mb-0">Filters</h5>
+      <button class="btn btn-link" type="button" data-bs-toggle="collapse" Mariana Cycle data-bs-target="#engTestsFilterCollapse" aria-expanded="true" aria-controls="engTestsFilterCollapse">
+        <i class="bi bi-chevron-down"></i> Toggle Filters
+      </button>
+    </div>
+    <div class="collapse show" id="engTestsFilterCollapse">
+      <div class="row g-3">
+        <div class="col-md-2">
+          <label for="engTestsFilterId" class="form-label">ID</label>
+          <input type="text" class="form-control" id="engTestsFilterId" placeholder="Enter ID">
+        </div>
+        <div class="col-md-2">
+          <label for="engTestsFilterCreated" class="form-label">Created</label>
+          <input type="date" class="form-control" id="engTestsFilterCreated">
+        </div>
+        <div class="col-md-2">
+          <label for="engTestsFilterName" class="form-label">Name</label>
+          <input type="text" class="form-control" id="engTestsFilterName" placeholder="Enter name">
+        </div>
+        <div class="col-md-2">
+          <label for="engTestsFilterTargetStart" class="form-label">Start Date</label>
+          <input type="date" class="form-control" id="engTestsFilterTargetStart">
+        </div>
+        <div class="col-md-2">
+          <label for="engTestsFilterTargetEnd" class="form-label">End Date</label>
+          <input type="date" class="form-control" id="engTestsFilterTargetEnd">
+        </div>
+        <div class="col-md-2">
+          <label for="engTestsFilterAssignedTo" class="form-label">Assigned To</label>
+          <select class="form-select" id="engTestsFilterAssignedTo">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label for="engTestsFilterComponent" class="form-label">Component</label>
+          <select class="form-select" id="engTestsFilterComponent">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label for="engTestsFilterStatus" class="form-label">Status</label>
+          <select class="form-select" id="engTestsFilterStatus">
+            <option value="">All</option>
+            <option value="Not Started">Not Started</option>
+            <option value="In Progress">In Progress</option>
+            <option value="On Hold">On Hold</option>
+            <option value="Completed">Completed</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label for="engTestsFilterCertification" class="form-label">Certification</label>
+          <select class="form-select" id="engTestsFilterCertification">
+            <option value="">All</option>
+            <option value="Pending">Pending</option>
+            <option value="Certified">Certified</option>
+            <option value="Not Certified">Not Certified</option>
+            <option value="Certified with Exception">Certified with Exception</option>
+          </select>
+        </div>
+        <div class="col-md-12 d-flex justify-content-end">
+          <button class="btn btn-primary me-2" id="engTestsApplyFilters">Apply Filters</button>
+          <button class="btn btn-secondary" id="engTestsResetFilters">Reset Filters</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Engagement-Tests Table Section -->
+  <div class="table-container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5>Total Count: <span id="engTestsTotalCount">0</span></h5>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-striped table-hover">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Created</th>
+            <th>Name</th>
+            <th>Start Date</th>
+            <th>End Date</th>
+            <th>Assigned To</th>
+            <th>Component</th>
+            <th>Status</th>
+            <th>Certification</th>
+            <th>Title</th>
+            <th>Description</th>
+            <th>Branch Tag</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="engTestsTableBody"></tbody>
+      </table>
+    </div>
+    <div class="pagination-section">
+      <div id="engTestsPaginationStatus">Page 1 of 1 (0 results)</div>
+      <div>
+        <button class="btn btn-outline-primary btn-sm me-1" id="engTestsFirstPage">First</button>
+        <button class="btn btn-outline-primary btn-sm me-1" id="engTestsPrevPage">Previous</button>
+        <button class="btn btn-outline-primary btn-sm me-1" id="engTestsNextPage">Next</button>
+        <button class="btn btn-outline-primary btn-sm" id="engTestsLastPage">Last</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Certification Modal -->
+<div class="modal fade" id="certificationModal" tabindex="-1" aria-labelledby="certificationModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="certificationModalLabel">Edit Certification</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label for="certificationStatus" class="form-label">Certification Status</label>
+          <select class="form-select" id="mappingFilterMap">
+            <option value="Pending">Pending</option>
+            <option value="Certified">Certified</option>
+            <option value="Not Certified">Not Certified</option>
+            <option value="Certified with Exception">Certified with Exception</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label for="certificationBranchTag" class="form-label">Branch Tag</label>
+          <textarea class="form-control description-textarea" id="certificationBranchTag"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="certificationSave">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Engagement-Tests Tab Logic
+  let engTestsAllData = [];
+  let engTestsFilteredData = [];
+  let engTestsCurrentPage = 1;
+  const engTestsPageSize = 10;
+
+  async function engTestsFetchData() {
+    try {
+      // Fetch engagements
+      const engResponse = await fetch('https://demo.defectdojo.org/api/v2/engagements/?limit=100');
+      if (!engResponse.ok) {
+        showToast(`Failed to fetch engagements: ${engResponse.status}`, 'error');
+        return;
+      }
+      const engData = await engResponse.json();
+      const engagements = Array.isArray(engData) ? engData : engData.results || [];
+
+      // Fetch products and users
+      await engFetchAllProducts();
+      await fetchAllUsers();
+
+      engTestsAllData = [];
+
+      for (const eng of engagements) {
+        // Fetch tests for each engagement with tag 'pci_jira_owasp'
+        const testsResponse = await fetch(`https://demo.defectdojo.org/api/v2/tests/?engagement=${eng.id}&tags=pci_jira_owasp&limit=100`);
+        if (!testsResponse.ok) {
+          console.error(`Failed to fetch tests for engagement ${eng.id}: ${testsResponse.status}`);
+          continue;
+        }
+        const testsData = await testsResponse.json();
+        const tests = Array.isArray(testsData) ? testsData : testsData.results || [];
+
+        // Process each test
+        for (const test of tests) {
+          // Fetch title for commit_hash
+          let testTitle = 'N/A';
+          if (test.commit_hash && test.commit_hash.includes('_')) {
+            const testId = test.commit_hash.split('_')[0];
+            try {
+              const titleResponse = await fetch(`https://demo.defectdojo.org/api/v2/tests/${testId}/`);
+              if (titleResponse.ok) {
+                const titleData = await titleResponse.json();
+                testTitle = titleData.title || 'N/A';
+              }
+            } catch (error) {
+              console.error(`Error fetching title for test ${testId}:`, error);
+            }
+          }
+
+          // Determine engagement status
+          const allTests = await fetch(`https://demo.defectdojo.org/api/v2/tests/?engagement=${eng.id}&tags=pci_jira_owasp`);
+          const allTestsData = await allTests.json();
+          const allTestsArray = Array.isArray(allTestsData) ? allTestsData : allTestsData.results || [];
+          let status = 'In Progress';
+          if (allTestsArray.length > 0) {
+            const allCompleted = allTestsArray.every(t => t.branch_tag === 'Pass' || t.branch_tag === 'Fail');
+            const anyNotStarted = allTestsArray.some(t => t.branch_tag === 'Not Started');
+            if (allCompleted) {
+              status = 'Completed';
+            } else if (anyNotStarted) {
+              status = 'In Progress';
+            }
+          }
+
+          engTestsAllData.push({
+            engagement: {
+              id: eng.id,
+              created: eng.created,
+              name: eng.name,
+              target_start: eng.target_start,
+              target_end: eng.target_end,
+              lead: eng.lead,
+              lead_name: eng.lead ? usersCache[eng.lead]?.name || 'Unassigned' : 'Unassigned',
+              product: eng.product,
+              product_name: engProductsCache[eng.product]?.name || 'Unknown',
+              status: status,
+              build_id: eng.build_id || 'Pending'
+            },
+            test: {
+              title: testTitle,
+              description: test.description || '',
+              branch_tag: test.branch_tag || 'NA'
+            }
+          });
+        }
+      }
+
+      if (engTestsAllData.length === 0) {
+        showToast('No engagement tests found', 'warning');
+      }
+
+      engTestsFilteredData = [...engTestsAllData];
+      engTestsApplyFilters();
+      await engTestsPopulateFilterDropdowns();
+    } catch (error) {
+      console.error('Error fetching engagement tests:', error);
+      showToast('Error fetching engagement tests: ' + error.message, 'error');
+    }
+  }
+
+  async function engTestsPopulateFilterDropdowns() {
+    const assignedToSelect = document.getElementById('engTestsFilterAssignedTo');
+    assignedToSelect.innerHTML = '<option value="">All</option>';
+    Object.values(usersCache).forEach(user => {
+      const option = document.createElement('option');
+      option.value = user.id;
+      option.textContent = user.name;
+      assignedToSelect.appendChild(option);
+    });
+
+    const componentSelect = document.getElementById('engTestsFilterComponent');
+    componentSelect.innerHTML = '<option value="">All</option>';
+    Object.values(engProductsCache).forEach(product => {
+      const option = document.createElement('option');
+      option.value = product.id;
+      option.textContent = product.name;
+      componentSelect.appendChild(option);
+    });
+
+    $('#engTestsFilterAssignedTo, #engTestsFilterComponent').select2({
+      theme: 'bootstrap-5',
+      width: '100%',
+      placeholder: 'Search...',
+      allowClear: true
+    });
+  }
+
+  function engTestsApplyFilters() {
+    const id = document.getElementById('engTestsFilterId').value;
+    const created = document.getElementById('engTestsFilterCreated').value;
+    const name = document.getElementById('engTestsFilterName').value.toLowerCase();
+    const targetStart = document.getElementById('engTestsFilterTargetStart').value;
+    const targetEnd = document.getElementById('engTestsFilterTargetEnd').value;
+    const assignedTo = document.getElementById('engTestsFilterAssignedTo').value;
+    const component = document.getElementById('engTestsFilterComponent').value;
+    const status = document.getElementById('engTestsFilterStatus').value;
+    const certification = document.getElementById('engTestsFilterCertification').value;
+
+    engTestsFilteredData = engTestsAllData.filter(item => {
+      const eng = item.engagement;
+      if (id && eng.id.toString() !== id) return false;
+      if (created && eng.created?.slice(0, 10) !== created) return false;
+      if (name && eng.name?.toLowerCase().includes(name) === false) return false;
+      if (targetStart && eng.target_start?.slice(0, 10) !== targetStart) return false;
+      if (targetEnd && eng.target_end?.slice(0, 10) !== targetEnd) return false;
+      if (assignedTo && eng.lead != assignedTo) return false;
+      if (component && eng.product != component) return false;
+      if (status && eng.status !== status) return false;
+      if (certification && eng.build_id !== certification) return false;
+      return true;
+    });
+
+    engTestsCurrentPage = 1;
+    engTestsRenderTable();
+  }
+
+  function engTestsResetFilters() {
+    document.getElementById('engTestsFilterId').value = '';
+    document.getElementById('engTestsFilterCreated').value = '';
+    document.getElementById('engTestsFilterName').value = '';
+    document.getElementBy互通
+
+    ('engTestsFilterTargetStart').value = '';
+    document.getElementById('engTestsFilterTargetEnd').value = '';
+    $('#engTestsFilterAssignedTo').val('').trigger('change');
+    $('#engTestsFilterComponent').val('').trigger('change');
+    document.getElementById('engTestsFilterStatus').value = '';
+    document.getElementById('engTestsFilterCertification').value = '';
+    engTestsApplyFilters();
+  }
+
+  function engTestsRenderTable() {
+    const start = (engTestsCurrentPage - 1) * engTestsPageSize;
+    const pagedData = engTestsFilteredData.slice(start, start + engTestsPageSize);
+    const totalPages = Math.ceil(engTestsFilteredData.length / engTestsPageSize);
+
+    document.getElementById('engTestsTotalCount').textContent = engTestsFilteredData.length;
+
+    const tableBody = document.getElementById('engTestsTableBody');
+    tableBody.innerHTML = pagedData.map(item => {
+      const eng = item.engagement;
+      const test = item.test;
+      return `
+        <tr>
+          <td>${eng.id || 'N/A'}</td>
+          <td>${eng.created?.slice(0, 10) || 'N/A'}</td>
+          <td>${eng.name || 'N/A'}</td>
+          <td>${eng.target_start?.slice(0, 10) || 'N/A'}</td>
+          <td>${eng.target_end?.slice(0, 10) || 'N/A'}</td>
+          <td>${eng.lead_name || 'Unassigned'}</td>
+          <td>${eng.product_name || 'Unknown'}</td>
+          <td>${eng.status || 'N/A'}</td>
+          <td>${eng.build_id || 'Pending'}</td>
+          <td>${test.title || 'N/A'}</td>
+          <td>${test.description || ''}</td>
+          <td>${test.branch_tag || 'NA'}</td>
+          <td>
+            <button class="btn btn-primary btn-sm edit-certification" data-engagement-id="${eng.id}" data-certification="${eng.build_id || 'Pending'}" data-branch-tag="${test.branch_tag || 'NA'}">Edit</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    document.getElementById('engTestsPaginationStatus').textContent = `Page ${engTestsCurrentPage} of ${totalPages} (${engTestsFilteredData.length} results)`;
+    document.getElementById('engTestsFirstPage').disabled = engTestsCurrentPage === 1;
+    document.getElementById('engTestsPrevPage').disabled = engTestsCurrentPage === 1;
+    document.getElementById('engTestsNextPage').disabled = engTestsCurrentPage === totalPages;
+    document.getElementById('engTestsLastPage').disabled = engTestsCurrentPage === totalPages;
+
+    // Attach click handlers for Edit buttons
+    document.querySelectorAll('.edit-certification').forEach(button => {
+      button.addEventListener('click', (event) => {
+        const engagementId = button.getAttribute('data-engagement-id');
+        const certification = button.getAttribute('data-certification');
+        const branchTag = button.getAttribute('data-branch-tag');
+
+        // Populate modal
+        document.getElementById('certificationStatus').value = certification;
+        document.getElementById('certificationBranchTag').value = branchTag;
+
+        // Set up save button
+        const saveButton = document.getElementById('certificationSave');
+        saveButton.onclick = () => engTestsSaveCertification(engagementId);
+
+        const modal = new bootstrap.Modal(document.getElementById('certificationModal'), {
+          backdrop: 'static',
+          keyboard: false
+        });
+        modal.show();
+      });
+    });
+  }
+
+  async function engTestsSaveCertification(engagementId) {
+    if (!csrfToken) {
+      showToast('CSRF token not available. Please try again.', 'error');
+      return;
+    }
+    try {
+      const certificationStatus = document.getElementById('certificationStatus').value;
+      const branchTag = document.getElementById('certificationBranchTag').value;
+
+      // Fetch existing engagement data
+      const response = await fetch(`https://demo.defectdojo.org/api/v2/engagements/${engagementId}/`);
+      if (!response.ok) {
+        showToast(`Failed to fetch engagement: ${response.status}`, 'error');
+        return;
+      }
+      const engData = await response.json();
+
+      // Update engagement
+      const updateData = {
+        ...engData,
+        build_id: certificationStatus
+      };
+
+      const updateResponse = await fetch(`https://demo.defectdojo.org/api/v2/engagements/${engagementId}/`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify(updateData)
+      });
+
+      if (!updateResponse.ok) {
+        showToast(`Failed to update engagement: ${updateResponse.status}`, 'error');
+        return;
+      }
+
+      // Update tests' branch_tag
+      const testsResponse = await fetch(`https://demo.defectdojo.org/api/v2/tests/?engagement=${engagementId}&tags=pci_jira_owasp`);
+      if (!testsResponse.ok) {
+        showToast(`Failed to fetch tests: ${testsResponse.status}`, 'error');
+        return;
+      }
+      const testsData = await testsResponse.json();
+      const tests = Array.isArray(testsData) ? testsData : testsData.results || [];
+
+      for (const test of tests) {
+        const testUpdateResponse = await fetch(`https://demo.defectdojo.org/api/v2/tests/${test.id}/`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+          },
+          body: JSON.stringify({ branch_tag: branchTag })
+        });
+        if (!testUpdateResponse.ok) {
+          showToast(`Failed to update test ${test.id}: ${testUpdate  Mariana Cycle testUpdateResponse.status}`, 'error');
+        }
+      }
+
+      showToast('Certification updated successfully', 'success');
+
+      // Refresh data
+      await engTestsFetchData();
+      bootstrap.Modal.getInstance(document.getElementById('certificationModal')).hide();
+    } catch (error) {
+      console.error('Error saving certification:', error);
+      showToast('Error saving certification: ' + error.message, 'error');
+    }
+  }
+
+  // Engagement-Tests Tab Initialization
+  document.addEventListener('DOMContentLoaded', async () => {
+    await engTestsFetchData();
+
+    document.getElementById('engTestsFirstPage').onclick = () => { engTestsCurrentPage = 1; engTestsRenderTable(); };
+    document.getElementById('engTestsPrevPage').onclick = () => { if (engTestsCurrentPage > 1) engTestsCurrentPage--; engTestsRenderTable(); };
+    document.getElementById('engTestsNextPage').onclick = () => {
+      const totalPages = Math.ceil(engTestsFilteredData.length / engTestsPageSize);
+      if (engTestsCurrentPage < totalPages) engTestsCurrentPage++;
+      engTestsRenderTable();
+    };
+    document.getElementById('engTestsLastPage').onclick = () => {
+      engTestsCurrentPage = Math.ceil(engTestsFilteredData.length / engTestsPageSize);
+      engTestsRenderTable();
+    };
+    document.getElementById('engTestsApplyFilters').onclick = engTestsApplyFilters;
+    document.getElementById('engTestsResetFilters').onclick = engTestsResetFilters;
+  });
+</script>
+</body>
+</html>
