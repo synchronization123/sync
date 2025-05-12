@@ -123,6 +123,12 @@
               <input type="text" class="form-control" id="testsFilterId" placeholder="Enter ID">
             </div>
             <div class="col-md-3">
+              <label for="testsFilterTestName" class="form-label">Test Name</label>
+              <select class="form-select" id="testsFilterTestName">
+                <option value="">All</option>
+              </select>
+            </div>
+            <div class="col-md-3">
               <label for="testsFilterTitle" class="form-label">Title</label>
               <input type="text" class="form-control" id="testsFilterTitle" placeholder="Enter title">
             </div>
@@ -147,9 +153,9 @@
             <thead>
               <tr>
                 <th>ID</th>
+                <th>Test Name</th>
                 <th>Title</th>
                 <th>Description</th>
-                <th>Commit Hash</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -172,9 +178,6 @@
     </div>
   </div>
 </div>
-
-<!-- Toast Container (for this tab, can be shared if already present) -->
-<div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
 
 <style>
   .filter-section {
@@ -210,101 +213,12 @@
     align-items: center;
     margin-top: 15px;
   }
-  .toast-container {
-    z-index: 1055;
-  }
   .modal-xl .modal-content {
     border-radius: 8px;
   }
 </style>
 
 <script>
-  // Shared Variables and Functions (merge with existing if already present)
-  let usersCache = {};
-  let engProductsCache = {};
-  let csrfToken = null;
-
-  async function fetchCsrfToken() {
-    try {
-      const response = await fetch('https://demo.defectdojo.org/api/key-v2');
-      if (!response.ok) {
-        showToast(`Failed to fetch CSRF token page: ${response.status}`, 'error');
-        return;
-      }
-      const html = await response.text();
-      const patterns = [
-        /name="csrfmiddlewaretoken"\s+value="([^"]+)"/,
-        /name="csrf_token"\s+value="([^"]+)"/,
-        /<meta name="csrf-token" content="([^"]+)"/,
-        /var\s+csrf_token\s*=\s*['"]([^'"]+)['"]/
-      ];
-      for (const pattern of patterns) {
-        const match = html.match(pattern);
-        if (match) {
-          csrfToken = match[1];
-          console.log('CSRF token fetched:', csrfToken);
-          return;
-        }
-      }
-      console.error('CSRF token not found. HTML response:', html);
-      showToast('CSRF token not found in API key page. Check console for HTML.', 'error');
-    } catch (error) {
-      console.error('Error fetching CSRF token:', error);
-      showToast('Error fetching CSRF token: ' + error.message, 'error');
-    }
-  }
-
-  async function fetchAllUsers() {
-    try {
-      const response = await fetch('https://demo.defectdojo.org/api/v2/users/');
-      if (response.ok) {
-        const data = await response.json();
-        const users = Array.isArray(data) ? data : data.results || [];
-        users.forEach(user => {
-          usersCache[user.id] = { id: user.id, name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Unknown' };
-        });
-      } else {
-        showToast('Failed to fetch users', 'error');
-      }
-    } catch (error) {
-      console.error('Error fetching users:', error);
-    }
-  }
-
-  async function engFetchAllProducts() {
-    try {
-      const response = await fetch('https://demo.defectdojo.org/api/v2/products/?limit=100');
-      if (response.ok) {
-        const data = await response.json();
-        const products = Array.isArray(data) ? data : data.results || [];
-        products.forEach(product => {
-          engProductsCache[product.id] = { id: product.id, name: product.name || 'Unknown' };
-        });
-      } else {
-        showToast('Failed to fetch products', 'error');
-      }
-    } catch (error) {
-      console.error('Error fetching products:', error);
-    }
-  }
-
-  function showToast(message, type = 'info') {
-    const toastContainer = document.getElementById('toastContainer');
-    const toast = document.createElement('div');
-    toast.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : type === 'warning' ? 'warning' : type === 'success' ? 'success' : type} border-0`;
-    toast.setAttribute('role', 'alert');
-    toast.innerHTML = `
-      <div class="d-flex">
-        <div class="toast-body">${message}</div>
-        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-      </div>
-    `;
-    toastContainer.appendChild(toast);
-    const bsToast = new bootstrap.Toast(toast, { autohide: true, delay: 5000 });
-    bsToast.show();
-    toast.addEventListener('hidden.bs.toast', () => toast.remove());
-  }
-
   // Engagements-Test-Count Tab Logic
   let engTestCountAllData = [];
   let engTestCountFilteredData = [];
@@ -326,10 +240,6 @@
       }
       const engData = await engResponse.json();
       const engagements = Array.isArray(engData) ? engData : engData.results || [];
-
-      // Fetch products and users
-      await engFetchAllProducts();
-      await fetchAllUsers();
 
       engTestCountAllData = [];
 
@@ -508,48 +418,83 @@
       const testsData = await response.json();
       const tests = Array.isArray(testsData) ? testsData : testsData.results || [];
 
-      testsAllData = [];
-
-      for (const test of tests) {
-        let testTitle = 'N/A';
-        if (test.commit_hash && test.commit_hash.includes('_')) {
-          const testId = test.commit_hash.split('_')[0];
-          try {
-            const titleResponse = await fetch(`https://demo.defectdojo.org/api/v2/tests/${testId}/`);
-            if (titleResponse.ok) {
-              const titleData = await titleResponse.json();
-              testTitle = titleData.title || 'N/A';
-            }
-          } catch (error) {
-            console.error(`Error fetching title for test ${testId}:`, error);
-          }
-        }
-
-        testsAllData.push({
-          id: test.id,
-          title: testTitle,
-          description: test.description || '',
-          commit_hash: test.commit_hash || 'N/A',
-          status: test.build_id || 'NA'
-        });
-      }
+      testsAllData = tests.map(test => ({
+        id: test.id,
+        test_name: test.title || 'N/A',
+        title: 'N/A', // Placeholder; clarify if this should be fetched differently
+        description: test.description || '',
+        status: test.build_id || 'NA'
+      }));
 
       testsFilteredData = [...testsAllData];
       testsCurrentPage = 1;
       testsApplyFilters();
+      await populateTestNameFilter();
     } catch (error) {
       console.error('Error fetching tests:', error);
       showToast('Error fetching tests: ' + error.message, 'error');
     }
   }
 
+  async function populateTestNameFilter() {
+    const testNameSelect = document.getElementById('testsFilterTestName');
+    const uniqueTestNames = [...new Set(testsAllData.map(item => item.test_name))].sort();
+    testNameSelect.innerHTML = '<option value="">All</option>';
+    uniqueTestNames.forEach(name => {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      testNameSelect.appendChild(option);
+    });
+
+    $('#testsFilterTestName').select2({
+      theme: 'bootstrap-5',
+      width: '100%',
+      placeholder: 'Search...',
+      allowClear: true
+    });
+  }
+
+  async function updateTestStatus(testId, newStatus) {
+    if (!csrfToken) {
+      showToast('CSRF token not available. Please try again.', 'error');
+      return;
+    }
+    try {
+      const response = await fetch(`https://demo.defectdojo.org/api/v2/tests/${testId}/`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({ build_id: newStatus })
+      });
+      if (!response.ok) {
+        showToast(`Failed to update test status: ${response.status}`, 'error');
+        return;
+      }
+      showToast('Test status updated successfully', 'success');
+      // Update local data
+      const testIndex = testsAllData.findIndex(t => t.id === testId);
+      if (testIndex !== -1) {
+        testsAllData[testIndex].status = newStatus;
+        testsApplyFilters();
+      }
+    } catch (error) {
+      console.error('Error updating test status:', error);
+      showToast('Error updating test status: ' + error.message, 'error');
+    }
+  }
+
   function testsApplyFilters() {
     const id = document.getElementById('testsFilterId').value;
+    const testName = document.getElementById('testsFilterTestName').value;
     const title = document.getElementById('testsFilterTitle').value.toLowerCase();
     const status = document.getElementById('testsFilterStatus').value;
 
     testsFilteredData = testsAllData.filter(item => {
       if (id && item.id.toString() !== id) return false;
+      if (testName && item.test_name !== testName) return false;
       if (title && item.title?.toLowerCase().includes(title) === false) return false;
       if (status && item.status !== status) return false;
       return true;
@@ -561,6 +506,7 @@
 
   function testsResetFilters() {
     document.getElementById('testsFilterId').value = '';
+    $('#testsFilterTestName').val('').trigger('change');
     document.getElementById('testsFilterTitle').value = '';
     document.getElementById('testsFilterStatus').value = '';
     testsApplyFilters();
@@ -575,10 +521,16 @@
     tableBody.innerHTML = pagedData.map(item => `
       <tr>
         <td>${item.id || 'N/A'}</td>
+        <td>${item.test_name || 'N/A'}</td>
         <td>${item.title || 'N/A'}</td>
         <td>${item.description || ''}</td>
-        <td>${item.commit_hash || 'N/A'}</td>
-        <td>${item.status || 'NA'}</td>
+        <td>
+          <select class="form-select status-select" data-test-id="${item.id}">
+            <option value="NA" ${item.status === 'NA' ? 'selected' : ''}>NA</option>
+            <option value="Pass" ${item.status === 'Pass' ? 'selected' : ''}>Pass</option>
+            <option value="Fail" ${item.status === 'Fail' ? 'selected' : ''}>Fail</option>
+          </select>
+        </td>
       </tr>
     `).join('');
 
@@ -587,11 +539,20 @@
     document.getElementById('testsPrevPage').disabled = testsCurrentPage === 1;
     document.getElementById('testsNextPage').disabled = testsCurrentPage === totalPages;
     document.getElementById('testsLastPage').disabled = testsCurrentPage === totalPages;
+
+    // Attach change handlers for status dropdowns
+    document.querySelectorAll('.status-select').forEach(select => {
+      select.addEventListener('change', (event) => {
+        const testId = event.target.getAttribute('data-test-id');
+        const newStatus = event.target.value;
+        updateTestStatus(testId, newStatus);
+      });
+    });
   }
 
   // Engagements-Test-Count Tab Initialization
   document.addEventListener('DOMContentLoaded', async () => {
-    await fetchCsrfToken();
+    // Assume fetchCsrfToken, fetchAllUsers, engFetchAllProducts are called in main script
     await engTestCountFetchData();
 
     document.getElementById('engTestCountFirstPage').onclick = () => { engTestCountCurrentPage = 1; engTestCountRenderTable(); };
