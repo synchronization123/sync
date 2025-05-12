@@ -460,14 +460,13 @@
       link.addEventListener('click', async (event) => {
         event.preventDefault();
         const engagementId = link.getAttribute('data-engagement-id');
-        // Assume jiraModal requires a function to fetch Jira-related data
-        await fetchJiraDataForEngagement(engagementId); // Placeholder; replace with actual function
+        await fetchJiraDataForEngagement(engagementId); // Replace with actual function from Engagements tab
         const modal = new bootstrap.Modal(document.getElementById('jiraModal'), {
           backdrop: 'static',
           keyboard: false
         });
-        // Update modal title or content as needed
-        document.getElementById('jiraModalLabel')?.setAttribute('data-engagement-id', engagementId);
+        const engagement = engTestCountAllData.find(item => item.id == engagementId);
+        document.getElementById('jiraModalLabel').textContent = `Jira Tests for ${engagement?.name || 'Engagement ' + engagementId}`;
         modal.show();
       });
     });
