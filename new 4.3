@@ -1,109 +1,161 @@
-// Modified mappingSaveTests function
-async function mappingSaveTests() {
-  if (!csrfToken) {
-    showToast('CSRF token not available. Please try again.', 'error');
-    return;
-  }
+<!-- Tests Modal -->
+<div class="modal fade" id="testsModal" tabindex="-1" aria-labelledby="testsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h5 class="modal-title w-100" id="testsModalLabel">Tests for Engagement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Tests Filter Section -->
+        <div class="filter-section mb-3">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label for="testsFilterId" class="form-label">ID</label>
+              <input type="text" class="form-control" id="testsFilterId" placeholder="Enter ID">
+            </div>
+            <div class="col-md-3">
+              <label for="testsFilterTestName" class="form-label">Test Name</label>
+              <select class="form-select" id="testsFilterTestName">
+                <option value="">All</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label for="testsFilterTitle" class="form-label">Branch Tag</label>
+              <input type="text" class="form-control" id="testsFilterTitle" placeholder="Enter branch tag">
+            </div>
+            <div class="col-md-3">
+              <label for="testsFilterStatus" class="form-label">Status</label>
+              <select class="form-select" id="testsFilterStatus">
+                <option value="">All</option>
+                <option value="NA">NA</option>
+                <option value="Pass">Pass</option>
+                <option value="Fail">Fail</option>
+              </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+              <button class="btn btn-primary me-2" id="testsApplyFilters">Apply Filters</button>
+              <button class="btn btn-secondary" id="testsResetFilters">Reset Filters</button>
+            </div>
+          </div>
+        </div>
+        <!-- Tests Table -->
+        <div class="table-responsive">
+          <table class="table table-striped table-hover">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Test Name</th>
+                <th>Branch Tag</th>
+                <th>Description</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="testsTableBody"></tbody>
+          </table>
+        </div>
+        <div class="pagination-section">
+          <div id="testsPaginationStatus">Page 1 of 1 (0 results)</div>
+          <div>
+            <button class="btn btn-outline-primary btn-sm me-1" id="testsFirstPage">First</button>
+            <button class="btn btn-outline-primary btn-sm me-1" id="testsPrevPage">Previous</button>
+            <button class="btn btn-outline-primary btn-sm me-1" id="testsNextPage">Next</button>
+            <button class="btn btn-outline-primary btn-sm" id="testsLastPage">Last</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 
+
+
+
+async function fetchTestsForEngagement(engagementId) {
   try {
-    const jiraTest = jiraAllTests.find(t => t.id == currentJiraTestId);
-    if (!jiraTest || !jiraTest.engagement) {
-      showToast('Jira test or engagement ID not found', 'error');
+    const response = await fetch(`https://demo.defectdojo.org/api/v2/tests/?engagement=${engagementId}&tags=pci_jira_owasp&limit=100`);
+    if (!response.ok) {
+      showToast(`Failed to fetch tests: ${response.status}`, 'error');
       return;
     }
-    const engagementId = jiraTest.engagement;
-    const engagementLead = jiraTest.lead || null;
-    const jiraTestTitle = jiraTest.title || `Jira_Test_${currentJiraTestId}`; // Title of rmm_jira test
+    const testsData = await response.json();
+    const tests = Array.isArray(testsData) ? testsData : testsData.results || [];
 
-    // Process each test in mappingSelections
-    const mappedIds = [];
-    for (const [testId, status] of Object.entries(mappingSelections)) {
-      const test = mappingAllTests.find(t => t.id == testId);
-      if (!test) continue;
+    testsAllData = [];
 
-      const testTitle = test.title || `Test_${testId}`;
-      const rmmTestCommitHash = testTitle; // Use test title as commit_hash
-
-      if (status === 'Yes') {
-        mappedIds.push(testId);
-
-        // Check if an rmm_jira_owasp test already exists
-        const existingRmmTest = await findExistingRmmTest(engagementId, rmmTestCommitHash);
-        if (!existingRmmTest) {
-          // Create new test with tag rmm_jira_owasp and mandatory parameters
-          const newTestData = {
-            title: testTitle,
-            description: test.description || '',
-            engagement: engagementId,
-            target_start: new Date().toISOString().slice(0, 10),
-            target_end: new Date().toISOString().slice(0, 10),
-            test_type: test.test_type || null,
-            test_type_name: test.test_type_name || test.test_type || '',
-            lead: engagementLead,
-            tags: ['rmm_jira_owasp'],
-            commit_hash: rmmTestCommitHash,
-            branch_tag: jiraTestTitle, // Set branch_tag to rmm_jira test title
-            build_id: 'NA'
-          };
-
-          const createResponse = await fetch('https://demo.defectdojo.org/api/v2/tests/', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': csrfToken
-            },
-            body: JSON.stringify(newTestData)
-          });
-
-          if (!createResponse.ok) {
-            showToast(`Failed to create rmm_jira_owasp test for test ${testId}: ${createResponse.status}`, 'error');
-            continue;
-          }
-          console.log(`Created rmm_jira_owasp test for test ${testId} with branch_tag: ${jiraTestTitle}`);
-        }
-      } else if (status === 'NA') {
-        // Delete existing rmm_jira_owasp test if it exists
-        const existingRmmTest = await findExistingRmmTest(engagementId, rmmTestCommitHash);
-        if (existingRmmTest) {
-          const deleteResponse = await fetch(`https://demo.defectdojo.org/api/v2/tests/${existingRmmTest.id}/`, {
-            method: 'DELETE',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': csrfToken
+    for (const test of tests) {
+      let branchTag = 'N/A';
+      // Find the corresponding rmm_jira_owasp test using commit_hash
+      if (test.title) {
+        try {
+          const rmmResponse = await fetch(`https://demo.defectdojo.org/api/v2/tests/?engagement=${engagementId}&tags=rmm_jira_owasp&commit_hash=${encodeURIComponent(test.title)}&limit=1`);
+          if (rmmResponse.ok) {
+            const rmmData = await rmmResponse.json();
+            const rmmTests = Array.isArray(rmmData) ? rmmData : rmmData.results || [];
+            if (rmmTests.length > 0 && rmmTests[0].branch_tag) {
+              branchTag = rmmTests[0].branch_tag;
             }
-          });
-
-          if (!deleteResponse.ok && deleteResponse.status !== 204) {
-            showToast(`Failed to delete rmm_jira_owasp test for test ${testId}: ${deleteResponse.status}`, 'error');
-            continue;
           }
-          console.log(`Deleted rmm_jira_owasp test ${existingRmmTest.id} for test ${testId}`);
+        } catch (error) {
+          console.error(`Error fetching rmm_jira_owasp test for test ${test.id}:`, error);
         }
       }
+
+      testsAllData.push({
+        id: test.id,
+        test_name: test.title || 'N/A',
+        branch_tag: branchTag, // Store branch_tag instead of title
+        description: test.description || '',
+        status: test.build_id || 'NA'
+      });
     }
 
-    // Update the Jira test's commit_hash with the mapped test IDs
-    const commitHash = mappedIds.join(',');
-    const updateResponse = await fetch(`https://demo.defectdojo.org/api/v2/tests/${currentJiraTestId}/`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': csrfToken
-      },
-      body: JSON.stringify({ commit_hash: commitHash })
-    });
-
-    if (updateResponse.ok) {
-      showToast('Test mappings saved successfully', 'success');
-      jiraTest.commit_hash = commitHash;
-      jiraApplyFilters();
-      const modal = bootstrap.Modal.getInstance(document.getElementById('mappingModal'));
-      if (modal) modal.hide();
-    } else {
-      showToast(`Failed to save test mappings: ${updateResponse.status}`, 'error');
-    }
+    testsFilteredData = [...testsAllData];
+    testsCurrentPage = 1;
+    testsApplyFilters();
+    await populateTestNameFilter();
   } catch (error) {
-    console.error('Error saving test mappings:', error);
-    showToast('Error saving test mappings: ' + error.message, 'error');
+    console.error('Error fetching tests:', error);
+    showToast('Error fetching tests: ' + error.message, 'error');
   }
+}
+
+function testsRenderTable() {
+  const start = (testsCurrentPage - 1) * testsPageSize;
+  const pagedData = testsFilteredData.slice(start, start + testsPageSize);
+  const totalPages = Math.ceil(testsFilteredData.length / testsPageSize);
+
+  const tableBody = document.getElementById('testsTableBody');
+  tableBody.innerHTML = pagedData.map(item => `
+    <tr>
+      <td>${item.id || 'N/A'}</td>
+      <td>${item.test_name || 'N/A'}</td>
+      <td>${item.branch_tag || 'N/A'}</td>
+      <td>${item.description || ''}</td>
+      <td>
+        <select class="form-select status-select" data-test-id="${item.id}">
+          <option value="NA" ${item.status === 'NA' ? 'selected' : ''}>NA</option>
+          <option value="Pass" ${item.status === 'Pass' ? 'selected' : ''}>Pass</option>
+          <option value="Fail" ${item.status === 'Fail' ? 'selected' : ''}>Fail</option>
+        </select>
+      </td>
+    </tr>
+  `).join('');
+
+  document.getElementById('testsPaginationStatus').textContent = `Page ${testsCurrentPage} of ${totalPages} (${testsFilteredData.length} results)`;
+  document.getElementById('testsFirstPage').disabled = testsCurrentPage === 1;
+  document.getElementById('testsPrevPage').disabled = testsCurrentPage === 1;
+  document.getElementById('testsNextPage').disabled = testsCurrentPage === totalPages;
+  document.getElementById('testsLastPage').disabled = testsCurrentPage === totalPages;
+
+  document.querySelectorAll('.status-select').forEach(select => {
+    select.addEventListener('change', (event) => {
+      const testId = event.target.getAttribute('data-test-id');
+      const newStatus = event.target.value;
+      updateTestStatus(testId, newStatus);
+    });
+  });
 }
