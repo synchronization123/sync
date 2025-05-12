@@ -12,7 +12,8 @@ async function mappingSaveTests() {
       return;
     }
     const engagementId = jiraTest.engagement;
-    const engagementLead = jiraTest.lead || null; // Use Jira test's lead, assuming it matches engagement's lead
+    const engagementLead = jiraTest.lead || null;
+    const jiraTestTitle = jiraTest.title || `Jira_Test_${currentJiraTestId}`; // Title of rmm_jira test
 
     // Process each test in mappingSelections
     const mappedIds = [];
@@ -36,11 +37,12 @@ async function mappingSaveTests() {
             engagement: engagementId,
             target_start: new Date().toISOString().slice(0, 10),
             target_end: new Date().toISOString().slice(0, 10),
-            test_type: test.test_type || null, // Copy test_type (ID)
-            test_type_name: test.test_type_name || test.test_type || '', // Copy test_type_name, fallback to test_type
+            test_type: test.test_type || null,
+            test_type_name: test.test_type_name || test.test_type || '',
             lead: engagementLead,
             tags: ['rmm_jira_owasp'],
             commit_hash: rmmTestCommitHash,
+            branch_tag: jiraTestTitle, // Set branch_tag to rmm_jira test title
             build_id: 'NA'
           };
 
@@ -57,7 +59,7 @@ async function mappingSaveTests() {
             showToast(`Failed to create rmm_jira_owasp test for test ${testId}: ${createResponse.status}`, 'error');
             continue;
           }
-          console.log(`Created rmm_jira_owasp test for test ${testId}`);
+          console.log(`Created rmm_jira_owasp test for test ${testId} with branch_tag: ${jiraTestTitle}`);
         }
       } else if (status === 'NA') {
         // Delete existing rmm_jira_owasp test if it exists
