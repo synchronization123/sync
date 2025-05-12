@@ -110,8 +110,8 @@
 <div class="modal fade" id="testsModal" tabindex="-1" aria-labelledby="testsModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-xl">
     <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="testsModalLabel">Tests for Engagement</h5>
+      <div class="modal-header text-center">
+        <h5 class="modal-title w-100" id="testsModalLabel">Tests for Engagement</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
@@ -218,6 +218,10 @@
   }
   .date-picker, .select-field {
     width: 100%;
+  }
+  .modal-header.text-center .modal-title {
+    flex-grow: 1;
+    text-align: center;
   }
 </style>
 
@@ -451,32 +455,35 @@
     document.getElementById('engTestCountNextPage').disabled = engTestCountCurrentPage === totalPages;
     document.getElementById('engTestCountLastPage').disabled = engTestCountCurrentPage === totalPages;
 
-    // Attach click handlers for name links
+    // Attach click handlers for name links (open jiraModal)
     document.querySelectorAll('.name-link').forEach(link => {
       link.addEventListener('click', async (event) => {
         event.preventDefault();
         const engagementId = link.getAttribute('data-engagement-id');
-        await fetchTestsForEngagement(engagementId);
-        const modal = new bootstrap.Modal(document.getElementById('testsModal'), {
+        // Assume jiraModal requires a function to fetch Jira-related data
+        await fetchJiraDataForEngagement(engagementId); // Placeholder; replace with actual function
+        const modal = new bootstrap.Modal(document.getElementById('jiraModal'), {
           backdrop: 'static',
           keyboard: false
         });
-        document.getElementById('testsModalLabel').textContent = `Tests for Engagement ${engagementId}`;
+        // Update modal title or content as needed
+        document.getElementById('jiraModalLabel')?.setAttribute('data-engagement-id', engagementId);
         modal.show();
       });
     });
 
-    // Attach click handlers for test count links
+    // Attach click handlers for test count links (open testsModal)
     document.querySelectorAll('.test-count-link').forEach(link => {
       link.addEventListener('click', async (event) => {
         event.preventDefault();
         const engagementId = link.getAttribute('data-engagement-id');
+        const engagement = engTestCountAllData.find(item => item.id == engagementId);
         await fetchTestsForEngagement(engagementId);
         const modal = new bootstrap.Modal(document.getElementById('testsModal'), {
           backdrop: 'static',
           keyboard: false
         });
-        document.getElementById('testsModalLabel').textContent = `Tests for Engagement ${engagementId}`;
+        document.getElementById('testsModalLabel').textContent = `Tests for ${engagement?.name || 'Engagement ' + engagementId}`;
         modal.show();
       });
     });
@@ -581,6 +588,14 @@
       console.error('Error fetching tests:', error);
       showToast('Error fetching tests: ' + error.message, 'error');
     }
+  }
+
+  // Placeholder function for jiraModal data fetching
+  async function fetchJiraDataForEngagement(engagementId) {
+    // Replace with actual logic from Engagements tab's jiraModal
+    console.log(`Fetching Jira data for engagement ${engagementId}`);
+    // Example: await fetch(`https://demo.defectdojo.org/api/v2/tests/?engagement=${engagementId}&tags=jira`);
+    showToast(`Jira data fetch for engagement ${engagementId} not implemented.`, 'warning');
   }
 
   async function populateTestNameFilter() {
