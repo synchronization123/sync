@@ -1,0 +1,41 @@
+function mappingRenderTable() {
+  const start = (mappingCurrentPage - 1) * mappingPageSize;
+  const pagedData = mappingFilteredTests.slice(start, start + mappingPageSize);
+  const totalPages = Math.ceil(mappingFilteredTests.length / mappingPageSize);
+
+  document.getElementById('mappingTotalCount').textContent = mappingFilteredTests.length;
+
+  const tableBody = document.getElementById('mappingTableBody');
+  tableBody.innerHTML = pagedData.map(t => `
+    <tr>
+      <td>${t.id || 'N/A'}</td>
+      <td>${t.title || 'N/A'}</td>
+      <td>${t.description || ''}</td>
+      <td>${t.build_id || 'N/A'}</td>
+      <td>${t.commit_hash || 'N/A'}</td>
+      <td>
+        <input type="checkbox" class="form-check-input mapping-checkbox" data-test-id="${t.id}" ${mappingSelections[t.id] === 'Yes' ? 'checked' : ''}>
+      </td>
+    </tr>
+  `).join('');
+
+  document.getElementById('mappingPaginationStatus').textContent = `Page ${mappingCurrentPage} of ${totalPages} (${mappingFilteredTests.length} results)`;
+  document.getElementById('mappingFirstPage').disabled = mappingCurrentPage === 1;
+  document.getElementById('mappingPrevPage').disabled = mappingCurrentPage === 1;
+  document.getElementById('mappingNextPage').disabled = mappingCurrentPage === totalPages;
+  document.getElementById('mappingLastPage').disabled = mappingCurrentPage === totalPages;
+
+  // Update Select All checkbox state
+  const selectAllCheckbox = document.getElementById('mappingSelectAll');
+  const checkboxes = document.querySelectorAll('.mapping-checkbox');
+  selectAllCheckbox.checked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
+
+  // Event listeners for checkboxes
+  document.querySelectorAll('.mapping-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', (event) => {
+      const testId = event.target.getAttribute('data-test-id');
+      mappingSelections[testId] = event.target.checked ? 'Yes' : 'NA';
+      mappingApplyFilters(); // Refresh table to reflect filter by map status
+    });
+  });
+}
