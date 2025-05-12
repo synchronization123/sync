@@ -1,0 +1,80 @@
+// Add these variables to store API counts
+let jiraCountCache = {};
+let testCasesCountCache = {};
+
+// Function to fetch the Jira count for an engagement
+async function fetchJiraCount(engagementId) {
+    try {
+        const response = await fetch(`https://demo.defectdojo.org/api/v2/tests/?engagement=${engagementId}&tags=pci_jira`);
+        if (response.ok) {
+            const data = await response.json();
+            jiraCountCache[engagementId] = Array.isArray(data) ? data.length : (data.results?.length || 0);
+        } else {
+            console.error(`Failed to fetch Jira count for engagement ${engagementId}`);
+            jiraCountCache[engagementId] = 0;
+        }
+    } catch (error) {
+        console.error(`Error fetching Jira count for engagement ${engagementId}:`, error);
+        jiraCountCache[engagementId] = 0;
+    }
+}
+
+// Function to fetch the Test Cases count for an engagement
+async function fetchTestCasesCount(engagementId) {
+    try {
+        const response = await fetch(`https://demo.defectdojo.org/api/v2/tests/?engagement=${engagementId}&tags=pci_jira_owasp`);
+        if (response.ok) {
+            const data = await response.json();
+            testCasesCountCache[engagementId] = Array.isArray(data) ? data.length : (data.results?.length || 0);
+        } else {
+            console.error(`Failed to fetch Test Cases count for engagement ${engagementId}`);
+            testCasesCountCache[engagementId] = 0;
+        }
+    } catch (error) {
+        console.error(`Error fetching Test Cases count for engagement ${engagementId}:`, error);
+        testCasesCountCache[engagementId] = 0;
+    }
+}
+
+// Modify this function to include the new columns
+async function engRenderTable() {
+    const start = (engCurrentPage - 1) * engPageSize;
+    const pagedData = engFilteredEngagements.slice(start, start + engPageSize);
+    const totalPages = Math.ceil(engFilteredEngagements.length / engPageSize);
+
+    document.getElementById('engTotalCount').textContent = engFilteredEngagements.length;
+
+    const tableBody = document.getElementById('engTableBody');
+    tableBody.innerHTML = '';
+
+    for (const engagement of pagedData) {
+        // Fetch Jira and Test Cases counts if not already cached
+        if (jiraCountCache[engagement.id] === undefined) await fetchJiraCount(engagement.id);
+        if (testCasesCountCache[engagement.id] === undefined) await fetchTestCasesCount(engagement.id);
+
+        // Create table row
+        const row = `
+            <tr>
+                <td>${engagement.id || 'N/A'}</td>
+                <td>${engagement.created?.slice(0, 10) || 'N/A'}</td>
+                <td><a href="#" class="jira-link" data-engagement-id="${engagement.id}">${engagement.name || 'N/A'}</a></td>
+                <td>${engagement.description || ''}</td>
+                <td>${engagement.target_start?.slice(0, 10) || 'N/A'}</td>
+                <td>${engagement.target_end?.slice(0, 10) || 'N/A'}</td>
+                <td>${engagement.lead_name || 'Unassigned'}</td>
+                <td>${engagement.product_name || 'Unknown'}</td>
+                <td>${engagement.status || 'N/A'}</td>
+                <td>${engagement.build_id || 'Pending'}</td>
+                <td>${jiraCountCache[engagement.id]}</td>
+                <td>${testCasesCountCache[engagement.id]}</td>
+            </tr>
+        `;
+        tableBody.innerHTML += row;
+    }
+
+    document.getElementById('engPaginationStatus').textContent = `Page ${engCurrentPage} of ${totalPages} (${engFilteredEngagements.length} results)`;
+    document.getElementById('engFirstPage').disabled = engCurrentPage === 1;
+    document.getElementById('engPrevPage').disabled = engCurrentPage === 1;
+    document.getElementById('engNextPage').disabled = engCurrentPage === totalPages;
+    document.getElementById('engLastPage').disabled = engCurrentPage === totalPages;
+}
