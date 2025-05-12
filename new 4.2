@@ -1,0 +1,207 @@
+// Mapping Modal Event Listeners
+function setupMappingModalListeners() {
+  document.getElementById('mappingApplyFilters').addEventListener('click', mappingApplyFilters);
+  document.getElementById('mappingResetFilters').addEventListener('click', mappingResetFilters);
+  document.getElementById('mappingSaveTests').addEventListener('click', mappingSaveTests);
+
+  document.getElementById('mappingSelectAll').addEventListener('change', (event) => {
+    const isChecked = event.target.checked;
+    mappingFilteredTests.forEach(t => {
+      mappingSelections[t.id] = isChecked ? 'Yes' : 'NA';
+    });
+    mappingApplyFilters();
+  });
+
+  // Pagination listeners
+  document.getElementById('mappingFirstPage').addEventListener('click', () => {
+    mappingCurrentPage = 1;
+    mappingRenderTable();
+  });
+  document.getElementById('mappingPrevPage').addEventListener('click', () => {
+    if (mappingCurrentPage > 1) {
+      mappingCurrentPage--;
+      mappingRenderTable();
+    }
+  });
+  document.getElementById('mappingNextPage').addEventListener('click', () => {
+    const totalPages = Math.ceil(mappingFilteredTests.length / mappingPageSize);
+    if (mappingCurrentPage < totalPages) {
+      mappingCurrentPage++;
+      mappingRenderTable();
+    }
+  });
+  document.getElementById('mappingLastPage').addEventListener('click', () => {
+    mappingCurrentPage = Math.ceil(mappingFilteredTests.length / mappingPageSize);
+    mappingRenderTable();
+  });
+}
+
+// Engagements-Test-Count Pagination Listeners
+function setupEngTestCountPaginationListeners() {
+  document.getElementById('engTestCountFirstPage').addEventListener('click', () => {
+    engTestCountCurrentPage = 1;
+    engTestCountRenderTable();
+  });
+  document.getElementById('engTestCountPrevPage').addEventListener('click', () => {
+    if (engTestCountCurrentPage > 1) {
+      engTestCountCurrentPage--;
+      engTestCountRenderTable();
+    }
+  });
+  document.getElementById('engTestCountNextPage').addEventListener('click', () => {
+    const totalPages = Math.ceil(engTestCountFilteredData.length / engTestCountPageSize);
+    if (engTestCountCurrentPage < totalPages) {
+      engTestCountCurrentPage++;
+      engTestCountRenderTable();
+    }
+  });
+  document.getElementById('engTestCountLastPage').addEventListener('click', () => {
+    engTestCountCurrentPage = Math.ceil(engTestCountFilteredData.length / engTestCountPageSize);
+    engTestCountRenderTable();
+  });
+
+  document.getElementById('engTestCountApplyFilters').addEventListener('click', engTestCountApplyFilters);
+  document.getElementById('engTestCountResetFilters').addEventListener('click', engTestCountResetFilters);
+}
+
+// Tests Modal Pagination Listeners
+function setupTestsModalPaginationListeners() {
+  document.getElementById('testsFirstPage').addEventListener('click', () => {
+    testsCurrentPage = 1;
+    testsRenderTable();
+  });
+  document.getElementById('testsPrevPage').addEventListener('click', () => {
+    if (testsCurrentPage > 1) {
+      testsCurrentPage--;
+      testsRenderTable();
+    }
+  });
+  document.getElementById('testsNextPage').addEventListener('click', () => {
+    const totalPages = Math.ceil(testsFilteredData.length / testsPageSize);
+    if (testsCurrentPage < totalPages) {
+      testsCurrentPage++;
+      testsRenderTable();
+    }
+  });
+  document.getElementById('testsLastPage').addEventListener('click', () => {
+    testsCurrentPage = Math.ceil(testsFilteredData.length / testsPageSize);
+    testsRenderTable();
+  });
+
+  document.getElementById('testsApplyFilters').addEventListener('click', testsApplyFilters);
+  document.getElementById('testsResetFilters').addEventListener('click', testsResetFilters);
+}
+
+// Test Cases Tab Pagination Listeners
+function setupTestCasesPaginationListeners() {
+  document.getElementById('testFirstPage').addEventListener('click', () => {
+    testCurrentPage = 1;
+    testRenderTable();
+  });
+  document.getElementById('testPrevPage').addEventListener('click', () => {
+    if (testCurrentPage > 1) {
+      testCurrentPage--;
+      testRenderTable();
+    }
+  });
+  document.getElementById('testNextPage').addEventListener('click', () => {
+    const totalPages = Math.ceil(testFilteredTests.length / testPageSize);
+    if (testCurrentPage < totalPages) {
+      testCurrentPage++;
+      testRenderTable();
+    }
+  });
+  document.getElementById('testLastPage').addEventListener('click', () => {
+    testCurrentPage = Math.ceil(testFilteredTests.length / testPageSize);
+    testRenderTable();
+  });
+
+  document.getElementById('testApplyFilters').addEventListener('click', testApplyFilters);
+  document.getElementById('testResetFilters').addEventListener('click', testResetFilters);
+}
+
+// Jira Modal Pagination Listeners
+function setupJiraModalPaginationListeners() {
+  document.getElementById('jiraFirstPage').addEventListener('click', () => {
+    jiraCurrentPage = 1;
+    jiraRenderTable();
+  });
+  document.getElementById('jiraPrevPage').addEventListener('click', () => {
+    if (jiraCurrentPage > 1) {
+      jiraCurrentPage--;
+      jiraRenderTable();
+    }
+  });
+  document.getElementById('jiraNextPage').addEventListener('click', () => {
+    const totalPages = Math.ceil(jiraFilteredTests.length / jiraPageSize);
+    if (jiraCurrentPage < totalPages) {
+      jiraCurrentPage++;
+      jiraRenderTable();
+    }
+  });
+  document.getElementById('jiraLastPage').addEventListener('click', () => {
+    jiraCurrentPage = Math.ceil(jiraFilteredTests.length / jiraPageSize);
+    jiraRenderTable();
+  });
+
+  document.getElementById('jiraApplyFilters').addEventListener('click', jiraApplyFilters);
+  document.getElementById('jiraResetFilters').addEventListener('click', jiraResetFilters);
+}
+
+// Consolidated DOMContentLoaded Listener
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    // Fetch CSRF token and shared data
+    await fetchCsrfToken();
+    await fetchAllUsers();
+    await engFetchAllProducts();
+
+    // Initialize Select2 for all existing selects
+    $('select').select2({
+      theme: 'bootstrap-5',
+      width: '100%',
+      placeholder: 'Search...',
+      allowClear: true
+    });
+
+    // Setup event listeners for all tabs and modals
+    setupEngTestCountPaginationListeners();
+    setupTestsModalPaginationListeners();
+    setupTestCasesPaginationListeners();
+    setupJiraModalPaginationListeners();
+    setupMappingModalListeners();
+
+    // Initialize data for tabs
+    const activeTab = document.querySelector('.nav-tabs .nav-link.active').getAttribute('aria-controls');
+    if (activeTab === 'engagements-test-count') {
+      await engTestCountFetchData();
+    } else if (activeTab === 'test-cases') {
+      await testFetchTests();
+      await testPopulateFilterDropdowns();
+    }
+
+    // Tab change listener to fetch data only when tab is activated
+    document.querySelectorAll('.nav-tabs .nav-link').forEach(tab => {
+      tab.addEventListener('shown.bs.tab', async (event) => {
+        const tabId = event.target.getAttribute('aria-controls');
+        if (tabId === 'engagements-test-count' && engTestCountAllData.length === 0) {
+          await engTestCountFetchData();
+        } else if (tabId === 'test-cases' && testAllTests.length === 0) {
+          await testFetchTests();
+          await testPopulateFilterDropdowns();
+        }
+      });
+    });
+
+    // Handle Select2 opening in modals
+    $(document).on('select2:open', () => {
+      document.querySelector('.select2-search__field')?.focus();
+    });
+  } catch (error) {
+    console.error('Initialization error:', error);
+    showToast('Error initializing dashboard: ' + error.message, 'error');
+  }
+});
+  </script>
+</body>
+</html>
