@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 import os
 from openpyxl import load_workbook
-from openpyxl.styles import Alignment, Border, Side, Font
+from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 
 # Define variables
 contrast_token = 'dhdjdjdjdjrjrjrjdj=='
@@ -21,7 +21,7 @@ contrast_headers = {
 # Base URL for the API
 base_url = 'https://contrast.crm.com/Contrast/api/ng/'
 
-# Get current date dynamically (system date: 14-May-25, 03:48 PM IST)
+# Get current date dynamically (system date: 14-May-25, 03:58 PM IST)
 current_date = datetime.now()
 date_str = current_date.strftime('%d-%b-%y').upper()  # Format as DD-MMM-YY (e.g., 14-MAY-25)
 
@@ -91,18 +91,37 @@ if os.path.exists(excel_file):
         date_row = [cell.value for cell in ws[1] if cell.value]  # Get dates from row 1
         existing_dates = list(dict.fromkeys(date_row))  # Remove duplicates, preserve order
     
+    # Remove the TOTAL row if it exists
+    if not existing_df.empty and existing_df.iloc[-1]['AGENT VERSIONS'] == 'TOTAL':
+        existing_df = existing_df.iloc[:-1]
+    
     # Remove current date's columns if they exist
     if date_str in existing_dates:
         existing_dates.remove(date_str)
         start_col = 1 + existing_dates.index(date_str) * 3 + 1  # Calculate starting column
-        cols_to_drop = [existing_df.columns[start_col-1:start_col+2]]  # DEVELOPMENT, QA, TOTAL SERVERS
-        existing_df = existing_df.drop(columns=existing_df.columns[start_col-1:start_col+2])
+        cols_to_drop = existing_df.columns[start_col-1:start_col+2]  # DEVELOPMENT, QA, TOTAL SERVERS
+        existing_df = existing_df.drop(columns=cols_to_drop)
     
     # Add the new date to the list
     existing_dates.append(date_str)
     
-    # Merge with existing DataFrame
+    # Merge with existing DataFrame, ensuring new agent versions have 0 for old dates
     if 'AGENT VERSIONS' in existing_df.columns:
+        # Get all unique agent versions
+        all_versions = pd.concat([existing_df[['AGENT VERSIONS']], new_df[['AGENT VERSIONS']]], ignore_index=True)
+        all_versions = all_versions['AGENT VERSIONS'].drop_duplicates().to_list()
+        
+        # Reindex both DataFrames to include all agent versions
+        existing_df = existing_df.set_index('AGENT VERSIONS').reindex(all_versions).reset_index()
+        new_df = new_df.set_index('AGENT VERSIONS').reindex(all_versions).reset_index()
+        
+        # Fill NaN with 0 for existing_df (old dates, new agent versions)
+        existing_df = existing_df.fillna(0)
+        for col in existing_df.columns:
+            if col != 'AGENT VERSIONS':
+                existing_df[col] = existing_df[col].astype(int)
+        
+        # Merge the DataFrames
         combined_df = existing_df.merge(new_df, on='AGENT VERSIONS', how='outer')
     else:
         combined_df = new_df
@@ -119,7 +138,7 @@ for col in combined_df.columns:
 # Sort by AGENT VERSIONS
 combined_df = combined_df.sort_values('AGENT VERSIONS')
 
-# Add a TOTAL row
+# Add a single TOTAL row at the end
 total_row = {'AGENT VERSIONS': 'TOTAL'}
 for col in combined_df.columns:
     if col != 'AGENT VERSIONS':
@@ -148,7 +167,9 @@ border = Border(
     top=Side(style='thin'), bottom=Side(style='thin')
 )
 center_align = Alignment(horizontal='center', vertical='center')
+left_align = Alignment(horizontal='left', vertical='center')
 bold_font = Font(bold=True)
+green_fill = PatternFill(start_color='00FF00', end_color='00FF00', fill_type='solid')
 
 # Insert a new row at the top (row 1) for dates
 ws.insert_rows(1)
@@ -168,11 +189,25 @@ for idx, date in enumerate(existing_dates, start=1):
     for col in range(start_col, start_col+3):
         ws.cell(row=1, column=col).border = border
 
-# Apply formatting to all cells: borders and center alignment
-for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
-    for cell in row:
+# Apply formatting to all cells: borders, alignment, bold for TOTAL row, and green highlight for 0
+for row_idx, row in enumerate(ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=ws.max_column), start=2):
+    for col_idx, cell in enumerate(row, start=1):
+        # Apply border to all cells
         cell.border = border
-        cell.alignment = center_align
+        
+        # Alignment: AGENT VERSIONS (column 1) is left-aligned, others are center-aligned
+        if col_idx == 1:  # AGENT VERSIONS column
+            cell.alignment = left_align
+        else:
+            cell.alignment = center_align
+        
+        # Bold the last row (TOTAL)
+        if row_idx == ws.max_row:
+            cell.font = bold_font
+        
+        # Highlight cells with value 0 in green (excluding AGENT VERSIONS column and header row)
+        if col_idx > 1 and row_idx > 2 and cell.value == 0:
+            cell.fill = green_fill
 
 # Save the formatted Excel file
 wb.save(excel_file)
