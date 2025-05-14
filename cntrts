@@ -1,213 +1,48 @@
 import requests
 import pandas as pd
-from datetime import datetime, date
-import os
-import logging
-from openpyxl import load_workbook
-from openpyxl.utils import get_column_letter
-from openpyxl.styles import Alignment
 
-# Configuration
-CONTRAST_URL = "https://contrast.crm.com/Contrast/api/ng/{org_id}/applications/{app_id}/servers"
-# Alternative: CONTRAST_URL = "https://app.contrastsecurity.com/Contrast/api/ng/{org_id}/applications/{app_id}/servers"
-TOKEN = os.getenv("CONTRAST_TOKEN", "token placeholder")  # Replace with actual token
-ORG_ID = os.getenv("CONTRAST_ORG_ID", "orgid placeholder")  # Replace with actual org ID
-API_KEY = os.getenv("CONTRAST_API_KEY", "apikey placeholder")  # Replace with actual API key
-APP_IDS = ["appid 1", "appid 2"]  # Replace with actual app IDs
-CONTRAST_HEADERS = {
-    "Authorization": f"Token {TOKEN}",
-    "Api-key": API_KEY,
-    "Accept": "application/json"
+# Define variables
+contrast_token = 'dhdjdjdjdjrjrjrjdj=='
+OrgUUid = 'gshdhdhd'
+App_Id = 'hdj-jdjdjd-7788-jdjdjdj'  # Extracted from the list as a single string
+api_key = 'hhjkkjdddjdkdk'
+
+# Construct the API URL
+base_url = 'https://contrast.crm.com/Contrast/api/ng/'
+url = f"{base_url}{OrgUUid}/applications/{App_Id}/servers"
+
+# Define headers using the contrast_token variable
+contrast_headers = {
+    'Authorization': contrast_token,
+    'Api-key': api_key,
+    'Accept': 'application/json'
 }
-OUTPUT_EXCEL = "output.xlsx"
-LOG_FILE = "api_errors.log"
 
-# Set up logging
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=logging.DEBUG,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# Make the GET request to the API
+response = requests.get(url, headers=contrast_headers)
 
-def check_api_accessibility():
-    """Check if the API base URL is accessible."""
-    try:
-        response = requests.get("https://contrast.crm.com", timeout=5)
-        logging.info(f"API accessibility check: Status Code {response.status_code}")
-        print(f"API accessibility check: Status Code {response.status_code}")
-        return response.status_code in [200, 401]  # 401 is okay (auth required)
-    except requests.RequestException as e:
-        logging.error(f"API accessibility check failed: {e}")
-        print(f"Error: Cannot reach API server: {e}")
-        return False
-
-def fetch_server_data(app_id):
-    """Fetch server data for a given application ID from Contrast API."""
-    url = CONTRAST_URL.format(org_id=ORG_ID, app_id=app_id)
-    headers = CONTRAST_HEADERS
-    logging.debug(f"Fetching data for app_id {app_id}: {url}")
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        try:
-            data = response.json()
-            servers = data.get("servers", [])
-            logging.debug(f"Success for app_id {app_id}: {len(servers)} servers retrieved")
-            return servers
-        except ValueError as e:
-            logging.error(f"Invalid JSON for app_id {app_id}: {e}, Status Code: {response.status_code}, Response: {response.text[:200]}")
-            print(f"Error: Invalid JSON for app_id {app_id}: {e} (Status: {response.status_code})")
-            return []
-    except requests.RequestException as e:
-        status_code = getattr(e.response, 'status_code', 'N/A')
-        response_text = getattr(e.response, 'text', 'N/A')[:200]
-        logging.error(f"Error fetching data for app_id {app_id}: {e}, Status Code: {status_code}, Response: {response_text}")
-        print(f"Error fetching data for app_id {app_id}: {e} (Status: {status_code})")
-        if status_code == 401:
-            print("Authorization failure. Verify TOKEN, API_KEY, and ORG_ID.")
-        return []
-
-def process_server_data(app_ids):
-    """Fetch and process server data for all app IDs."""
-    all_servers = []
-    for app_id in app_ids:
-        servers = fetch_server_data(app_id)
-        for server in servers:
-            server_id = server.get("server_id", f"{app_id}_{len(all_servers)}")
-            all_servers.append({
-                "app_id": app_id,
-                "server_id": server_id,
-                "environment": server.get("environment"),
-                "status": server.get("status"),
-                "agent_version": server.get("agent_version")
-            })
-    df = pd.DataFrame(all_servers)
-    logging.info(f"Processed {len(df)} server records from {len(app_ids)} app_ids")
-    return df
-
-def create_pivot_table(df):
-    """Create pivot table for the given date."""
-    if df.empty:
-        logging.warning("No data to create pivot table")
-        return pd.DataFrame(), []
-    pivot = pd.pivot_table(
-        df,
-        values="server_id",
-        index="agent_version",
-        columns="environment",
-        aggfunc="count",
-        fill_value=0
-    )
-    pivot["Server Count"] = pivot.sum(axis=1)
-    columns = ["Server Count"]
-    env_columns = [col for col in pivot.columns if col != "Server Count"]
-    columns.extend(sorted(env_columns))
-    pivot = pivot[columns]
-    pivot = pivot.reset_index()
-    logging.info(f"Created pivot table with {len(pivot)} agent_versions and {len(env_columns)} environments")
-    return pivot, env_columns
-
-def get_existing_dates_and_columns():
-    """Read existing dates and their column offsets from output.xlsx."""
-    if not os.path.exists(OUTPUT_EXCEL):
-        return {}, {}
+# Check if the request was successful
+if response.status_code == 200:
+    # Parse the JSON response
+    data = response.json()
+    # Assume the data contains a 'servers' key with a list of server objects
+    servers = data.get('servers', [])
     
-    df = pd.read_excel(OUTPUT_EXCEL, header=2)
-    date_columns = {}
-    date_to_offset = {}
-    book = load_workbook(OUTPUT_EXCEL)
-    sheet = book.active
-    for col_idx in range(2, sheet.max_column + 1):
-        date_str = sheet.cell(row=1, column=col_idx).value
-        if date_str:
-            try:
-                date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
-                col_name = df.columns[col_idx - 1]
-                date_columns[date_obj] = date_columns.get(date_obj, []) + [col_name]
-            except ValueError:
-                continue
+    # Define the fields to extract
+    required_fields = ['environment', 'status', 'server_id', 'name', 'agent_version']
     
-    current_offset = 1
-    for date_obj in sorted(date_columns.keys()):
-        date_to_offset[date_obj] = current_offset
-        current_offset += len(date_columns[date_obj])
-    logging.info(f"Found {len(date_columns)} existing dates in output.xlsx")
-    return date_columns, date_to_offset
-
-def update_excel(pivot, env_columns, date_str):
-    """Update output.xlsx with new or merged data for the given date."""
-    current_date = datetime.now().date()
-    date_columns, date_to_offset = get_existing_dates_and_columns()
+    # Extract the required fields from each server
+    extracted_data = []
+    for server in servers:
+        row = {field: server.get(field, '') for field in required_fields}
+        extracted_data.append(row)
     
-    num_columns = len(env_columns) + 1 if env_columns else 1
-    if current_date in date_to_offset:
-        col_offset = date_to_offset[current_date]
-        update_existing = True
-    else:
-        col_offset = max(date_to_offset.values(), default=0) + (num_columns if date_to_offset else 1)
-        update_existing = False
+    # Create a pandas DataFrame from the extracted data
+    df = pd.DataFrame(extracted_data)
     
-    if os.path.exists(OUTPUT_EXCEL):
-        book = load_workbook(OUTPUT_EXCEL)
-        sheet = book.active
-        df_existing = pd.read_excel(OUTPUT_EXCEL, header=2)
-    else:
-        book = load_workbook()
-        sheet = book.create_sheet("Sheet1")
-        df_existing = pd.DataFrame()
-    
-    if pivot.empty and not update_existing:
-        logging.warning("No data to write. Skipping Excel update.")
-        print("No data to write. Check logs for errors.")
-        return
-    
-    pivot_columns = ["agent_version", "Server Count"] + env_columns
-    pivot = pivot[pivot_columns] if not pivot.empty else pd.DataFrame(columns=pivot_columns)
-    
-    if not df_existing.empty:
-        existing_versions = df_existing["agent_version"].unique()
-        pivot = pivot.set_index("agent_version").reindex(
-            index=pd.Index(existing_versions).union(pivot.index)
-        ).fillna(0).reset_index()
-    
-    start_col = get_column_letter(2 + col_offset)
-    end_col = get_column_letter(2 + col_offset + num_columns - 1)
-    sheet.merge_cells(f"{start_col}1:{end_col}1")
-    sheet[f"{start_col}1"] = date_str
-    sheet[f"{start_col}1"].alignment = Alignment(horizontal="center")
-    
-    headers = ["Server Count"] + env_columns
-    for i, header in enumerate(headers):
-        sheet.cell(row=3, column=2 + i + col_offset).value = header
-    
-    for i, row in pivot.iterrows():
-        sheet.cell(row=4 + i, column=1).value = row["agent_version"]
-        for j, col in enumerate(pivot_columns[1:]):
-            sheet.cell(row=4 + i, column=2 + j + col_offset).value = row[col]
-    
-    book.save(OUTPUT_EXCEL)
-    logging.info(f"Updated {OUTPUT_EXCEL} for {date_str} at columns {start_col}:{end_col}")
-
-def main():
-    date_str = datetime.now().strftime("%Y-%m-%d")
-    logging.info(f"Starting script for {date_str}")
-    
-    if not check_api_accessibility():
-        print("API server is not accessible. Check logs and network connectivity.")
-        return
-    
-    if TOKEN == "token placeholder" or API_KEY == "apikey placeholder":
-        print("TOKEN and API_KEY must be set to actual values. Check environment variables or configuration.")
-        return
-    
-    df = process_server_data(APP_IDS)
-    if df.empty:
-        print("No server data retrieved. Check logs for errors. Likely an authorization issue.")
-        return
-    
-    pivot, env_columns = create_pivot_table(df)
-    update_excel(pivot, env_columns, date_str)
-    print(f"Excel file updated with data for {date_str}")
-
-if __name__ == "__main__":
-    main()
+    # Save the DataFrame to an Excel file
+    df.to_excel('Data.xlsx', index=False)
+    print("Data successfully saved to Data.xlsx")
+else:
+    # Handle errors if the request fails
+    print(f"Error: {response.status_code} - {response.text}")
