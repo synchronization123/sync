@@ -8,7 +8,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment
 
 # Configuration
-BASE_URL = "https://contrast.crm.com/ng/{org_id}/applications/{app_id}/servers"
+BASE_URL = "https://contrast.crm.com/Contrast/api/ng/{org_id}/applications/{app_id}/servers"
 ORG_ID = os.getenv("CONTRAST_ORG_ID", "jdjdjdjdjdjdjdj7345")
 API_TOKEN = os.getenv("CONTRAST_API_TOKEN", "djdjdndkd")
 APP_IDS = ["sjdjdn777-hshdhdh", "hdhbd-667-jsnns"]
