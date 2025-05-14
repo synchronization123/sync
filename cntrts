@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, date
 import os
 import logging
+import base64
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment
@@ -10,7 +11,8 @@ from openpyxl.styles import Alignment
 # Configuration
 BASE_URL = "https://contrast.crm.com/Contrast/api/ng/{org_id}/applications/{app_id}/servers"
 ORG_ID = os.getenv("CONTRAST_ORG_ID", "jdjdjdjdjdjdjdj7345")
-API_TOKEN = os.getenv("CONTRAST_API_TOKEN", "djdjdndkd")
+API_KEY = os.getenv("CONTRAST_API_KEY", "your_api_key")  # Replace with actual API key
+SERVICE_KEY = os.getenv("CONTRAST_SERVICE_KEY", "your_service_key")  # Replace with actual Service key
 APP_IDS = ["sjdjdn777-hshdhdh", "hdhbd-667-jsnns"]
 OUTPUT_EXCEL = "output.xlsx"
 LOG_FILE = "api_errors.log"
@@ -28,7 +30,7 @@ def check_api_accessibility():
         response = requests.get("https://contrast.crm.com", timeout=5)
         logging.info(f"API accessibility check: Status Code {response.status_code}")
         print(f"API accessibility check: Status Code {response.status_code}")
-        return response.status_code == 200
+        return response.status_code in [200, 401]  # 401 is okay (auth required)
     except requests.RequestException as e:
         logging.error(f"API accessibility check failed: {e}")
         print(f"Error: Cannot reach API server: {e}")
@@ -37,7 +39,14 @@ def check_api_accessibility():
 def fetch_server_data(app_id):
     """Fetch server data for a given application ID from Contrast API."""
     url = BASE_URL.format(org_id=ORG_ID, app_id=app_id)
-    headers = {"Authorization": f"Bearer {API_TOKEN}"}
+    # Authorization header: API_KEY:SERVICE_KEY
+    auth_str = f"{API_KEY}:{SERVICE_KEY}"
+    headers = {"Authorization": auth_str}
+    
+    # Alternative: Base64-encoded (uncomment if required)
+    # auth_str = base64.b64encode(auth_str.encode()).decode()
+    # headers = {"Authorization": f"Basic {auth_str}"}
+    
     logging.debug(f"Fetching data for app_id {app_id}: {url}")
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -56,6 +65,8 @@ def fetch_server_data(app_id):
         response_text = getattr(e.response, 'text', 'N/A')[:200]
         logging.error(f"Error fetching data for app_id {app_id}: {e}, Status Code: {status_code}, Response: {response_text}")
         print(f"Error fetching data for app_id {app_id}: {e} (Status: {status_code})")
+        if status_code == 401:
+            print("Authorization failure. Verify API_KEY, SERVICE_KEY, and ORG_ID.")
         return []
 
 def process_server_data(app_ids):
@@ -64,7 +75,6 @@ def process_server_data(app_ids):
     for app_id in app_ids:
         servers = fetch_server_data(app_id)
         for server in servers:
-            # Use server_id or a unique identifier; assuming server_id exists
             server_id = server.get("server_id", f"{app_id}_{len(all_servers)}")
             all_servers.append({
                 "app_id": app_id,
@@ -188,9 +198,13 @@ def main():
         print("API server is not accessible. Check logs and network connectivity.")
         return
     
+    if not API_KEY or not SERVICE_KEY:
+        print("API_KEY and SERVICE_KEY must be set. Check environment variables or configuration.")
+        return
+    
     df = process_server_data(APP_IDS)
     if df.empty:
-        print("No server data retrieved. Check logs for errors.")
+        print("No server data retrieved. Check logs for errors. Likely an authorization issue.")
         return
     
     pivot, env_columns = create_pivot_table(df)
