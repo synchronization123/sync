@@ -21,7 +21,7 @@ contrast_headers = {
 # Base URL for the API
 base_url = 'https://contrast.crm.com/Contrast/api/ng/'
 
-# Get current date dynamically (system date: 14-May-25, 03:42 PM IST)
+# Get current date dynamically (system date: 14-May-25, 03:48 PM IST)
 current_date = datetime.now()
 date_str = current_date.strftime('%d-%b-%y').upper()  # Format as DD-MMM-YY (e.g., 14-MAY-25)
 
@@ -64,7 +64,7 @@ for server in all_servers:
     elif env == 'QA':
         version_env_counts[version]['QA'] += 1
 
-# Prepare data for the new columns in Final.xlsx (without date in header)
+# Prepare data for the new columns in Final.xlsx (without date in header initially)
 new_data = []
 for version, counts in version_env_counts.items():
     total = counts['DEVELOPMENT'] + counts['QA']
@@ -80,55 +80,60 @@ new_df = pd.DataFrame(new_data)
 
 # Load existing Final.xlsx if it exists, else create a new DataFrame
 excel_file = 'final.xlsx'
+existing_dates = []
 if os.path.exists(excel_file):
-    existing_df = pd.read_excel(excel_file, header=[0, 1])  # Read with multi-index for dates
-    
-    # Extract existing dates from the header
-    existing_dates = [col[0] for col in existing_df.columns if col[0] != 'AGENT VERSIONS']
-    existing_dates = list(dict.fromkeys(existing_dates))  # Remove duplicates, preserve order
+    # Read the existing file, assuming dates are in row 1
+    existing_df = pd.read_excel(excel_file, skiprows=1)  # Skip the date row
+    # Extract existing dates by inspecting row 1
+    with pd.ExcelFile(excel_file) as xls:
+        temp_df = pd.read_excel(xls, nrows=0)  # Read headers only
+        ws = load_workbook(excel_file).active
+        date_row = [cell.value for cell in ws[1] if cell.value]  # Get dates from row 1
+        existing_dates = list(dict.fromkeys(date_row))  # Remove duplicates, preserve order
     
     # Remove current date's columns if they exist
     if date_str in existing_dates:
         existing_dates.remove(date_str)
-        existing_df = existing_df.drop(columns=[(date_str, 'DEVELOPMENT'), (date_str, 'QA'), (date_str, 'TOTAL SERVERS')])
+        start_col = 1 + existing_dates.index(date_str) * 3 + 1  # Calculate starting column
+        cols_to_drop = [existing_df.columns[start_col-1:start_col+2]]  # DEVELOPMENT, QA, TOTAL SERVERS
+        existing_df = existing_df.drop(columns=existing_df.columns[start_col-1:start_col+2])
     
     # Add the new date to the list
     existing_dates.append(date_str)
     
-    # Rename new_df columns with the date as the first level
-    new_df.columns = pd.MultiIndex.from_tuples(
-        [('AGENT VERSIONS', ''), (date_str, 'DEVELOPMENT'), (date_str, 'QA'), (date_str, 'TOTAL SERVERS')]
-    )
-    
     # Merge with existing DataFrame
-    if ('AGENT VERSIONS', '') in existing_df.columns:
-        combined_df = existing_df.merge(new_df, on=('AGENT VERSIONS', ''), how='outer')
+    if 'AGENT VERSIONS' in existing_df.columns:
+        combined_df = existing_df.merge(new_df, on='AGENT VERSIONS', how='outer')
     else:
         combined_df = new_df
 else:
     existing_dates = [date_str]
-    new_df.columns = pd.MultiIndex.from_tuples(
-        [('AGENT VERSIONS', ''), (date_str, 'DEVELOPMENT'), (date_str, 'QA'), (date_str, 'TOTAL SERVERS')]
-    )
     combined_df = new_df
 
 # Fill NaN values with 0 for numerical columns
+combined_df = combined_df.fillna(0)
 for col in combined_df.columns:
-    if col[0] != 'AGENT VERSIONS':
-        combined_df[col] = combined_df[col].fillna(0).astype(int)
+    if col != 'AGENT VERSIONS':
+        combined_df[col] = combined_df[col].astype(int)
 
 # Sort by AGENT VERSIONS
-combined_df = combined_df.sort_values(('AGENT VERSIONS', ''))
+combined_df = combined_df.sort_values('AGENT VERSIONS')
 
 # Add a TOTAL row
-total_row = {('AGENT VERSIONS', ''): 'TOTAL'}
+total_row = {'AGENT VERSIONS': 'TOTAL'}
 for col in combined_df.columns:
-    if col[0] != 'AGENT VERSIONS':
+    if col != 'AGENT VERSIONS':
         total_row[col] = combined_df[col].sum()
-total_df = pd.DataFrame([total_row], columns=combined_df.columns)
+total_df = pd.DataFrame([total_row])
 
 # Append the TOTAL row
 combined_df = pd.concat([combined_df, total_df], ignore_index=True)
+
+# Flatten the DataFrame by repeating the headers for each date
+flat_columns = ['AGENT VERSIONS']
+for date in existing_dates:
+    flat_columns.extend(['DEVELOPMENT', 'QA', 'TOTAL SERVERS'])
+combined_df.columns = flat_columns
 
 # Save to Excel with pandas first
 combined_df.to_excel(excel_file, index=False)
