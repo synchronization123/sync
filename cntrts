@@ -8,13 +8,15 @@ from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
+from concurrent.futures import ThreadPoolExecutor
+import time
 
 # GUI Class
 class App:
     def __init__(self, root):
         self.root = root
         self.root.title("Server Data Processor")
-        self.root.geometry("600x400")  # Smaller window since no table display
+        self.root.geometry("600x400")
 
         # Frame for button, loading, and progress
         self.top_frame = ttk.Frame(self.root)
@@ -49,8 +51,7 @@ class App:
         self.log_text.configure(state='normal')
         self.log_text.insert(tk.END, f"{datetime.now().strftime('%H:%M:%S')}: {message}\n")
         self.log_text.configure(state='disabled')
-        self.log_text.see(tk.END)  # Auto-scroll to the latest log
-        self.root.update()
+        self.log_text.see(tk.END)
 
     def start_script(self):
         # Disable the button to prevent multiple clicks
@@ -60,11 +61,11 @@ class App:
         # Start loading animation
         self.animate_loading()
 
-        # Start the script in a separate thread to keep GUI responsive
+        # Start the script in a separate thread
         threading.Thread(target=self.run_script_thread, daemon=True).start()
 
     def animate_loading(self):
-        # Simple loading animation with dots
+        # Simplified loading animation with less frequent updates
         def update_dots():
             if self.loading_label.cget("text").startswith("Loading"):
                 dots = self.loading_label.cget("text")[7:]
@@ -72,39 +73,33 @@ class App:
                     self.loading_label.config(text="Loading")
                 else:
                     self.loading_label.config(text="Loading" + dots + ".")
-                self.root.after(500, update_dots)
-        self.root.after(500, update_dots)
+                self.root.after(1000, update_dots)  # Reduced frequency to 1000ms
+        self.root.after(1000, update_dots)
 
     def run_script_thread(self):
         # Update progress bar and log
         self.progress['value'] = 0
         self.log("Starting script execution...")
-        self.root.update()
 
         # Step 1: Fetch data (40% progress)
         self.log("Fetching data from API...")
         self.progress['value'] = 10
-        self.root.update()
         all_servers = self.fetch_data()
         self.progress['value'] = 40
-        self.root.update()
 
         # Step 2: Generate Data.xlsx (20% progress)
         self.log("Generating Data.xlsx...")
         self.generate_data_xlsx(all_servers)
         self.progress['value'] = 60
-        self.root.update()
 
         # Step 3: Generate and format Final.xlsx (30% progress)
         self.log("Generating and formatting Final.xlsx...")
         self.generate_final_xlsx(all_servers)
         self.progress['value'] = 90
-        self.root.update()
 
         # Step 4: Finalize (10% progress)
         self.log("Finalizing...")
         self.progress['value'] = 100
-        self.root.update()
 
         # Stop loading animation and re-enable button
         self.loading_label.config(text="")
@@ -112,7 +107,7 @@ class App:
 
         # Show final prompt
         self.log("Script execution completed.")
-        messagebox.showinfo("Success", "Final Excel data is ready to view in Final.xlsx.")
+        self.root.after(0, lambda: messagebox.showinfo("Success", "Final Excel data is ready to view in Final.xlsx."))
 
     def fetch_data(self):
         contrast_token = 'dhdjdjdjdjrjrjrjdj=='
@@ -128,27 +123,46 @@ class App:
 
         base_url = 'https://contrast.crm.com/Contrast/api/ng/'
         all_servers = []
-        for app_id in App_Ids:
-            url = f"{base_url}{OrgUUid}/applications/{app_id}/servers"
-            try:
-                response = requests.get(url, headers=contrast_headers)
-                if response.status_code == 200:
-                    data = response.json()
-                    servers = data.get('servers', [])
-                    for server in servers:
-                        row = {
-                            'app_id': app_id,
-                            'environment': server.get('environment', '').upper(),
-                            'status': server.get('status', ''),
-                            'server_id': server.get('server_id', ''),
-                            'name': server.get('name', ''),
-                            'agent_version': server.get('agent_version', '')
-                        }
-                        all_servers.append(row)
-                else:
-                    self.log(f"Error for App ID {app_id}: {response.status_code} - {response.text}")
-            except Exception as e:
-                self.log(f"Exception during API call: {e}")
+
+        # Use a session to reuse connections
+        with requests.Session() as session:
+            session.headers.update(contrast_headers)
+
+            # Fetch data in parallel using ThreadPoolExecutor
+            def fetch_servers(app_id):
+                url = f"{base_url}{OrgUUid}/applications/{app_id}/servers"
+                try:
+                    response = session.get(url, timeout=10)
+                    if response.status_code == 200:
+                        data = response.json()
+                        servers = data.get('servers', [])
+                        result = []
+                        for server in servers:
+                            row = {
+                                'app_id': app_id,
+                                'environment': server.get('environment', '').upper(),
+                                'status': server.get('status', ''),
+                                'server_id': server.get('server_id', ''),
+                                'name': server.get('name', ''),
+                                'agent_version': server.get('agent_version', '')
+                            }
+                            result.append(row)
+                        return result
+                    else:
+                        self.log(f"Error for App ID {app_id}: {response.status_code} - {response.text}")
+                        return []
+                except Exception as e:
+                    self.log(f"Exception for App ID {app_id}: {e}")
+                    return []
+
+            # Parallelize API calls
+            with ThreadPoolExecutor(max_workers=len(App_Ids)) as executor:
+                results = list(executor.map(fetch_servers, App_Ids))
+
+        # Flatten the results
+        for result in results:
+            all_servers.extend(result)
+
         return all_servers
 
     def generate_data_xlsx(self, all_servers):
