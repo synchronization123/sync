@@ -64,9 +64,11 @@ def process_server_data(app_ids):
     for app_id in app_ids:
         servers = fetch_server_data(app_id)
         for server in servers:
+            # Use server_id or a unique identifier; assuming server_id exists
+            server_id = server.get("server_id", f"{app_id}_{len(all_servers)}")
             all_servers.append({
                 "app_id": app_id,
-                "server_id": server.get("server_id"),
+                "server_id": server_id,
                 "environment": server.get("environment"),
                 "status": server.get("status"),
                 "agent_version": server.get("agent_version")
