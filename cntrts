@@ -1,271 +1,353 @@
+# Save this file as script.pyw
 import requests
 import pandas as pd
 from datetime import datetime
 import os
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
+import tkinter as tk
+from tkinter import ttk, messagebox
+import threading
+import time
 
-# Define variables
-contrast_token = 'dhdjdjdjdjrjrjrjdj=='
-OrgUUid = 'gshdhdhd'
-App_Ids = ['hdj-jdjdjd-7888-jdjdjdj', 'hdjdjdjd', 'dhdjdkdkd']
-api_key = 'hhjkkjdddjdkdk'
+# GUI Class
+class App:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Server Data Processor")
+        self.root.geometry("1200x600")  # Window size
 
-# Define headers
-contrast_headers = {
-    'Authorization': contrast_token,
-    'Api-key': api_key,
-    'Accept': 'application/json'
-}
+        # Frame for button and progress
+        self.top_frame = ttk.Frame(self.root)
+        self.top_frame.pack(pady=10)
 
-# Base URL for the API
-base_url = 'https://contrast.crm.com/Contrast/api/ng/'
+        # Run button
+        self.run_button = ttk.Button(self.top_frame, text="Run Script", command=self.start_script)
+        self.run_button.pack(side=tk.LEFT, padx=5)
 
-# Get current date dynamically (system date: 14-May-25, 04:25 PM IST)
-current_date = datetime.now()
-date_str = current_date.strftime('%d-%b-%y').upper()  # Format as DD-MMM-YY (e.g., 14-MAY-25)
+        # Loading label (for animation)
+        self.loading_label = ttk.Label(self.top_frame, text="")
+        self.loading_label.pack(side=tk.LEFT, padx=10)
 
-# Step 1: Fetch data from the API and save to Data.xlsx
-all_servers = []
-for app_id in App_Ids:
-    url = f"{base_url}{OrgUUid}/applications/{app_id}/servers"
-    response = requests.get(url, headers=contrast_headers)
-    if response.status_code == 200:
-        data = response.json()
-        servers = data.get('servers', [])
-        for server in servers:
-            row = {
-                'app_id': app_id,
-                'environment': server.get('environment', '').upper(),
-                'status': server.get('status', ''),
-                'server_id': server.get('server_id', ''),
-                'name': server.get('name', ''),
-                'agent_version': server.get('agent_version', '')
-            }
-            all_servers.append(row)
-    else:
-        print(f"Error for App ID {app_id}: {response.status_code} - {response.text}")
+        # Progress bar
+        self.progress = ttk.Progressbar(self.top_frame, length=300, mode='determinate')
+        self.progress.pack(side=tk.LEFT, padx=5)
 
-# Create DataFrame for raw data and save to Data.xlsx (overwrite daily)
-raw_df = pd.DataFrame(all_servers)
-raw_df = raw_df[['app_id', 'environment', 'status', 'server_id', 'name', 'agent_version']]
-raw_df.to_excel('Data.xlsx', index=False)
-print("Raw data successfully saved to Data.xlsx")
+        # Frame for table display
+        self.table_frame = ttk.Frame(self.root)
+        self.table_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-# Step 2: Process data for Final.xlsx (aggregate by agent_version and environment)
-version_env_counts = {}
-for server in all_servers:
-    version = server['agent_version']
-    env = server['environment']
-    if version not in version_env_counts:
-        version_env_counts[version] = {'DEVELOPMENT': 0, 'QA': 0}
-    if env == 'DEVELOPMENT':
-        version_env_counts[version]['DEVELOPMENT'] += 1
-    elif env == 'QA':
-        version_env_counts[version]['QA'] += 1
+        # Treeview for displaying Final.xlsx
+        self.tree = None
+        self.existing_dates = []
+        self.flat_columns = []
 
-# Prepare data for the new columns in Final.xlsx (without date in header initially)
-new_data = []
-for version, counts in version_env_counts.items():
-    total = counts['DEVELOPMENT'] + counts['QA']
-    new_data.append({
-        'AGENT VERSIONS': version,
-        'DEVELOPMENT': counts['DEVELOPMENT'],
-        'QA': counts['QA'],
-        'TOTAL SERVERS': total
-    })
-
-# Create a DataFrame for the new data
-new_df = pd.DataFrame(new_data)
-
-# Load existing Final.xlsx if it exists, else create a new DataFrame
-excel_file = 'final.xlsx'
-existing_dates = []
-if os.path.exists(excel_file):
-    # Read the existing file, assuming dates are in row 1
-    existing_df = pd.read_excel(excel_file, skiprows=1)  # Skip the date row
-    # Extract existing dates by inspecting row 1
-    with pd.ExcelFile(excel_file) as xls:
-        temp_df = pd.read_excel(xls, nrows=0)  # Read headers only
-        ws = load_workbook(excel_file).active
-        date_row = [cell.value for cell in ws[1] if cell.value]  # Get dates from row 1
-        existing_dates = list(dict.fromkeys(date_row))  # Remove duplicates, preserve order
-    
-    # Remove the TOTAL row if it exists
-    if not existing_df.empty and existing_df.iloc[-1]['AGENT VERSIONS'] == 'TOTAL':
-        existing_df = existing_df.iloc[:-1]
-    
-    # Remove current date's columns if they exist
-    if date_str in existing_dates:
-        date_idx = existing_dates.index(date_str)
-        start_col = 1 + date_idx * 3 + 1  # Calculate starting column (e.g., B=2 for first date)
-        cols_to_drop = existing_df.columns[start_col-1:start_col+2]  # DEVELOPMENT, QA, TOTAL SERVERS
-        existing_df = existing_df.drop(columns=cols_to_drop)
-        existing_dates.pop(date_idx)  # Remove the date from the list
-    
-    # Add the new date to the list (at the end)
-    existing_dates.append(date_str)
-    
-    # Merge with existing DataFrame, ensuring new agent versions have 0 for old dates
-    if 'AGENT VERSIONS' in existing_df.columns:
-        # Get all unique agent versions
-        all_versions = pd.concat([existing_df[['AGENT VERSIONS']], new_df[['AGENT VERSIONS']]], ignore_index=True)
-        all_versions = all_versions['AGENT VERSIONS'].drop_duplicates().to_list()
+    def start_script(self):
+        # Disable the button to prevent multiple clicks
+        self.run_button.config(state='disabled')
+        self.loading_label.config(text="Loading")
         
-        # Reindex both DataFrames to include all agent versions
-        existing_df = existing_df.set_index('AGENT VERSIONS').reindex(all_versions).reset_index()
-        new_df = new_df.set_index('AGENT VERSIONS').reindex(all_versions).reset_index()
-        
-        # Fill NaN with 0 for existing_df (old dates, new agent versions)
-        existing_df = existing_df.fillna(0)
-        for col in existing_df.columns:
+        # Start loading animation
+        self.animate_loading()
+
+        # Start the script in a separate thread to keep GUI responsive
+        threading.Thread(target=self.run_script_thread, daemon=True).start()
+
+    def animate_loading(self):
+        # Simple loading animation with dots
+        def update_dots():
+            if self.loading_label.cget("text").startswith("Loading"):
+                dots = self.loading_label.cget("text")[7:]
+                if dots == "...":
+                    self.loading_label.config(text="Loading")
+                else:
+                    self.loading_label.config(text="Loading" + dots + ".")
+                self.root.after(500, update_dots)
+        self.root.after(500, update_dots)
+
+    def run_script_thread(self):
+        # Update progress bar
+        self.progress['value'] = 0
+        self.root.update()
+
+        # Step 1: Fetch data (40% progress)
+        self.progress['value'] = 10
+        self.root.update()
+        all_servers = self.fetch_data()
+        self.progress['value'] = 40
+        self.root.update()
+
+        # Step 2: Generate Data.xlsx (20% progress)
+        self.generate_data_xlsx(all_servers)
+        self.progress['value'] = 60
+        self.root.update()
+
+        # Step 3: Generate and format Final.xlsx (30% progress)
+        self.generate_final_xlsx(all_servers)
+        self.progress['value'] = 90
+        self.root.update()
+
+        # Step 4: Display Final.xlsx in GUI (10% progress)
+        self.display_final_xlsx()
+        self.progress['value'] = 100
+        self.root.update()
+
+        # Stop loading animation and re-enable button
+        self.loading_label.config(text="")
+        self.run_button.config(state='normal')
+
+    def fetch_data(self):
+        contrast_token = 'dhdjdjdjdjrjrjrjdj=='
+        OrgUUid = 'gshdhdhd'
+        App_Ids = ['hdj-jdjdjd-7888-jdjdjdj', 'hdjdjdjd', 'dhdjdkdkd']
+        api_key = 'hhjkkjdddjdkdk'
+
+        contrast_headers = {
+            'Authorization': contrast_token,
+            'Api-key': api_key,
+            'Accept': 'application/json'
+        }
+
+        base_url = 'https://contrast.crm.com/Contrast/api/ng/'
+        all_servers = []
+        for app_id in App_Ids:
+            url = f"{base_url}{OrgUUid}/applications/{app_id}/servers"
+            try:
+                response = requests.get(url, headers=contrast_headers)
+                if response.status_code == 200:
+                    data = response.json()
+                    servers = data.get('servers', [])
+                    for server in servers:
+                        row = {
+                            'app_id': app_id,
+                            'environment': server.get('environment', '').upper(),
+                            'status': server.get('status', ''),
+                            'server_id': server.get('server_id', ''),
+                            'name': server.get('name', ''),
+                            'agent_version': server.get('agent_version', '')
+                        }
+                        all_servers.append(row)
+                else:
+                    print(f"Error for App ID {app_id}: {response.status_code} - {response.text}")
+            except Exception as e:
+                print(f"Exception during API call: {e}")
+        return all_servers
+
+    def generate_data_xlsx(self, all_servers):
+        raw_df = pd.DataFrame(all_servers)
+        raw_df = raw_df[['app_id', 'environment', 'status', 'server_id', 'name', 'agent_version']]
+        raw_df.to_excel('Data.xlsx', index=False)
+
+    def generate_final_xlsx(self, all_servers):
+        current_date = datetime.now()
+        date_str = current_date.strftime('%d-%b-%y').upper()
+
+        # Step 2: Process data for Final.xlsx
+        version_env_counts = {}
+        for server in all_servers:
+            version = server['agent_version']
+            env = server['environment']
+            if version not in version_env_counts:
+                version_env_counts[version] = {'DEVELOPMENT': 0, 'QA': 0}
+            if env == 'DEVELOPMENT':
+                version_env_counts[version]['DEVELOPMENT'] += 1
+            elif env == 'QA':
+                version_env_counts[version]['QA'] += 1
+
+        new_data = []
+        for version, counts in version_env_counts.items():
+            total = counts['DEVELOPMENT'] + counts['QA']
+            new_data.append({
+                'AGENT VERSIONS': version,
+                'DEVELOPMENT': counts['DEVELOPMENT'],
+                'QA': counts['QA'],
+                'TOTAL SERVERS': total
+            })
+
+        new_df = pd.DataFrame(new_data)
+        excel_file = 'final.xlsx'
+        existing_dates = []
+        if os.path.exists(excel_file):
+            existing_df = pd.read_excel(excel_file, skiprows=1)
+            with pd.ExcelFile(excel_file) as xls:
+                temp_df = pd.read_excel(xls, nrows=0)
+                ws = load_workbook(excel_file).active
+                date_row = [cell.value for cell in ws[1] if cell.value]
+                existing_dates = list(dict.fromkeys(date_row))
+
+            if not existing_df.empty and existing_df.iloc[-1]['AGENT VERSIONS'] == 'TOTAL':
+                existing_df = existing_df.iloc[:-1]
+
+            if date_str in existing_dates:
+                date_idx = existing_dates.index(date_str)
+                start_col = 1 + date_idx * 3 + 1
+                cols_to_drop = existing_df.columns[start_col-1:start_col+2]
+                existing_df = existing_df.drop(columns=cols_to_drop)
+                existing_dates.pop(date_idx)
+
+            existing_dates.append(date_str)
+
+            if 'AGENT VERSIONS' in existing_df.columns:
+                all_versions = pd.concat([existing_df[['AGENT VERSIONS']], new_df[['AGENT VERSIONS']]], ignore_index=True)
+                all_versions = all_versions['AGENT VERSIONS'].drop_duplicates().to_list()
+                existing_df = existing_df.set_index('AGENT VERSIONS').reindex(all_versions).reset_index()
+                new_df = new_df.set_index('AGENT VERSIONS').reindex(all_versions).reset_index()
+                existing_df = existing_df.fillna(0)
+                for col in existing_df.columns:
+                    if col != 'AGENT VERSIONS':
+                        existing_df[col] = existing_df[col].astype(int)
+                combined_df = existing_df.merge(new_df, on='AGENT VERSIONS', how='outer')
+            else:
+                combined_df = new_df
+        else:
+            existing_dates = [date_str]
+            combined_df = new_df
+
+        combined_df = combined_df.fillna(0)
+        for col in combined_df.columns:
             if col != 'AGENT VERSIONS':
-                existing_df[col] = existing_df[col].astype(int)
-        
-        # Merge the DataFrames
-        combined_df = existing_df.merge(new_df, on='AGENT VERSIONS', how='outer')
-    else:
-        combined_df = new_df
-else:
-    existing_dates = [date_str]
-    combined_df = new_df
+                combined_df[col] = combined_df[col].astype(int)
 
-# Fill NaN values with 0 for numerical columns
-combined_df = combined_df.fillna(0)
-for col in combined_df.columns:
-    if col != 'AGENT VERSIONS':
-        combined_df[col] = combined_df[col].astype(int)
+        combined_df = combined_df.sort_values('AGENT VERSIONS')
+        total_row = {'AGENT VERSIONS': 'TOTAL'}
+        for col in combined_df.columns:
+            if col != 'AGENT VERSIONS':
+                total_row[col] = combined_df[col].sum()
+        total_df = pd.DataFrame([total_row])
+        combined_df = pd.concat([combined_df, total_df], ignore_index=True)
 
-# Sort by AGENT VERSIONS
-combined_df = combined_df.sort_values('AGENT VERSIONS')
+        self.flat_columns = ['AGENT VERSIONS']
+        for date in existing_dates:
+            self.flat_columns.extend(['DEVELOPMENT', 'QA', 'TOTAL SERVERS'])
+        combined_df.columns = self.flat_columns
 
-# Add a single TOTAL row at the end
-total_row = {'AGENT VERSIONS': 'TOTAL'}
-for col in combined_df.columns:
-    if col != 'AGENT VERSIONS':
-        total_row[col] = combined_df[col].sum()
-total_df = pd.DataFrame([total_row])
+        combined_df.to_excel(excel_file, index=False)
 
-# Append the TOTAL row
-combined_df = pd.concat([combined_df, total_df], ignore_index=True)
+        # Step 3: Apply formatting
+        wb = load_workbook(excel_file)
+        ws = wb.active
 
-# Flatten the DataFrame by repeating the headers for each date
-flat_columns = ['AGENT VERSIONS']
-for date in existing_dates:
-    flat_columns.extend(['DEVELOPMENT', 'QA', 'TOTAL SERVERS'])
-combined_df.columns = flat_columns
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin')
+        )
+        bold_left = Border(left=Side(style='medium'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+        bold_right = Border(left=Side(style='thin'), right=Side(style='medium'), top=Side(style='thin'), bottom=Side(style='thin'))
+        bold_top = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='medium'), bottom=Side(style='thin'))
+        bold_bottom = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='medium'))
+        bold_top_left = Border(left=Side(style='medium'), right=Side(style='thin'), top=Side(style='medium'), bottom=Side(style='thin'))
+        bold_top_right = Border(left=Side(style='thin'), right=Side(style='medium'), top=Side(style='medium'), bottom=Side(style='thin'))
+        bold_bottom_left = Border(left=Side(style='medium'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='medium'))
+        bold_bottom_right = Border(left=Side(style='thin'), right=Side(style='medium'), top=Side(style='thin'), bottom=Side(style='medium'))
 
-# Save to Excel with pandas first
-combined_df.to_excel(excel_file, index=False)
+        center_align = Alignment(horizontal='center', vertical='center')
+        left_align = Alignment(horizontal='left', vertical='center')
+        bold_font = Font(bold=True)
+        green_fill = PatternFill(start_color='00FF00', end_color='00FF00', fill_type='solid')
 
-# Step 3: Apply formatting using openpyxl
-wb = load_workbook(excel_file)
-ws = wb.active
-
-# Define styles
-thin_border = Border(
-    left=Side(style='thin'), right=Side(style='thin'),
-    top=Side(style='thin'), bottom=Side(style='thin')
-)
-
-# Define individual bold sides for outer columns
-bold_left = Border(left=Side(style='medium'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-bold_right = Border(left=Side(style='thin'), right=Side(style='medium'), top=Side(style='thin'), bottom=Side(style='thin'))
-bold_top = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='medium'), bottom=Side(style='thin'))
-bold_bottom = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='medium'))
-
-# Combined borders for corners (e.g., top-left, bottom-right)
-bold_top_left = Border(left=Side(style='medium'), right=Side(style='thin'), top=Side(style='medium'), bottom=Side(style='thin'))
-bold_top_right = Border(left=Side(style='thin'), right=Side(style='medium'), top=Side(style='medium'), bottom=Side(style='thin'))
-bold_bottom_left = Border(left=Side(style='medium'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='medium'))
-bold_bottom_right = Border(left=Side(style='thin'), right=Side(style='medium'), top=Side(style='thin'), bottom=Side(style='medium'))
-
-center_align = Alignment(horizontal='center', vertical='center')
-left_align = Alignment(horizontal='left', vertical='center')
-bold_font = Font(bold=True)
-green_fill = PatternFill(start_color='00FF00', end_color='00FF00', fill_type='solid')
-
-# Insert a new row at the top (row 1) for dates
-ws.insert_rows(1)
-
-# Assign dates and apply formatting
-for idx, date in enumerate(existing_dates, start=1):
-    # Calculate the column range for this date (e.g., B:D for first date)
-    start_col = 2 + (idx - 1) * 3
-    end_col = start_col + 2
-    
-    # Merge cells for the date (e.g., B1:D1 for first date)
-    ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=end_col)
-    # Set the date value
-    cell = ws.cell(row=1, column=start_col)
-    cell.value = date
-    cell.alignment = center_align
-    cell.font = bold_font
-    # Apply bold border to the merged date cell (top and sides)
-    for col in range(start_col, end_col + 1):
-        if col == start_col:
-            ws.cell(row=1, column=col).border = bold_top_left
-        elif col == end_col:
-            ws.cell(row=1, column=col).border = bold_top_right
-        else:
-            ws.cell(row=1, column=col).border = bold_top
-
-# Apply formatting to all cells with enhanced bold outlining
-for row_idx in range(1, ws.max_row + 1):
-    for col_idx in range(1, ws.max_column + 1):
-        cell = ws.cell(row=row_idx, column=col_idx)
-        
-        # Apply thin border to all cells as a base
-        cell.border = thin_border
-        
-        # Alignment: AGENT VERSIONS (column 1) is left-aligned, others are center-aligned
-        if col_idx == 1:
-            cell.alignment = left_align
-        else:
+        ws.insert_rows(1)
+        for idx, date in enumerate(existing_dates, start=1):
+            start_col = 2 + (idx - 1) * 3
+            end_col = start_col + 2
+            ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=end_col)
+            cell = ws.cell(row=1, column=start_col)
+            cell.value = date
             cell.alignment = center_align
-        
-        # Bold the last row (TOTAL)
-        if row_idx == ws.max_row:
             cell.font = bold_font
-        
-        # Highlight cells with value 0 in green (excluding AGENT VERSIONS column and header row)
-        if col_idx > 1 and row_idx > 2 and cell.value == 0:
-            cell.fill = green_fill
-        
-        # Apply bold outlining for date blocks (outer columns)
-        if col_idx > 1:  # Skip AGENT VERSIONS column
-            date_idx = (col_idx - 2) // 3  # Which date block (0, 1, ...)
-            start_col = 2 + date_idx * 3  # Start column of the date block (e.g., B=2)
-            end_col = start_col + 2  # End column of the date block (e.g., D=4)
-            
-            # Apply bold borders to outer columns of each date block
-            if col_idx == start_col:  # Leftmost column of the date block (e.g., B, E)
-                if row_idx == 1:  # Already handled by date row
-                    continue
-                elif row_idx == 2:  # Header row
-                    cell.border = bold_top_left
-                elif row_idx == ws.max_row:  # TOTAL row
-                    cell.border = bold_bottom_left
-                else:  # Data rows
-                    cell.border = bold_left
-            elif col_idx == end_col:  # Rightmost column of the date block (e.g., D, G)
-                if row_idx == 1:  # Already handled by date row
-                    continue
-                elif row_idx == 2:  # Header row
-                    cell.border = bold_top_right
-                elif row_idx == ws.max_row:  # TOTAL row
-                    cell.border = bold_bottom_right
-                else:  # Data rows
-                    cell.border = bold_right
-            # Apply bold top and bottom for all columns in the date block
-            if col_idx in range(start_col, end_col + 1):
-                if row_idx == 2:  # Header row (below date)
-                    if col_idx != start_col and col_idx != end_col:  # Middle columns (e.g., C, F)
-                        cell.border = bold_top
-                elif row_idx == ws.max_row:  # TOTAL row
-                    if col_idx != start_col and col_idx != end_col:  # Middle columns
-                        cell.border = bold_bottom
+            for col in range(start_col, end_col + 1):
+                if col == start_col:
+                    ws.cell(row=1, column=col).border = bold_top_left
+                elif col == end_col:
+                    ws.cell(row=1, column=col).border = bold_top_right
+                else:
+                    ws.cell(row=1, column=col).border = bold_top
 
-# Save the formatted Excel file
-wb.save(excel_file)
-print(f"Aggregated data for {date_str} successfully saved to {excel_file} with formatting")
+        for row_idx in range(1, ws.max_row + 1):
+            for col_idx in range(1, ws.max_column + 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                cell.border = thin_border
+                if col_idx == 1:
+                    cell.alignment = left_align
+                else:
+                    cell.alignment = center_align
+                if row_idx == ws.max_row:
+                    cell.font = bold_font
+                if col_idx > 1 and row_idx > 2 and cell.value == 0:
+                    cell.fill = green_fill
+                if col_idx > 1:
+                    date_idx = (col_idx - 2) // 3
+                    start_col = 2 + date_idx * 3
+                    end_col = start_col + 2
+                    if col_idx == start_col:
+                        if row_idx == 1:
+                            continue
+                        elif row_idx == 2:
+                            cell.border = bold_top_left
+                        elif row_idx == ws.max_row:
+                            cell.border = bold_bottom_left
+                        else:
+                            cell.border = bold_left
+                    elif col_idx == end_col:
+                        if row_idx == 1:
+                            continue
+                        elif row_idx == 2:
+                            cell.border = bold_top_right
+                        elif row_idx == ws.max_row:
+                            cell.border = bold_bottom_right
+                        else:
+                            cell.border = bold_right
+                    if col_idx in range(start_col, end_col + 1):
+                        if row_idx == 2:
+                            if col_idx != start_col and col_idx != end_col:
+                                cell.border = bold_top
+                        elif row_idx == ws.max_row:
+                            if col_idx != start_col and col_idx != end_col:
+                                cell.border = bold_bottom
+
+        wb.save(excel_file)
+        self.existing_dates = existing_dates
+
+    def display_final_xlsx(self):
+        # Clear previous table if exists
+        if self.tree:
+            self.tree.destroy()
+
+        # Create a new Treeview
+        columns = self.flat_columns
+        self.tree = ttk.Treeview(self.table_frame, columns=columns, show='headings')
+        self.tree.pack(fill=tk.BOTH, expand=True)
+
+        # Set column headings
+        for col in columns:
+            self.tree.heading(col, text=col)
+            self.tree.column(col, anchor='center', width=100)
+        self.tree.column('AGENT VERSIONS', anchor='w', width=150)
+
+        # Add date row as a special row (not in Treeview, but as labels above)
+        for idx, date in enumerate(self.existing_dates, start=1):
+            start_col = 2 + (idx - 1) * 3
+            label = ttk.Label(self.table_frame, text=date, font=('Arial', 10, 'bold'))
+            label.place(x=(start_col-1)*100 + 150, y=0, width=300, anchor='center')
+
+        # Load Final.xlsx data
+        df = pd.read_excel('final.xlsx', skiprows=1)
+        for idx, row in df.iterrows():
+            values = [str(val) for val in row]
+            tag = 'total' if idx == len(df) - 1 else ('zero' if any(val == '0' for val in values[1:]) else '')
+            self.tree.insert('', tk.END, values=values, tags=(tag,))
+
+        # Apply styling
+        self.tree.tag_configure('total', font=('Arial', 10, 'bold'))
+        self.tree.tag_configure('zero', background='limegreen')
+
+        # Add scrollbars
+        vsb = ttk.Scrollbar(self.table_frame, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(self.table_frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        vsb.pack(side='right', fill='y')
+        hsb.pack(side='bottom', fill='x')
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = App(root)
+    root.mainloop()
