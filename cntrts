@@ -8,16 +8,15 @@ from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
-import time
 
 # GUI Class
 class App:
     def __init__(self, root):
         self.root = root
         self.root.title("Server Data Processor")
-        self.root.geometry("1200x600")  # Window size
+        self.root.geometry("600x400")  # Smaller window since no table display
 
-        # Frame for button and progress
+        # Frame for button, loading, and progress
         self.top_frame = ttk.Frame(self.root)
         self.top_frame.pack(pady=10)
 
@@ -33,14 +32,25 @@ class App:
         self.progress = ttk.Progressbar(self.top_frame, length=300, mode='determinate')
         self.progress.pack(side=tk.LEFT, padx=5)
 
-        # Frame for table display
-        self.table_frame = ttk.Frame(self.root)
-        self.table_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # Text area for console logs
+        self.log_frame = ttk.Frame(self.root)
+        self.log_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Treeview for displaying Final.xlsx
-        self.tree = None
-        self.existing_dates = []
-        self.flat_columns = []
+        self.log_text = tk.Text(self.log_frame, height=15, width=70, state='disabled')
+        self.log_text.pack(fill=tk.BOTH, expand=True)
+
+        # Scrollbar for log text
+        scrollbar = ttk.Scrollbar(self.log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_text['yscrollcommand'] = scrollbar.set
+
+    def log(self, message):
+        # Add message to the log text area
+        self.log_text.configure(state='normal')
+        self.log_text.insert(tk.END, f"{datetime.now().strftime('%H:%M:%S')}: {message}\n")
+        self.log_text.configure(state='disabled')
+        self.log_text.see(tk.END)  # Auto-scroll to the latest log
+        self.root.update()
 
     def start_script(self):
         # Disable the button to prevent multiple clicks
@@ -66,11 +76,13 @@ class App:
         self.root.after(500, update_dots)
 
     def run_script_thread(self):
-        # Update progress bar
+        # Update progress bar and log
         self.progress['value'] = 0
+        self.log("Starting script execution...")
         self.root.update()
 
         # Step 1: Fetch data (40% progress)
+        self.log("Fetching data from API...")
         self.progress['value'] = 10
         self.root.update()
         all_servers = self.fetch_data()
@@ -78,23 +90,29 @@ class App:
         self.root.update()
 
         # Step 2: Generate Data.xlsx (20% progress)
+        self.log("Generating Data.xlsx...")
         self.generate_data_xlsx(all_servers)
         self.progress['value'] = 60
         self.root.update()
 
         # Step 3: Generate and format Final.xlsx (30% progress)
+        self.log("Generating and formatting Final.xlsx...")
         self.generate_final_xlsx(all_servers)
         self.progress['value'] = 90
         self.root.update()
 
-        # Step 4: Display Final.xlsx in GUI (10% progress)
-        self.display_final_xlsx()
+        # Step 4: Finalize (10% progress)
+        self.log("Finalizing...")
         self.progress['value'] = 100
         self.root.update()
 
         # Stop loading animation and re-enable button
         self.loading_label.config(text="")
         self.run_button.config(state='normal')
+
+        # Show final prompt
+        self.log("Script execution completed.")
+        messagebox.showinfo("Success", "Final Excel data is ready to view in Final.xlsx.")
 
     def fetch_data(self):
         contrast_token = 'dhdjdjdjdjrjrjrjdj=='
@@ -128,9 +146,9 @@ class App:
                         }
                         all_servers.append(row)
                 else:
-                    print(f"Error for App ID {app_id}: {response.status_code} - {response.text}")
+                    self.log(f"Error for App ID {app_id}: {response.status_code} - {response.text}")
             except Exception as e:
-                print(f"Exception during API call: {e}")
+                self.log(f"Exception during API call: {e}")
         return all_servers
 
     def generate_data_xlsx(self, all_servers):
@@ -216,10 +234,10 @@ class App:
         total_df = pd.DataFrame([total_row])
         combined_df = pd.concat([combined_df, total_df], ignore_index=True)
 
-        self.flat_columns = ['AGENT VERSIONS']
+        flat_columns = ['AGENT VERSIONS']
         for date in existing_dates:
-            self.flat_columns.extend(['DEVELOPMENT', 'QA', 'TOTAL SERVERS'])
-        combined_df.columns = self.flat_columns
+            flat_columns.extend(['DEVELOPMENT', 'QA', 'TOTAL SERVERS'])
+        combined_df.columns = flat_columns
 
         combined_df.to_excel(excel_file, index=False)
 
@@ -305,47 +323,6 @@ class App:
                                 cell.border = bold_bottom
 
         wb.save(excel_file)
-        self.existing_dates = existing_dates
-
-    def display_final_xlsx(self):
-        # Clear previous table if exists
-        if self.tree:
-            self.tree.destroy()
-
-        # Create a new Treeview
-        columns = self.flat_columns
-        self.tree = ttk.Treeview(self.table_frame, columns=columns, show='headings')
-        self.tree.pack(fill=tk.BOTH, expand=True)
-
-        # Set column headings
-        for col in columns:
-            self.tree.heading(col, text=col)
-            self.tree.column(col, anchor='center', width=100)
-        self.tree.column('AGENT VERSIONS', anchor='w', width=150)
-
-        # Add date row as a special row (not in Treeview, but as labels above)
-        for idx, date in enumerate(self.existing_dates, start=1):
-            start_col = 2 + (idx - 1) * 3
-            label = ttk.Label(self.table_frame, text=date, font=('Arial', 10, 'bold'))
-            label.place(x=(start_col-1)*100 + 150, y=0, width=300, anchor='center')
-
-        # Load Final.xlsx data
-        df = pd.read_excel('final.xlsx', skiprows=1)
-        for idx, row in df.iterrows():
-            values = [str(val) for val in row]
-            tag = 'total' if idx == len(df) - 1 else ('zero' if any(val == '0' for val in values[1:]) else '')
-            self.tree.insert('', tk.END, values=values, tags=(tag,))
-
-        # Apply styling
-        self.tree.tag_configure('total', font=('Arial', 10, 'bold'))
-        self.tree.tag_configure('zero', background='limegreen')
-
-        # Add scrollbars
-        vsb = ttk.Scrollbar(self.table_frame, orient="vertical", command=self.tree.yview)
-        hsb = ttk.Scrollbar(self.table_frame, orient="horizontal", command=self.tree.xview)
-        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-        vsb.pack(side='right', fill='y')
-        hsb.pack(side='bottom', fill='x')
 
 if __name__ == "__main__":
     root = tk.Tk()
