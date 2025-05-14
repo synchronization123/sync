@@ -11,6 +11,10 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 import time
 
+# Set the working directory to the script's directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(script_dir)
+
 # GUI Class
 class App:
     def __init__(self, root):
@@ -107,7 +111,7 @@ class App:
 
         # Show final prompt
         self.log("Script execution completed.")
-        self.root.after(0, lambda: messagebox.showinfo("Success", "Final Excel data is ready to view in Final.xlsx."))
+        self.root.after(0, lambda: messagebox.showinfo("Success", "Final Excel data is ready to view in Final.xlsx in the script's directory."))
 
     def fetch_data(self):
         contrast_token = 'dhdjdjdjdjrjrjrjdj=='
@@ -166,9 +170,11 @@ class App:
         return all_servers
 
     def generate_data_xlsx(self, all_servers):
+        # Use absolute path for Data.xlsx
+        data_xlsx_path = os.path.join(script_dir, 'Data.xlsx')
         raw_df = pd.DataFrame(all_servers)
         raw_df = raw_df[['app_id', 'environment', 'status', 'server_id', 'name', 'agent_version']]
-        raw_df.to_excel('Data.xlsx', index=False)
+        raw_df.to_excel(data_xlsx_path, index=False)
 
     def generate_final_xlsx(self, all_servers):
         current_date = datetime.now()
@@ -197,7 +203,8 @@ class App:
             })
 
         new_df = pd.DataFrame(new_data)
-        excel_file = 'final.xlsx'
+        # Use absolute path for Final.xlsx
+        excel_file = os.path.join(script_dir, 'final.xlsx')
         existing_dates = []
         if os.path.exists(excel_file):
             existing_df = pd.read_excel(excel_file, skiprows=1)
