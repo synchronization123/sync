@@ -8,12 +8,17 @@ from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment
 
 # Configuration
-BASE_URL = "https://contrast.crm.com/Contrast/api/ng/{org_id}/applications/{app_id}/servers"
-# Alternative: BASE_URL = "https://app.contrastsecurity.com/Contrast/api/ng/{org_id}/applications/{app_id}/servers"
-ORG_ID = os.getenv("CONTRAST_ORG_ID", "jdjdjdjjd")
-API_TOKEN = os.getenv("CONTRAST_API_TOKEN", "your_token")  # Replace with actual token
-API_KEY = os.getenv("CONTRAST_API_KEY", "ghhfhjj")  # Provided API key
-APP_IDS = ["hsjjs-7888-7888-uiihjihdjdjdjsjjjs"]
+CONTRAST_URL = "https://contrast.crm.com/Contrast/api/ng/{org_id}/applications/{app_id}/servers"
+# Alternative: CONTRAST_URL = "https://app.contrastsecurity.com/Contrast/api/ng/{org_id}/applications/{app_id}/servers"
+TOKEN = os.getenv("CONTRAST_TOKEN", "token placeholder")  # Replace with actual token
+ORG_ID = os.getenv("CONTRAST_ORG_ID", "orgid placeholder")  # Replace with actual org ID
+API_KEY = os.getenv("CONTRAST_API_KEY", "apikey placeholder")  # Replace with actual API key
+APP_IDS = ["appid 1", "appid 2"]  # Replace with actual app IDs
+CONTRAST_HEADERS = {
+    "Authorization": f"Token {TOKEN}",
+    "Api-key": API_KEY,
+    "Accept": "application/json"
+}
 OUTPUT_EXCEL = "output.xlsx"
 LOG_FILE = "api_errors.log"
 
@@ -38,12 +43,8 @@ def check_api_accessibility():
 
 def fetch_server_data(app_id):
     """Fetch server data for a given application ID from Contrast API."""
-    url = BASE_URL.format(org_id=ORG_ID, app_id=app_id)
-    headers = {
-        "Authorization": f"Bearer {API_TOKEN}",  # Using Bearer token
-        "APIKey": API_KEY,
-        "Accept": "application/json"
-    }
+    url = CONTRAST_URL.format(org_id=ORG_ID, app_id=app_id)
+    headers = CONTRAST_HEADERS
     logging.debug(f"Fetching data for app_id {app_id}: {url}")
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -63,7 +64,7 @@ def fetch_server_data(app_id):
         logging.error(f"Error fetching data for app_id {app_id}: {e}, Status Code: {status_code}, Response: {response_text}")
         print(f"Error fetching data for app_id {app_id}: {e} (Status: {status_code})")
         if status_code == 401:
-            print("Authorization failure. Verify API_TOKEN, API_KEY, and ORG_ID.")
+            print("Authorization failure. Verify TOKEN, API_KEY, and ORG_ID.")
         return []
 
 def process_server_data(app_ids):
@@ -195,8 +196,8 @@ def main():
         print("API server is not accessible. Check logs and network connectivity.")
         return
     
-    if not API_TOKEN or not API_KEY:
-        print("API_TOKEN and API_KEY must be set. Check environment variables or configuration.")
+    if TOKEN == "token placeholder" or API_KEY == "apikey placeholder":
+        print("TOKEN and API_KEY must be set to actual values. Check environment variables or configuration.")
         return
     
     df = process_server_data(APP_IDS)
