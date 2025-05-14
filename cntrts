@@ -1,0 +1,189 @@
+import requests
+import pandas as pd
+from datetime import datetime, date
+import os
+from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment
+
+# Configuration
+BASE_URL = "https://contrast.crm.com/ng/{org_id}/applications/{app_id}/servers"
+ORG_ID = "jdjdjdjdjdjdjdj7345"
+API_TOKEN = "djdjdndkd"
+INPUT_EXCEL = "app.xlsx"
+OUTPUT_EXCEL = "output.xlsx"
+
+def fetch_server_data(app_id):
+    """Fetch server data for a given application ID from Contrast API."""
+    url = BASE_URL.format(org_id=ORG_ID, app_id=app_id)
+    headers = {"Authorization": f"Bearer {API_TOKEN}"}
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json().get("servers", [])
+    except requests.RequestException as e:
+        print(f"Error fetching data for app_id {app_id}: {e}")
+        return []
+
+def load_app_ids():
+    """Load application IDs from app.xlsx."""
+    try:
+        df = pd.read_excel(INPUT_EXCEL)
+        return df["app_id"].tolist()  # Assuming column name is 'app_id'
+    except Exception as e:
+        print(f"Error reading app.xlsx: {e}")
+        return []
+
+def process_server_data(app_ids):
+    """Fetch and process server data for all app IDs."""
+    all_servers = []
+    for app_id in app_ids:
+        servers = fetch_server_data(app_id)
+        for server in servers:
+            all_servers.append({
+                "app_id": app_id,
+                "server_id": server.get("server_id"),
+                "environment": server.get("environment"),
+                "status": server.get("status"),
+                "agent_version": server.get("agent_version")
+            })
+    return pd.DataFrame(all_servers)
+
+def create_pivot_table(df):
+    """Create pivot table for the given date."""
+    # Create pivot table: agent_version vs environment with server_id count
+    pivot = pd.pivot_table(
+        df,
+        values="server_id",
+        index="agent_version",
+        columns="environment",
+        aggfunc="count",
+        fill_value=0
+    )
+    
+    # Add total server count per agent_version
+    pivot["Server Count"] = pivot.sum(axis=1)
+    
+    # Reorder columns: Server Count, QA, Development
+    columns = ["Server Count"]
+    env_columns = [col for col in pivot.columns if col != "Server Count"]
+    columns.extend(sorted(env_columns))  # Sort environments for consistency
+    pivot = pivot[columns]
+    
+    # Reset index to make agent_version a column
+    pivot = pivot.reset_index()
+    
+    return pivot, env_columns
+
+def get_existing_dates_and_columns():
+    """Read existing dates and their column offsets from output.xlsx."""
+    if not os.path.exists(OUTPUT_EXCEL):
+        return {}, {}
+    
+    df = pd.read_excel(OUTPUT_EXCEL, header=2)  # Read starting from row 3 (header row)
+    date_columns = {}
+    date_to_offset = {}
+    for col in df.columns:
+        if col != "agent_version":
+            # Extract date from header (e.g., "Server Count" -> date from row 1)
+            # We need to read row 1 directly from the sheet
+            book = load_workbook(OUTPUT_EXCEL)
+            sheet = book.active
+            col_idx = df.columns.get_loc(col) + 1  # 1-based index for openpyxl
+            date_str = sheet.cell(row=1, column=col_idx).value
+            if date_str:
+                try:
+                    date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+                    date_columns[date_obj] = date_columns.get(date_obj, []) + [col]
+                except ValueError:
+                    continue
+    
+    # Calculate column offsets
+    current_offset = 1  # Start after agent_version column
+    for date_obj in sorted(date_columns.keys()):
+        date_to_offset[date_obj] = current_offset
+        current_offset += len(date_columns[date_obj])  # Increment by number of columns
+    return date_columns, date_to_offset
+
+def update_excel(pivot, env_columns, date_str):
+    """Update output.xlsx with new or merged data for the given date."""
+    current_date = datetime.now().date()
+    date_columns, date_to_offset = get_existing_dates_and_columns()
+    
+    # Determine column offset
+    if current_date in date_to_offset:
+        col_offset = date_to_offset[current_date]
+        update_existing = True
+    else:
+        # Assign new offset based on the last column
+        col_offset = max(date_to_offset.values(), default=0) + (len(env_columns) + 1 if date_to_offset else 1)
+        update_existing = False
+    
+    # Load or create output Excel
+    if os.path.exists(OUTPUT_EXCEL):
+        book = load_workbook(OUTPUT_EXCEL)
+        sheet = book.active
+        df_existing = pd.read_excel(OUTPUT_EXCEL, header=2)
+    else:
+        book = load_workbook()
+        sheet = book.create_sheet("Sheet1")
+        df_existing = pd.DataFrame()
+    
+    # Prepare new data
+    pivot_columns = ["agent_version", "Server Count"] + env_columns
+    pivot = pivot[pivot_columns]
+    
+    # Merge with existing agent_versions
+    if not df_existing.empty:
+        existing_versions = df_existing["agent_version"].unique()
+        pivot = pivot.set_index("agent_version").reindex(
+            index=pd.Index(existing_versions).union(pivot.index)
+        ).fillna(0).reset_index()
+    
+    # Write date in row 1 (merged across columns)
+    num_columns = len(env_columns) + 1  # Server Count + environments
+    start_col = get_column_letter(2 + col_offset)
+    end_col = get_column_letter(2 + col_offset + num_columns - 1)
+    sheet.merge_cells(f"{start_col}1:{end_col}1")
+    sheet[f"{start_col}1"] = date_str
+    sheet[f"{start_col}1"].alignment = Alignment(horizontal="center")
+    
+    # Write headers in row 3
+    headers = ["Server Count"] + env_columns
+    for i, header in enumerate(headers):
+        sheet.cell(row=3, column=2 + i + col_offset).value = header
+    
+    # Write data starting from row 4
+    for i, row in pivot.iterrows():
+        sheet.cell(row=4 + i, column=1).value = row["agent_version"]  # Write agent_version
+        for j, col in enumerate(pivot_columns[1:]):  # Skip agent_version
+            sheet.cell(row=4 + i, column=2 + j + col_offset).value = row[col]
+    
+    # Save the workbook
+    book.save(OUTPUT_EXCEL)
+
+def main():
+    # Get current date as string
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    
+    # Load app IDs
+    app_ids = load_app_ids()
+    if not app_ids:
+        print("No app IDs found. Exiting.")
+        return
+    
+    # Fetch and process server data
+    df = process_server_data(app_ids)
+    if df.empty:
+        print("No server data retrieved. Exiting.")
+        return
+    
+    # Create pivot table
+    pivot, env_columns = create_pivot_table(df)
+    
+    # Update Excel with new or merged data
+    update_excel(pivot, env_columns, date_str)
+    print(f"Excel file updated with data for {date_str}")
+
+if __name__ == "__main__":
+    main()
