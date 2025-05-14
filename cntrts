@@ -4,45 +4,56 @@ import pandas as pd
 # Define variables
 contrast_token = 'dhdjdjdjdjrjrjrjdj=='
 OrgUUid = 'gshdhdhd'
-App_Id = 'hdj-jdjdjd-7788-jdjdjdj'  # Extracted from the list as a single string
+App_Ids = ['hdj-jdjdjd-7788-jdjdjdj', 'hdjdjdjd', 'dhdjdkdkd']  # Updated list of App IDs
 api_key = 'hhjkkjdddjdkdk'
 
-# Construct the API URL
-base_url = 'https://contrast.crm.com/Contrast/api/ng/'
-url = f"{base_url}{OrgUUid}/applications/{App_Id}/servers"
-
-# Define headers using the contrast_token variable
+# Define headers
 contrast_headers = {
     'Authorization': contrast_token,
     'Api-key': api_key,
     'Accept': 'application/json'
 }
 
-# Make the GET request to the API
-response = requests.get(url, headers=contrast_headers)
+# Base URL for the API
+base_url = 'https://contrast.crm.com/Contrast/api/ng/'
 
-# Check if the request was successful
-if response.status_code == 200:
-    # Parse the JSON response
-    data = response.json()
-    # Assume the data contains a 'servers' key with a list of server objects
-    servers = data.get('servers', [])
+# Define the fields to extract
+required_fields = ['environment', 'status', 'server_id', 'name', 'agent_version']
+
+# List to store all server data
+all_servers = []
+
+# Loop through each App ID
+for app_id in App_Ids:
+    # Construct the API URL for the current App ID
+    url = f"{base_url}{OrgUUid}/applications/{app_id}/servers"
     
-    # Define the fields to extract
-    required_fields = ['environment', 'status', 'server_id', 'name', 'agent_version']
+    # Make the GET request to the API
+    response = requests.get(url, headers=contrast_headers)
     
-    # Extract the required fields from each server
-    extracted_data = []
-    for server in servers:
-        row = {field: server.get(field, '') for field in required_fields}
-        extracted_data.append(row)
-    
-    # Create a pandas DataFrame from the extracted data
-    df = pd.DataFrame(extracted_data)
-    
-    # Save the DataFrame to an Excel file
-    df.to_excel('Data.xlsx', index=False)
-    print("Data successfully saved to Data.xlsx")
-else:
-    # Handle errors if the request fails
-    print(f"Error: {response.status_code} - {response.text}")
+    # Check if the request was successful
+    if response.status_code == 200:
+        # Parse the JSON response
+        data = response.json()
+        # Assume the data contains a 'servers' key with a list of server objects
+        servers = data.get('servers', [])
+        
+        # Extract the required fields from each server and add app_id for reference
+        for server in servers:
+            row = {field: server.get(field, '') for field in required_fields}
+            row['app_id'] = app_id  # Add app_id to track the source application
+            all_servers.append(row)
+    else:
+        # Handle errors if the request fails
+        print(f"Error for App ID {app_id}: {response.status_code} - {response.text}")
+
+# Create a pandas DataFrame from the combined data
+df = pd.DataFrame(all_servers)
+
+# Reorder columns to have app_id first, followed by required fields
+columns = ['app_id'] + required_fields
+df = df[columns]
+
+# Save the DataFrame to an Excel file
+df.to_excel('Data.xlsx', index=False)
+print("Data successfully saved to Data.xlsx")
