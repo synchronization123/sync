@@ -1,10 +1,12 @@
 import requests
 import pandas as pd
+from datetime import datetime
+import os
 
 # Define variables
 contrast_token = 'dhdjdjdjdjrjrjrjdj=='
 OrgUUid = 'gshdhdhd'
-App_Ids = ['hdj-jdjdjd-7788-jdjdjdj', 'hdjdjdjd', 'dhdjdkdkd']  # Updated list of App IDs
+App_Ids = ['hdj-jdjdjd-7788-jdjdjdj', 'hdjdjdjd', 'dhdjdkdkd']
 api_key = 'hhjkkjdddjdkdk'
 
 # Define headers
@@ -17,43 +19,117 @@ contrast_headers = {
 # Base URL for the API
 base_url = 'https://contrast.crm.com/Contrast/api/ng/'
 
-# Define the fields to extract
-required_fields = ['environment', 'status', 'server_id', 'name', 'agent_version']
+# Get current date dynamically (system date: 14-May-25, 03:29 PM IST)
+current_date = datetime.now()
+date_str = current_date.strftime('%d-%b-%y').upper()  # Format as DD-MMM-YY (e.g., 14-MAY-25)
 
-# List to store all server data
+# Step 1: Fetch data from the API and save to Data.xlsx
 all_servers = []
-
-# Loop through each App ID
 for app_id in App_Ids:
-    # Construct the API URL for the current App ID
     url = f"{base_url}{OrgUUid}/applications/{app_id}/servers"
-    
-    # Make the GET request to the API
     response = requests.get(url, headers=contrast_headers)
-    
-    # Check if the request was successful
     if response.status_code == 200:
-        # Parse the JSON response
         data = response.json()
-        # Assume the data contains a 'servers' key with a list of server objects
         servers = data.get('servers', [])
-        
-        # Extract the required fields from each server and add app_id for reference
         for server in servers:
-            row = {field: server.get(field, '') for field in required_fields}
-            row['app_id'] = app_id  # Add app_id to track the source application
+            row = {
+                'app_id': app_id,
+                'environment': server.get('environment', '').upper(),  # Uppercase for consistency
+                'status': server.get('status', ''),
+                'server_id': server.get('server_id', ''),
+                'name': server.get('name', ''),
+                'agent_version': server.get('agent_version', '')
+            }
             all_servers.append(row)
     else:
-        # Handle errors if the request fails
         print(f"Error for App ID {app_id}: {response.status_code} - {response.text}")
 
-# Create a pandas DataFrame from the combined data
-df = pd.DataFrame(all_servers)
+# Create DataFrame for raw data and save to Data.xlsx (overwrite daily)
+raw_df = pd.DataFrame(all_servers)
+raw_df = raw_df[['app_id', 'environment', 'status', 'server_id', 'name', 'agent_version']]  # Order columns
+raw_df.to_excel('Data.xlsx', index=False)
+print("Raw data successfully saved to Data.xlsx")
 
-# Reorder columns to have app_id first, followed by required fields
-columns = ['app_id'] + required_fields
-df = df[columns]
+# Step 2: Process data for Final.xlsx (aggregate by agent_version and environment)
+version_env_counts = {}
+for server in all_servers:
+    version = server['agent_version']
+    env = server['environment']
+    if version not in version_env_counts:
+        version_env_counts[version] = {'DEVELOPMENT': 0, 'QA': 0}
+    if env == 'DEVELOPMENT':
+        version_env_counts[version]['DEVELOPMENT'] += 1
+    elif env == 'QA':
+        version_env_counts[version]['QA'] += 1
 
-# Save the DataFrame to an Excel file
-df.to_excel('Data.xlsx', index=False)
-print("Data successfully saved to Data.xlsx")
+# Prepare data for the new columns in Final.xlsx
+new_data = []
+for version, counts in version_env_counts.items():
+    total = counts['DEVELOPMENT'] + counts['QA']
+    new_data.append({
+        'AGENT VERSIONS': version,
+        f'{date_str}_DEVELOPMENT': counts['DEVELOPMENT'],
+        f'{date_str}_QA': counts['QA'],
+        f'{date_str}_TOTAL SERVERS': total
+    })
+
+# Create a DataFrame for the new data
+new_df = pd.DataFrame(new_data)
+
+# Load existing Final.xlsx if it exists, else create a new DataFrame
+excel_file = 'final.xlsx'
+if os.path.exists(excel_file):
+    existing_df = pd.read_excel(excel_file)
+    
+    # Check if data for the current date already exists; if so, remove it to update
+    date_columns = [col for col in existing_df.columns if date_str in col]
+    if date_columns:
+        existing_df = existing_df.drop(columns=date_columns)
+    
+    # Merge the new data with the existing DataFrame
+    if 'AGENT VERSIONS' in existing_df.columns:
+        combined_df = existing_df.merge(new_df, on='AGENT VERSIONS', how='outer')
+    else:
+        combined_df = new_df
+else:
+    combined_df = new_df
+
+# Fill NaN values with 0 for numerical columns
+for col in combined_df.columns:
+    if col != 'AGENT VERSIONS':
+        combined_df[col] = combined_df[col].fillna(0).astype(int)
+
+# Sort by AGENT VERSIONS
+combined_df = combined_df.sort_values('AGENT VERSIONS')
+
+# Add a TOTAL row
+total_row = {'AGENT VERSIONS': 'TOTAL'}
+for col in combined_df.columns:
+    if col != 'AGENT VERSIONS':
+        total_row[col] = combined_df[col].sum()
+total_df = pd.DataFrame([total_row])
+
+# Append the TOTAL row
+combined_df = pd.concat([combined_df, total_df], ignore_index=True)
+
+# Reorder columns: AGENT VERSIONS first, then sort by date
+date_groups = {}
+for col in combined_df.columns:
+    if col != 'AGENT VERSIONS':
+        date = col.split('_')[0]  # Extract date part (e.g., 14-MAY-25)
+        if date not in date_groups:
+            date_groups[date] = []
+        date_groups[date].append(col)
+
+# Sort dates and create ordered column list
+sorted_dates = sorted(date_groups.keys(), key=lambda x: datetime.strptime(x, '%d-%b-%y'))
+ordered_columns = ['AGENT VERSIONS']
+for date in sorted_dates:
+    ordered_columns.extend([f'{date}_DEVELOPMENT', f'{date}_QA', f'{date}_TOTAL SERVERS'])
+
+# Reorder the DataFrame
+combined_df = combined_df[ordered_columns]
+
+# Save to final.xlsx
+combined_df.to_excel(excel_file, index=False)
+print(f"Aggregated data for {date_str} successfully saved to {excel_file}")
