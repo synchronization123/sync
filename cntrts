@@ -91,9 +91,9 @@ class App:
         all_servers = self.fetch_data()
         self.progress['value'] = 40
 
-        # Step 2: Generate Data.xlsx (20% progress)
-        self.log("Generating Data.xlsx...")
-        self.generate_data_xlsx(all_servers)
+        # Step 2: Generate Data.xlsx and remove duplicates (20% progress)
+        self.log("Generating Data.xlsx and removing duplicates...")
+        all_servers = self.generate_data_xlsx(all_servers)  # Updated to return deduplicated data
         self.progress['value'] = 60
 
         # Step 3: Generate and format Final.xlsx (30% progress)
@@ -175,6 +175,15 @@ class App:
         raw_df = pd.DataFrame(all_servers)
         raw_df = raw_df[['app_id', 'environment', 'status', 'server_id', 'name', 'agent_version']]
         raw_df.to_excel(data_xlsx_path, index=False)
+
+        # Read Data.xlsx, remove duplicates based on 'name', and overwrite
+        raw_df = pd.read_excel(data_xlsx_path)
+        deduplicated_df = raw_df.drop_duplicates(subset=['name'], keep='first')
+        deduplicated_df.to_excel(data_xlsx_path, index=False)
+
+        # Convert the deduplicated DataFrame back to a list of dictionaries for Final.xlsx
+        deduplicated_servers = deduplicated_df.to_dict('records')
+        return deduplicated_servers
 
     def generate_final_xlsx(self, all_servers):
         current_date = datetime.now()
