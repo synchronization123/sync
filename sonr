@@ -1,0 +1,227 @@
+import requests
+import base64
+import pandas as pd
+from datetime import datetime, timedelta
+from openpyxl import load_workbook, Workbook
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment, PatternFill
+import os
+
+# Step 1: Set up SonarQube API token and headers
+sonartoken = "gdjdjdjdjdjrjjrjd"
+auth_string = f"{sonartoken}:"
+auth_encoded = base64.b64encode(auth_string.encode()).decode()
+headers = {
+    "Authorization": f"Basic {auth_encoded}",
+    "Accept": "application/json",
+    "Content-Type": "application/json"
+}
+
+# Step 2: Fetch projects and save to Projects.xlsx
+project_url = "https://sonar.crm.com/api/components/search?qualifiers=TRK&ps=500"
+response = requests.get(project_url, headers=headers)
+projects_data = response.json()
+
+# Extract project details
+projects_list = []
+for component in projects_data.get("components", []):
+    projects_list.append({
+        "key": component["key"],
+        "name": component["name"],
+        "project": component["name"]
+    })
+
+# Save to Projects.xlsx
+projects_df = pd.DataFrame(projects_list)
+projects_df.to_excel("Projects.xlsx", index=False)
+
+# Step 3: Fetch vulnerabilities for each project and save to Vulnerabilities.xlsx
+vulnerabilities_list = []
+for key in projects_df["key"]:
+    vuln_url = f"https://sonar.crm.com/api/issues/search?componentKeys={key}&types=VULNERABILITY&resolved=false&statuses=OPEN"
+    response = requests.get(vuln_url, headers=headers)
+    vuln_data = response.json()
+
+    for issue in vuln_data.get("issues", []):
+        vulnerabilities_list.append({
+            "key": issue["key"],
+            "severity": issue.get("severity", ""),
+            "component": issue.get("component", ""),
+            "project": issue.get("project", ""),
+            "line": issue.get("line", ""),
+            "status": issue.get("status", ""),
+            "message": issue.get("message", "")
+        })
+
+# Save to Vulnerabilities.xlsx
+vulnerabilities_df = pd.DataFrame(vulnerabilities_list)
+vulnerabilities_df.to_excel("Vulnerabilities.xlsx", index=False)
+
+# Step 4: Fetch hotspots for each project and save to Hotspots.xlsx
+hotspots_list = []
+for key in projects_df["key"]:
+    hotspot_url = f"https://sonar.crm.com/api/hotspots/search?projectKey={key}&status=TO_REVIEW"
+    response = requests.get(hotspot_url, headers=headers)
+    hotspot_data = response.json()
+
+    for hotspot in hotspot_data.get("hotspots", []):
+        hotspots_list.append({
+            "key": hotspot["key"],
+            "component": hotspot.get("component", ""),
+            "project": hotspot.get("project", ""),
+            "securityCategory": hotspot.get("securityCategory", ""),
+            "vulnerabilityProbability": hotspot.get("vulnerabilityProbability", ""),
+            "status": hotspot.get("status", ""),
+            "line": hotspot.get("line", ""),
+            "message": hotspot.get("message", "")
+        })
+
+# Save to Hotspots.xlsx
+hotspots_df = pd.DataFrame(hotspots_list)
+hotspots_df.to_excel("Hotspots.xlsx", index=False)
+
+# Step 5: Prepare data for Final.xlsx
+# Get unique project keys from both Vulnerabilities and Hotspots
+unique_projects = set(vulnerabilities_df["project"]).union(set(hotspots_df["project"]))
+
+# Dynamically get the current date and the previous day
+current_date = datetime.now()
+previous_date = current_date - timedelta(days=1)
+
+# Format dates as DD-MMM-YY (e.g., 16-May-25)
+current_date_str = current_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
+previous_date_str = previous_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
+
+# Define categories (merged across vulnerabilities and hotspots)
+categories = ["BLOCKER", "CRITICAL", "MAJOR", "MINOR", "INFO", "HIGH", "MEDIUM", "LOW", "OTHER"]
+
+# Check if Final.xlsx exists to determine the dates to include
+if os.path.exists("Final.xlsx"):
+    # Load existing Final.xlsx
+    existing_df = pd.read_excel("Final.xlsx")
+    existing_dates = set()
+    for col in existing_df.columns:
+        if col != "project" and col != "Total":
+            date_part = col.split("_")[0]
+            existing_dates.add(date_part)
+    dates = list(existing_dates) + [current_date_str]
+else:
+    # If Final.xlsx doesn't exist, use previous and current date
+    dates = [previous_date_str, current_date_str]
+
+# Remove duplicates and sort dates
+dates = sorted(list(set(dates)))
+
+# Initialize the pivot table structure
+pivot_data = []
+for project in unique_projects:
+    row = {"project": project}
+    
+    # For each date, calculate counts
+    for date in dates:
+        # Filter vulnerabilities and hotspots for the project
+        vuln_filtered = vulnerabilities_df[vulnerabilities_df["project"] == project]
+        hotspot_filtered = hotspots_df[hotspots_df["project"] == project]
+
+        # Add counts for each category
+        for category in categories:
+            # Count vulnerabilities for categories that match severity
+            vuln_count = 0
+            if category in ["BLOCKER", "CRITICAL", "MAJOR", "MINOR", "INFO"]:
+                vuln_count = len(vuln_filtered[vuln_filtered["severity"] == category])
+
+            # Count hotspots for categories that match vulnerabilityProbability
+            hotspot_count = 0
+            if category in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "OTHER"]:
+                hotspot_count = len(hotspot_filtered[hotspot_filtered["vulnerabilityProbability"] == category])
+
+            # Sum the counts
+            total_count = vuln_count + hotspot_count
+            row[f"{date}_{category}"] = total_count
+
+    pivot_data.append(row)
+
+# Create DataFrame for the pivot table
+pivot_df = pd.DataFrame(pivot_data)
+
+# Reorder columns
+columns_order = ["project"]
+for date in dates:
+    columns_order.extend([f"{date}_{category}" for category in categories])
+pivot_df = pivot_df[columns_order]
+
+# If Final.xlsx exists, append new projects and update data
+if os.path.exists("Final.xlsx"):
+    # Load existing data
+    existing_df = pd.read_excel("Final.xlsx")
+    # Remove the Total row and Total column if they exist
+    if "Total" in existing_df["project"].values:
+        existing_df = existing_df[existing_df["project"] != "Total"]
+    if "Total" in existing_df.columns:
+        existing_df = existing_df.drop(columns=["Total"])
+    
+    # Merge with new data (update existing projects, add new ones)
+    combined_df = existing_df.set_index("project").combine_first(pivot_df.set_index("project")).reset_index()
+    pivot_df = combined_df[columns_order]
+else:
+    # If Final.xlsx doesn't exist, use the new pivot_df as is
+    pass
+
+# Add Total column for each row
+pivot_df["Total"] = pivot_df.iloc[:, 1:].sum(axis=1)
+
+# Add Total row at the bottom
+total_row = {"project": "Total"}
+for col in pivot_df.columns[1:]:  # Skip the project column
+    total_row[col] = pivot_df[col].sum()
+total_df = pd.DataFrame([total_row])
+pivot_df = pd.concat([pivot_df, total_df], ignore_index=True)
+
+# Save to Final.xlsx with an extra row at the top for merging dates
+with pd.ExcelWriter("Final.xlsx", engine="openpyxl") as writer:
+    pivot_df.to_excel(writer, index=False, startrow=1)
+
+# Step 6: Use openpyxl to format the Excel file
+wb = load_workbook("Final.xlsx")
+ws = wb.active
+
+# Number of categories per date
+categories_per_date = len(categories)
+
+# Merge cells for each date in row 1
+for i, date in enumerate(dates):
+    start_col = 2 + i * categories_per_date  # Start after 'project' column
+    end_col = start_col + categories_per_date - 1
+    start_col_letter = get_column_letter(start_col)
+    end_col_letter = get_column_letter(end_col)
+    ws.merge_cells(f"{start_col_letter}1:{end_col_letter}1")
+    ws[f"{start_col_letter}1"] = date
+
+# Update the headers in row 2 to show only the category names
+for col_idx, col_name in enumerate(pivot_df.columns, start=1):
+    if col_name != "project":
+        if col_name == "Total":
+            ws.cell(row=2, column=col_idx).value = "Total"
+        else:
+            category = col_name.split("_")[1]  # Extract the category (e.g., BLOCKER)
+            ws.cell(row=2, column=col_idx).value = category
+
+# Apply alignments and color formatting
+light_green_fill = PatternFill(start_color="90EE90", end_color="90EE90", fill_type="solid")
+
+for row in range(3, ws.max_row + 1):  # Start from row 3 (data rows)
+    for col in range(1, ws.max_column + 1):
+        cell = ws.cell(row=row, column=col)
+        # Center-align all cells except the project column
+        if col == 1:  # Project column
+            cell.alignment = Alignment(horizontal="left", vertical="center")
+        else:
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            # Highlight cells with value 0 in light green
+            if isinstance(cell.value, (int, float)) and cell.value == 0:
+                cell.fill = light_green_fill
+
+# Save the modified Excel file
+wb.save("Final.xlsx")
+
+print("Data downloaded, pivot table created, and formatting applied successfully!")
