@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from openpyxl import load_workbook, Workbook
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import Alignment, Font
+from openpyxl.styles import Alignment, Font, Border, Side
 import os
 
 # Step 1: Set up SonarQube API token and headers
@@ -93,6 +93,7 @@ if os.path.exists("Final.xlsx"):
     # Load existing Final.xlsx
     existing_df = pd.read_excel("Final.xlsx")
     existing_dates = set()
+    existing_projects = set(existing_df["project"].values) - {"Total"}  # Exclude "Total" row
     for col in existing_df.columns:
         if col != "project" and col != "Total":
             date_part = col.split("_")[0]
@@ -101,6 +102,7 @@ if os.path.exists("Final.xlsx"):
 else:
     # If Final.xlsx doesn't exist, use only the current date
     dates = [current_date_str]
+    existing_projects = set()
 
 # Remove duplicates and sort dates
 dates = sorted(list(set(dates)))
@@ -111,11 +113,22 @@ hotspot_categories = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "OTHER"]
 
 # Initialize the pivot table structure
 pivot_data = []
-for project in unique_projects:
+new_projects = unique_projects - existing_projects  # Identify new projects
+all_projects = unique_projects.union(existing_projects)
+
+for project in all_projects:
     row = {"project": project}
     
     # For each date, calculate counts
     for date in dates:
+        # Only calculate counts for the current date if the project is new
+        if project in new_projects and date != current_date_str:
+            for category in vuln_categories:
+                row[f"{date}_VULNERABILITY_{category}"] = None
+            for category in hotspot_categories:
+                row[f"{date}_HOTSPOT_{category}"] = None
+            continue
+
         # Filter vulnerabilities and hotspots for the project
         vuln_filtered = vulnerabilities_df[vulnerabilities_df["project"] == project]
         hotspot_filtered = hotspots_df[hotspots_df["project"] == project]
@@ -179,6 +192,20 @@ vuln_cols_per_date = len(vuln_categories)  # 5
 hotspot_cols_per_date = len(hotspot_categories)  # 5
 total_cols_per_date = vuln_cols_per_date + hotspot_cols_per_date  # 10
 
+# Define border styles
+thin_border = Border(
+    left=Side(style="thin"),
+    right=Side(style="thin"),
+    top=Side(style="thin"),
+    bottom=Side(style="thin")
+)
+bold_border = Border(
+    left=Side(style="medium"),
+    right=Side(style="medium"),
+    top=Side(style="medium"),
+    bottom=Side(style="medium")
+)
+
 # Merge cells for each date in row 1 and apply formatting
 for i, date in enumerate(dates):
     start_col = 2 + i * total_cols_per_date  # Start after 'project' column
@@ -190,8 +217,11 @@ for i, date in enumerate(dates):
     date_cell.value = date
     date_cell.alignment = Alignment(horizontal="center", vertical="center")
     date_cell.font = Font(bold=True)
+    # Apply border to merged date cell
+    for col in range(start_col, end_col + 1):
+        ws.cell(row=1, column=col).border = thin_border
 
-# Merge cells for "VULNERABILITY" and "HOTSPOT" in row 2
+# Merge cells for "VULNERABILITY" and "HOTSPOT" in row 2 and apply formatting
 for i, date in enumerate(dates):
     # VULNERABILITY section
     vuln_start_col = 2 + i * total_cols_per_date
@@ -199,7 +229,13 @@ for i, date in enumerate(dates):
     vuln_start_col_letter = get_column_letter(vuln_start_col)
     vuln_end_col_letter = get_column_letter(vuln_end_col)
     ws.merge_cells(f"{vuln_start_col_letter}2:{vuln_end_col_letter}2")
-    ws[f"{vuln_start_col_letter}2"] = "VULNERABILITY"
+    vuln_cell = ws[f"{vuln_start_col_letter}2"]
+    vuln_cell.value = "VULNERABILITY"
+    vuln_cell.alignment = Alignment(horizontal="center", vertical="center")
+    vuln_cell.font = Font(bold=True)
+    # Apply border to merged VULNERABILITY cell
+    for col in range(vuln_start_col, vuln_end_col + 1):
+        ws.cell(row=2, column=col).border = thin_border
 
     # HOTSPOT section
     hotspot_start_col = vuln_end_col + 1
@@ -207,18 +243,26 @@ for i, date in enumerate(dates):
     hotspot_start_col_letter = get_column_letter(hotspot_start_col)
     hotspot_end_col_letter = get_column_letter(hotspot_end_col)
     ws.merge_cells(f"{hotspot_start_col_letter}2:{hotspot_end_col_letter}2")
-    ws[f"{hotspot_start_col_letter}2"] = "HOTSPOT"
+    hotspot_cell = ws[f"{hotspot_start_col_letter}2"]
+    hotspot_cell.value = "HOTSPOT"
+    hotspot_cell.alignment = Alignment(horizontal="center", vertical="center")
+    hotspot_cell.font = Font(bold=True)
+    # Apply border to merged HOTSPOT cell
+    for col in range(hotspot_start_col, hotspot_end_col + 1):
+        ws.cell(row=2, column=col).border = thin_border
 
-# Update the headers in row 3 to show only the category names
+# Update the headers in row 3 to show only the category names and apply borders
 for col_idx, col_name in enumerate(pivot_df.columns, start=1):
+    cell = ws.cell(row=3, column=col_idx)
     if col_name != "project":
         if col_name == "Total":
-            ws.cell(row=3, column=col_idx).value = "Total"
+            cell.value = "Total"
         else:
             category = col_name.split("_")[-1]  # Extract the category (e.g., BLOCKER)
-            ws.cell(row=3, column=col_idx).value = category
+            cell.value = category
+    cell.border = thin_border
 
-# Apply alignments
+# Apply alignments, borders, and bold formatting to Total row
 for row in range(4, ws.max_row + 1):  # Start from row 4 (data rows)
     for col in range(1, ws.max_column + 1):
         cell = ws.cell(row=row, column=col)
@@ -227,6 +271,71 @@ for row in range(4, ws.max_row + 1):  # Start from row 4 (data rows)
             cell.alignment = Alignment(horizontal="left", vertical="center")
         else:
             cell.alignment = Alignment(horizontal="center", vertical="center")
+        # Apply thin border to all cells
+        cell.border = thin_border
+        # Bold the Total row
+        if row == ws.max_row:  # Total row
+            cell.font = Font(bold=True)
+
+# Apply bold outline to the entire table
+for row in range(1, ws.max_row + 1):
+    for col in range(1, ws.max_column + 1):
+        cell = ws.cell(row=row, column=col)
+        # Top border
+        if row == 1:
+            cell.border = Border(
+                left=cell.border.left,
+                right=cell.border.right,
+                top=Side(style="medium"),
+                bottom=cell.border.bottom
+            )
+        # Bottom border
+        if row == ws.max_row:
+            cell.border = Border(
+                left=cell.border.left,
+                right=cell.border.right,
+                top=cell.border.top,
+                bottom=Side(style="medium")
+            )
+        # Left border
+        if col == 1:
+            cell.border = Border(
+                left=Side(style="medium"),
+                right=cell.border.right,
+                top=cell.border.top,
+                bottom=cell.border.bottom
+            )
+        # Right border
+        if col == ws.max_column:
+            cell.border = Border(
+                left=cell.border.left,
+                right=Side(style="medium"),
+                top=cell.border.top,
+                bottom=cell.border.bottom
+            )
+
+# Apply bold vertical line to the left of column B
+for row in range(1, ws.max_row + 1):
+    cell = ws.cell(row=row, column=2)
+    cell.border = Border(
+        left=Side(style="medium"),
+        right=cell.border.right,
+        top=cell.border.top,
+        bottom=cell.border.bottom
+    )
+
+# Apply bold vertical line to the left of column L for each date
+# Column L is the 12th column (for the first date), then 22nd, 32nd, etc.
+for i in range(len(dates)):
+    col = 2 + i * total_cols_per_date + vuln_cols_per_date  # Left of HOTSPOT section
+    for row in range(1, ws.max_row + 1):
+        cell = ws.cell(row=row, column=col)
+        cell.border = Border(
+            left=Side(style="medium"),
+            right=cell.border.right,
+            top=cell.border.top,
+            bottom=cell.border.bottom
+        )
 
 # Save the modified Excel file
 wb.save("Final.xlsx")
