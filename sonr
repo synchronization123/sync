@@ -142,7 +142,14 @@ if os.path.exists("Final.xlsx"):
                 date_str = date_cell.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
                 existing_dates.add(date_str)
             else:
-                existing_dates.add(str(date_cell))
+                # Handle string dates, ensuring consistent format
+                try:
+                    parsed_date = datetime.strptime(str(date_cell), "%d-%b-%y")
+                    date_str = parsed_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
+                    existing_dates.add(date_str)
+                except ValueError:
+                    # If the date format doesn't match, skip or log it
+                    continue
     wb.close()
 
     dates = list(existing_dates) + [current_date_str]
@@ -225,7 +232,7 @@ else:
     # If Final.xlsx doesn't exist, pivot_df is the final DataFrame
     pass
 
-# Reorder columns
+# Now reorder columns after the merge
 columns_order = ["project"]
 for date in dates:
     columns_order.extend([f"{date}_VULNERABILITY_{category}" for category in vuln_categories])
