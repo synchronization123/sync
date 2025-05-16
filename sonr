@@ -92,11 +92,26 @@ current_date_str = current_date.strftime("%d-%b-%y").replace("May", "May").repla
 if os.path.exists("Final.xlsx"):
     # Load existing Final.xlsx
     existing_df = pd.read_excel("Final.xlsx")
-    existing_dates = set()
-    existing_projects = set(existing_df["project"].values) - {"Total"}  # Exclude "Total" row
+    
+    # Find the "project" column (case-insensitive)
+    project_col = None
     for col in existing_df.columns:
-        if col != "project" and col != "Total":
-            # Ensure col is a string and has the expected format
+        if str(col).lower() == "project":
+            project_col = col
+            break
+    
+    if project_col is None:
+        raise ValueError("Could not find 'project' column in Final.xlsx. Existing columns: " + str(list(existing_df.columns)))
+    
+    # Extract existing projects, excluding "Total" row
+    existing_projects = set(existing_df[project_col].values)
+    if "Total" in existing_projects:
+        existing_projects.remove("Total")
+    
+    # Extract existing dates
+    existing_dates = set()
+    for col in existing_df.columns:
+        if col != project_col and col != "Total":
             col_str = str(col)
             if "_" in col_str:
                 date_part = col_str.split("_")[0]
@@ -162,6 +177,20 @@ pivot_df = pivot_df[columns_order]
 if os.path.exists("Final.xlsx"):
     # Load existing data
     existing_df = pd.read_excel("Final.xlsx")
+    
+    # Find the "project" column again for merging
+    project_col = None
+    for col in existing_df.columns:
+        if str(col).lower() == "project":
+            project_col = col
+            break
+    
+    if project_col is None:
+        raise ValueError("Could not find 'project' column in Final.xlsx during merge. Existing columns: " + str(list(existing_df.columns)))
+    
+    # Rename the project column to ensure consistency
+    existing_df = existing_df.rename(columns={project_col: "project"})
+    
     # Remove the Total row and Total column if they exist
     if "Total" in existing_df["project"].values:
         existing_df = existing_df[existing_df["project"] != "Total"]
