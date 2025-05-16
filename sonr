@@ -176,45 +176,54 @@ all_projects = unique_projects.union(existing_projects)
 for project in all_projects:
     row = {"project": project}
     
-    # For each date, add data
-    for date in dates:
-        # Only calculate counts for the current date
-        if date == current_date_str:
-            # Filter vulnerabilities and hotspots for the project
-            vuln_filtered = vulnerabilities_df[vulnerabilities_df["project"] == project]
-            hotspot_filtered = hotspots_df[hotspots_df["project"] == project]
+    # Only calculate counts for the current date
+    # Filter vulnerabilities and hotspots for the project
+    vuln_filtered = vulnerabilities_df[vulnerabilities_df["project"] == project]
+    hotspot_filtered = hotspots_df[hotspots_df["project"] == project]
 
-            # Add vulnerability counts
-            for category in vuln_categories:
-                count = len(vuln_filtered[vuln_filtered["severity"] == category])
-                row[f"{date}_VULNERABILITY_{category}"] = count if count > 0 else None
+    # Add vulnerability counts
+    for category in vuln_categories:
+        count = len(vuln_filtered[vuln_filtered["severity"] == category])
+        row[f"{current_date_str}_VULNERABILITY_{category}"] = count if count > 0 else None
 
-            # Add hotspot counts
-            for category in hotspot_categories:
-                count = len(hotspot_filtered[hotspot_filtered["vulnerabilityProbability"] == category])
-                row[f"{date}_HOTSPOT_{category}"] = count if count > 0 else None
+    # Add hotspot counts
+    for category in hotspot_categories:
+        count = len(hotspot_filtered[hotspot_filtered["vulnerabilityProbability"] == category])
+        row[f"{current_date_str}_HOTSPOT_{category}"] = count if count > 0 else None
 
-            # Add total for this date
-            total = 0
-            for category in vuln_categories:
-                count = row.get(f"{date}_VULNERABILITY_{category}", 0)
-                total += count if count is not None else 0
-            for category in hotspot_categories:
-                count = row.get(f"{date}_HOTSPOT_{category}", 0)
-                total += count if count is not None else 0
-            row[f"{date}_Total"] = total if total > 0 else None
-        else:
-            # For previous dates, leave the columns blank in pivot_data (they'll be filled from existing_df)
-            for category in vuln_categories:
-                row[f"{date}_VULNERABILITY_{category}"] = None
-            for category in hotspot_categories:
-                row[f"{date}_HOTSPOT_{category}"] = None
-            row[f"{date}_Total"] = None
+    # Add total for this date
+    total = 0
+    for category in vuln_categories:
+        count = row.get(f"{current_date_str}_VULNERABILITY_{category}", 0)
+        total += count if count is not None else 0
+    for category in hotspot_categories:
+        count = row.get(f"{current_date_str}_HOTSPOT_{category}", 0)
+        total += count if count is not None else 0
+    row[f"{current_date_str}_Total"] = total if total > 0 else None
 
     pivot_data.append(row)
 
-# Create DataFrame for the pivot table
+# Create DataFrame for the pivot table (only current date columns)
 pivot_df = pd.DataFrame(pivot_data)
+
+# If Final.xlsx exists, merge with existing data
+if os.path.exists("Final.xlsx"):
+    # Load existing data
+    existing_df = pd.read_excel("Final.xlsx", header=2)
+    
+    # Rename the first column to "project"
+    existing_df.columns = ["project"] + list(existing_df.columns[1:])
+    
+    # Remove the Total row if it exists
+    existing_df = existing_df[existing_df["project"] != "Total"]
+    
+    # Merge with new data (append current date columns, preserve existing columns)
+    combined_df = existing_df.set_index("project").combine_first(pivot_df.set_index("project")).reset_index()
+    # Ensure we're working with a fresh copy to avoid SettingWithCopyWarning
+    pivot_df = combined_df.copy()
+else:
+    # If Final.xlsx doesn't exist, pivot_df is the final DataFrame
+    pass
 
 # Reorder columns
 columns_order = ["project"]
@@ -223,23 +232,6 @@ for date in dates:
     columns_order.extend([f"{date}_HOTSPOT_{category}" for category in hotspot_categories])
     columns_order.append(f"{date}_Total")
 pivot_df = pivot_df[columns_order]
-
-# If Final.xlsx exists, append new projects and update data
-if os.path.exists("Final.xlsx"):
-    # Load existing data
-    existing_df = pd.read_excel("Final.xlsx", header=2)
-    
-    # Rename the first column to "project"
-    existing_df.columns = ["project"] + list(existing_df.columns[1:])
-    
-    # Remove the Total rows for each date if they exist in the column names
-    existing_df = existing_df[existing_df["project"] != "Total"]
-    
-    # Merge with new data (update existing projects, add new ones)
-    # combine_first will preserve existing_df values where pivot_df has None
-    combined_df = existing_df.set_index("project").combine_first(pivot_df.set_index("project")).reset_index()
-    # Ensure we're working with a fresh copy to avoid SettingWithCopyWarning
-    pivot_df = combined_df[columns_order].copy()
 
 # Add Total row at the bottom
 total_row = {"project": "Total"}
