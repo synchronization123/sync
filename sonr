@@ -88,34 +88,38 @@ unique_projects = set(vulnerabilities_df["project"]).union(set(hotspots_df["proj
 current_date = datetime.now()
 current_date_str = current_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
 
+# Define categories for vulnerabilities and hotspots separately
+vuln_categories = ["BLOCKER", "CRITICAL", "MAJOR", "MINOR", "INFO"]
+hotspot_categories = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "OTHER"]
+
+# Number of columns per date for vulnerabilities and hotspots
+vuln_cols_per_date = len(vuln_categories)  # 5
+hotspot_cols_per_date = len(hotspot_categories)  # 5
+total_cols_per_date = vuln_cols_per_date + hotspot_cols_per_date  # 10
+
 # Check if Final.xlsx exists to determine the dates to include
 if os.path.exists("Final.xlsx"):
-    # Load existing Final.xlsx
-    existing_df = pd.read_excel("Final.xlsx")
+    # Use openpyxl to read the dates from row 1
+    wb = load_workbook("Final.xlsx")
+    ws = wb.active
+    existing_dates = set()
+    for col in range(2, ws.max_column + 1, total_cols_per_date):  # Start from column B, step by 10 columns
+        date_cell = ws.cell(row=1, column=col).value
+        if date_cell:
+            existing_dates.add(date_cell)
+    wb.close()
+
+    # Load the data with pandas, using row 3 (index 2) as the header
+    existing_df = pd.read_excel("Final.xlsx", header=2)
     
-    # Find the "project" column (case-insensitive)
-    project_col = None
-    for col in existing_df.columns:
-        if str(col).lower() == "project":
-            project_col = col
-            break
-    
-    if project_col is None:
-        raise ValueError("Could not find 'project' column in Final.xlsx. Existing columns: " + str(list(existing_df.columns)))
+    # Rename the first column to "project" (it might be "Unnamed: 0" due to the empty cell in row 1, column A)
+    existing_df.columns = ["project"] + list(existing_df.columns[1:])
     
     # Extract existing projects, excluding "Total" row
-    existing_projects = set(existing_df[project_col].values)
+    existing_projects = set(existing_df["project"].values)
     if "Total" in existing_projects:
         existing_projects.remove("Total")
     
-    # Extract existing dates
-    existing_dates = set()
-    for col in existing_df.columns:
-        if col != project_col and col != "Total":
-            col_str = str(col)
-            if "_" in col_str:
-                date_part = col_str.split("_")[0]
-                existing_dates.add(date_part)
     dates = list(existing_dates) + [current_date_str]
 else:
     # If Final.xlsx doesn't exist, use only the current date
@@ -124,10 +128,6 @@ else:
 
 # Remove duplicates and sort dates
 dates = sorted(list(set(dates)))
-
-# Define categories for vulnerabilities and hotspots separately
-vuln_categories = ["BLOCKER", "CRITICAL", "MAJOR", "MINOR", "INFO"]
-hotspot_categories = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "OTHER"]
 
 # Initialize the pivot table structure
 pivot_data = []
@@ -176,20 +176,10 @@ pivot_df = pivot_df[columns_order]
 # If Final.xlsx exists, append new projects and update data
 if os.path.exists("Final.xlsx"):
     # Load existing data
-    existing_df = pd.read_excel("Final.xlsx")
+    existing_df = pd.read_excel("Final.xlsx", header=2)
     
-    # Find the "project" column again for merging
-    project_col = None
-    for col in existing_df.columns:
-        if str(col).lower() == "project":
-            project_col = col
-            break
-    
-    if project_col is None:
-        raise ValueError("Could not find 'project' column in Final.xlsx during merge. Existing columns: " + str(list(existing_df.columns)))
-    
-    # Rename the project column to ensure consistency
-    existing_df = existing_df.rename(columns={project_col: "project"})
+    # Rename the first column to "project"
+    existing_df.columns = ["project"] + list(existing_df.columns[1:])
     
     # Remove the Total row and Total column if they exist
     if "Total" in existing_df["project"].values:
@@ -218,11 +208,6 @@ with pd.ExcelWriter("Final.xlsx", engine="openpyxl") as writer:
 # Step 6: Use openpyxl to format the Excel file
 wb = load_workbook("Final.xlsx")
 ws = wb.active
-
-# Number of columns per date for vulnerabilities and hotspots
-vuln_cols_per_date = len(vuln_categories)  # 5
-hotspot_cols_per_date = len(hotspot_categories)  # 5
-total_cols_per_date = vuln_cols_per_date + hotspot_cols_per_date  # 10
 
 # Define border styles
 thin_border = Border(
