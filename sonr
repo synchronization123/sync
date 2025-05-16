@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from openpyxl import load_workbook, Workbook
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import Alignment, PatternFill
+from openpyxl.styles import Alignment, Font
 import os
 
 # Step 1: Set up SonarQube API token and headers
@@ -84,16 +84,9 @@ hotspots_df.to_excel("Hotspots.xlsx", index=False)
 # Get unique project keys from both Vulnerabilities and Hotspots
 unique_projects = set(vulnerabilities_df["project"]).union(set(hotspots_df["project"]))
 
-# Dynamically get the current date and the previous day
+# Dynamically get the current date
 current_date = datetime.now()
-previous_date = current_date - timedelta(days=1)
-
-# Format dates as DD-MMM-YY (e.g., 16-May-25)
 current_date_str = current_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
-previous_date_str = previous_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
-
-# Define categories (merged across vulnerabilities and hotspots)
-categories = ["BLOCKER", "CRITICAL", "MAJOR", "MINOR", "INFO", "HIGH", "MEDIUM", "LOW", "OTHER"]
 
 # Check if Final.xlsx exists to determine the dates to include
 if os.path.exists("Final.xlsx"):
@@ -106,11 +99,15 @@ if os.path.exists("Final.xlsx"):
             existing_dates.add(date_part)
     dates = list(existing_dates) + [current_date_str]
 else:
-    # If Final.xlsx doesn't exist, use previous and current date
-    dates = [previous_date_str, current_date_str]
+    # If Final.xlsx doesn't exist, use only the current date
+    dates = [current_date_str]
 
 # Remove duplicates and sort dates
 dates = sorted(list(set(dates)))
+
+# Define categories for vulnerabilities and hotspots separately
+vuln_categories = ["BLOCKER", "CRITICAL", "MAJOR", "MINOR", "INFO"]
+hotspot_categories = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "OTHER"]
 
 # Initialize the pivot table structure
 pivot_data = []
@@ -123,21 +120,15 @@ for project in unique_projects:
         vuln_filtered = vulnerabilities_df[vulnerabilities_df["project"] == project]
         hotspot_filtered = hotspots_df[hotspots_df["project"] == project]
 
-        # Add counts for each category
-        for category in categories:
-            # Count vulnerabilities for categories that match severity
-            vuln_count = 0
-            if category in ["BLOCKER", "CRITICAL", "MAJOR", "MINOR", "INFO"]:
-                vuln_count = len(vuln_filtered[vuln_filtered["severity"] == category])
+        # Add vulnerability counts
+        for category in vuln_categories:
+            count = len(vuln_filtered[vuln_filtered["severity"] == category])
+            row[f"{date}_VULNERABILITY_{category}"] = count if count > 0 else None
 
-            # Count hotspots for categories that match vulnerabilityProbability
-            hotspot_count = 0
-            if category in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "OTHER"]:
-                hotspot_count = len(hotspot_filtered[hotspot_filtered["vulnerabilityProbability"] == category])
-
-            # Sum the counts
-            total_count = vuln_count + hotspot_count
-            row[f"{date}_{category}"] = total_count
+        # Add hotspot counts
+        for category in hotspot_categories:
+            count = len(hotspot_filtered[hotspot_filtered["vulnerabilityProbability"] == category])
+            row[f"{date}_HOTSPOT_{category}"] = count if count > 0 else None
 
     pivot_data.append(row)
 
@@ -147,7 +138,8 @@ pivot_df = pd.DataFrame(pivot_data)
 # Reorder columns
 columns_order = ["project"]
 for date in dates:
-    columns_order.extend([f"{date}_{category}" for category in categories])
+    columns_order.extend([f"{date}_VULNERABILITY_{category}" for category in vuln_categories])
+    columns_order.extend([f"{date}_HOTSPOT_{category}" for category in hotspot_categories])
 pivot_df = pivot_df[columns_order]
 
 # If Final.xlsx exists, append new projects and update data
@@ -163,9 +155,6 @@ if os.path.exists("Final.xlsx"):
     # Merge with new data (update existing projects, add new ones)
     combined_df = existing_df.set_index("project").combine_first(pivot_df.set_index("project")).reset_index()
     pivot_df = combined_df[columns_order]
-else:
-    # If Final.xlsx doesn't exist, use the new pivot_df as is
-    pass
 
 # Add Total column for each row
 pivot_df["Total"] = pivot_df.iloc[:, 1:].sum(axis=1)
@@ -177,39 +166,60 @@ for col in pivot_df.columns[1:]:  # Skip the project column
 total_df = pd.DataFrame([total_row])
 pivot_df = pd.concat([pivot_df, total_df], ignore_index=True)
 
-# Save to Final.xlsx with an extra row at the top for merging dates
+# Save to Final.xlsx with two extra rows at the top for date and section headers
 with pd.ExcelWriter("Final.xlsx", engine="openpyxl") as writer:
-    pivot_df.to_excel(writer, index=False, startrow=1)
+    pivot_df.to_excel(writer, index=False, startrow=2)
 
 # Step 6: Use openpyxl to format the Excel file
 wb = load_workbook("Final.xlsx")
 ws = wb.active
 
-# Number of categories per date
-categories_per_date = len(categories)
+# Number of columns per date for vulnerabilities and hotspots
+vuln_cols_per_date = len(vuln_categories)  # 5
+hotspot_cols_per_date = len(hotspot_categories)  # 5
+total_cols_per_date = vuln_cols_per_date + hotspot_cols_per_date  # 10
 
-# Merge cells for each date in row 1
+# Merge cells for each date in row 1 and apply formatting
 for i, date in enumerate(dates):
-    start_col = 2 + i * categories_per_date  # Start after 'project' column
-    end_col = start_col + categories_per_date - 1
+    start_col = 2 + i * total_cols_per_date  # Start after 'project' column
+    end_col = start_col + total_cols_per_date - 1
     start_col_letter = get_column_letter(start_col)
     end_col_letter = get_column_letter(end_col)
     ws.merge_cells(f"{start_col_letter}1:{end_col_letter}1")
-    ws[f"{start_col_letter}1"] = date
+    date_cell = ws[f"{start_col_letter}1"]
+    date_cell.value = date
+    date_cell.alignment = Alignment(horizontal="center", vertical="center")
+    date_cell.font = Font(bold=True)
 
-# Update the headers in row 2 to show only the category names
+# Merge cells for "VULNERABILITY" and "HOTSPOT" in row 2
+for i, date in enumerate(dates):
+    # VULNERABILITY section
+    vuln_start_col = 2 + i * total_cols_per_date
+    vuln_end_col = vuln_start_col + vuln_cols_per_date - 1
+    vuln_start_col_letter = get_column_letter(vuln_start_col)
+    vuln_end_col_letter = get_column_letter(vuln_end_col)
+    ws.merge_cells(f"{vuln_start_col_letter}2:{vuln_end_col_letter}2")
+    ws[f"{vuln_start_col_letter}2"] = "VULNERABILITY"
+
+    # HOTSPOT section
+    hotspot_start_col = vuln_end_col + 1
+    hotspot_end_col = hotspot_start_col + hotspot_cols_per_date - 1
+    hotspot_start_col_letter = get_column_letter(hotspot_start_col)
+    hotspot_end_col_letter = get_column_letter(hotspot_end_col)
+    ws.merge_cells(f"{hotspot_start_col_letter}2:{hotspot_end_col_letter}2")
+    ws[f"{hotspot_start_col_letter}2"] = "HOTSPOT"
+
+# Update the headers in row 3 to show only the category names
 for col_idx, col_name in enumerate(pivot_df.columns, start=1):
     if col_name != "project":
         if col_name == "Total":
-            ws.cell(row=2, column=col_idx).value = "Total"
+            ws.cell(row=3, column=col_idx).value = "Total"
         else:
-            category = col_name.split("_")[1]  # Extract the category (e.g., BLOCKER)
-            ws.cell(row=2, column=col_idx).value = category
+            category = col_name.split("_")[-1]  # Extract the category (e.g., BLOCKER)
+            ws.cell(row=3, column=col_idx).value = category
 
-# Apply alignments and color formatting
-light_green_fill = PatternFill(start_color="90EE90", end_color="90EE90", fill_type="solid")
-
-for row in range(3, ws.max_row + 1):  # Start from row 3 (data rows)
+# Apply alignments
+for row in range(4, ws.max_row + 1):  # Start from row 4 (data rows)
     for col in range(1, ws.max_column + 1):
         cell = ws.cell(row=row, column=col)
         # Center-align all cells except the project column
@@ -217,9 +227,6 @@ for row in range(3, ws.max_row + 1):  # Start from row 3 (data rows)
             cell.alignment = Alignment(horizontal="left", vertical="center")
         else:
             cell.alignment = Alignment(horizontal="center", vertical="center")
-            # Highlight cells with value 0 in light green
-            if isinstance(cell.value, (int, float)) and cell.value == 0:
-                cell.fill = light_green_fill
 
 # Save the modified Excel file
 wb.save("Final.xlsx")
