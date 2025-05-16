@@ -169,48 +169,47 @@ if os.path.exists("Final.xlsx"):
 else:
     existing_projects = set()
 
-# Initialize the pivot table structure
+# Initialize the pivot table structure (only for the current date)
 pivot_data = []
-new_projects = unique_projects - existing_projects  # Identify new projects
 all_projects = unique_projects.union(existing_projects)
 
 for project in all_projects:
     row = {"project": project}
     
-    # For each date, calculate counts
+    # For each date, add data
     for date in dates:
-        # Only calculate counts for the current date if the project is new
-        if project in new_projects and date != current_date_str:
+        # Only calculate counts for the current date
+        if date == current_date_str:
+            # Filter vulnerabilities and hotspots for the project
+            vuln_filtered = vulnerabilities_df[vulnerabilities_df["project"] == project]
+            hotspot_filtered = hotspots_df[hotspots_df["project"] == project]
+
+            # Add vulnerability counts
+            for category in vuln_categories:
+                count = len(vuln_filtered[vuln_filtered["severity"] == category])
+                row[f"{date}_VULNERABILITY_{category}"] = count if count > 0 else None
+
+            # Add hotspot counts
+            for category in hotspot_categories:
+                count = len(hotspot_filtered[hotspot_filtered["vulnerabilityProbability"] == category])
+                row[f"{date}_HOTSPOT_{category}"] = count if count > 0 else None
+
+            # Add total for this date
+            total = 0
+            for category in vuln_categories:
+                count = row.get(f"{date}_VULNERABILITY_{category}", 0)
+                total += count if count is not None else 0
+            for category in hotspot_categories:
+                count = row.get(f"{date}_HOTSPOT_{category}", 0)
+                total += count if count is not None else 0
+            row[f"{date}_Total"] = total if total > 0 else None
+        else:
+            # For previous dates, leave the columns blank in pivot_data (they'll be filled from existing_df)
             for category in vuln_categories:
                 row[f"{date}_VULNERABILITY_{category}"] = None
             for category in hotspot_categories:
                 row[f"{date}_HOTSPOT_{category}"] = None
             row[f"{date}_Total"] = None
-            continue
-
-        # Filter vulnerabilities and hotspots for the project
-        vuln_filtered = vulnerabilities_df[vulnerabilities_df["project"] == project]
-        hotspot_filtered = hotspots_df[hotspots_df["project"] == project]
-
-        # Add vulnerability counts
-        for category in vuln_categories:
-            count = len(vuln_filtered[vuln_filtered["severity"] == category])
-            row[f"{date}_VULNERABILITY_{category}"] = count if count > 0 else None
-
-        # Add hotspot counts
-        for category in hotspot_categories:
-            count = len(hotspot_filtered[hotspot_filtered["vulnerabilityProbability"] == category])
-            row[f"{date}_HOTSPOT_{category}"] = count if count > 0 else None
-
-        # Add total for this date
-        total = 0
-        for category in vuln_categories:
-            count = row.get(f"{date}_VULNERABILITY_{category}", 0)
-            total += count if count is not None else 0
-        for category in hotspot_categories:
-            count = row.get(f"{date}_HOTSPOT_{category}", 0)
-            total += count if count is not None else 0
-        row[f"{date}_Total"] = total if total > 0 else None
 
     pivot_data.append(row)
 
@@ -237,6 +236,7 @@ if os.path.exists("Final.xlsx"):
     existing_df = existing_df[existing_df["project"] != "Total"]
     
     # Merge with new data (update existing projects, add new ones)
+    # combine_first will preserve existing_df values where pivot_df has None
     combined_df = existing_df.set_index("project").combine_first(pivot_df.set_index("project")).reset_index()
     # Ensure we're working with a fresh copy to avoid SettingWithCopyWarning
     pivot_df = combined_df[columns_order].copy()
