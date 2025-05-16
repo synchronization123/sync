@@ -106,28 +106,37 @@ if os.path.exists("Final.xlsx"):
     for col in range(2, ws.max_column + 1, total_cols_per_date):  # Start from column B, step by 10 columns
         date_cell = ws.cell(row=1, column=col).value
         if date_cell:
-            existing_dates.add(date_cell)
+            # Convert datetime objects to strings in the same format
+            if isinstance(date_cell, datetime):
+                date_str = date_cell.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
+                existing_dates.add(date_str)
+            else:
+                existing_dates.add(str(date_cell))
     wb.close()
 
-    # Load the data with pandas, using row 3 (index 2) as the header
-    existing_df = pd.read_excel("Final.xlsx", header=2)
-    
-    # Rename the first column to "project" (it might be "Unnamed: 0" due to the empty cell in row 1, column A)
-    existing_df.columns = ["project"] + list(existing_df.columns[1:])
-    
-    # Extract existing projects, excluding "Total" row
-    existing_projects = set(existing_df["project"].values)
-    if "Total" in existing_projects:
-        existing_projects.remove("Total")
-    
     dates = list(existing_dates) + [current_date_str]
 else:
     # If Final.xlsx doesn't exist, use only the current date
     dates = [current_date_str]
     existing_projects = set()
 
-# Remove duplicates and sort dates
+# Remove duplicates and sort dates (all elements are now strings)
 dates = sorted(list(set(dates)))
+
+# Load existing projects
+if os.path.exists("Final.xlsx"):
+    # Load the data with pandas, using row 3 (index 2) as the header
+    existing_df = pd.read_excel("Final.xlsx", header=2)
+    
+    # Rename the first column to "project"
+    existing_df.columns = ["project"] + list(existing_df.columns[1:])
+    
+    # Extract existing projects, excluding "Total" row
+    existing_projects = set(existing_df["project"].values)
+    if "Total" in existing_projects:
+        existing_projects.remove("Total")
+else:
+    existing_projects = set()
 
 # Initialize the pivot table structure
 pivot_data = []
