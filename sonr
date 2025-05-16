@@ -35,46 +35,77 @@ for component in projects_data.get("components", []):
 projects_df = pd.DataFrame(projects_list)
 projects_df.to_excel("Projects.xlsx", index=False)
 
-# Step 3: Fetch vulnerabilities for each project and save to Vulnerabilities.xlsx
+# Step 3: Fetch vulnerabilities for each project with pagination and save to Vulnerabilities.xlsx
 vulnerabilities_list = []
 for key in projects_df["key"]:
-    vuln_url = f"https://sonar.crm.com/api/issues/search?componentKeys={key}&types=VULNERABILITY&resolved=false&statuses=OPEN"
-    response = requests.get(vuln_url, headers=headers)
-    vuln_data = response.json()
+    page = 1
+    while True:
+        vuln_url = f"https://sonar.crm.com/api/issues/search?componentKeys={key}&types=VULNERABILITY&resolved=false&statuses=OPEN&p={page}"
+        response = requests.get(vuln_url, headers=headers)
+        vuln_data = response.json()
 
-    for issue in vuln_data.get("issues", []):
-        vulnerabilities_list.append({
-            "key": issue["key"],
-            "severity": issue.get("severity", ""),
-            "component": issue.get("component", ""),
-            "project": issue.get("project", ""),
-            "line": issue.get("line", ""),
-            "status": issue.get("status", ""),
-            "message": issue.get("message", "")
-        })
+        # Extract issues from the current page
+        issues = vuln_data.get("issues", [])
+        for issue in issues:
+            vulnerabilities_list.append({
+                "key": issue["key"],
+                "severity": issue.get("severity", ""),
+                "component": issue.get("component", ""),
+                "project": issue.get("project", ""),
+                "line": issue.get("line", ""),
+                "status": issue.get("status", ""),
+                "message": issue.get("message", "")
+            })
+
+        # Check pagination metadata to determine if there are more pages
+        total = vuln_data.get("total", 0)
+        page_size = vuln_data.get("ps", 100)  # Default page size is typically 100
+        current_page = vuln_data.get("p", 1)
+
+        # If the current page has fewer issues than the page size, or we've fetched all issues, break
+        if len(issues) < page_size or (current_page * page_size) >= total:
+            break
+
+        page += 1
 
 # Save to Vulnerabilities.xlsx
 vulnerabilities_df = pd.DataFrame(vulnerabilities_list)
 vulnerabilities_df.to_excel("Vulnerabilities.xlsx", index=False)
 
-# Step 4: Fetch hotspots for each project and save to Hotspots.xlsx
+# Step 4: Fetch hotspots for each project with pagination and save to Hotspots.xlsx
 hotspots_list = []
 for key in projects_df["key"]:
-    hotspot_url = f"https://sonar.crm.com/api/hotspots/search?projectKey={key}&status=TO_REVIEW"
-    response = requests.get(hotspot_url, headers=headers)
-    hotspot_data = response.json()
+    page = 1
+    while True:
+        hotspot_url = f"https://sonar.crm.com/api/hotspots/search?projectKey={key}&status=TO_REVIEW&p={page}"
+        response = requests.get(hotspot_url, headers=headers)
+        hotspot_data = response.json()
 
-    for hotspot in hotspot_data.get("hotspots", []):
-        hotspots_list.append({
-            "key": hotspot["key"],
-            "component": hotspot.get("component", ""),
-            "project": hotspot.get("project", ""),
-            "securityCategory": hotspot.get("securityCategory", ""),
-            "vulnerabilityProbability": hotspot.get("vulnerabilityProbability", ""),
-            "status": hotspot.get("status", ""),
-            "line": hotspot.get("line", ""),
-            "message": hotspot.get("message", "")
-        })
+        # Extract hotspots from the current page
+        hotspots = hotspot_data.get("hotspots", [])
+        for hotspot in hotspots:
+            hotspots_list.append({
+                "key": hotspot["key"],
+                "component": hotspot.get("component", ""),
+                "project": hotspot.get("project", ""),
+                "securityCategory": hotspot.get("securityCategory", ""),
+                "vulnerabilityProbability": hotspot.get("vulnerabilityProbability", ""),
+                "status": hotspot.get("status", ""),
+                "line": hotspot.get("line", ""),
+                "message": hotspot.get("message", "")
+            })
+
+        # Check pagination metadata to determine if there are more pages
+        paging = hotspot_data.get("paging", {})
+        total = paging.get("total", 0)
+        page_size = paging.get("pageSize", 100)  # Default page size is typically 100
+        current_page = paging.get("pageIndex", 1)
+
+        # If the current page has fewer hotspots than the page size, or we've fetched all hotspots, break
+        if len(hotspots) < page_size or (current_page * page_size) >= total:
+            break
+
+        page += 1
 
 # Save to Hotspots.xlsx
 hotspots_df = pd.DataFrame(hotspots_list)
