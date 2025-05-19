@@ -1,0 +1,90 @@
+import requests
+import json
+from collections import defaultdict
+
+# API endpoint and authentication
+BASE_URL = "https://dojo.crm.com/api/v2/tests/"
+TOKEN = "jdjdjdjdjd"
+HEADERS = {
+    "Authorization": f"Token {TOKEN}",
+    "Content-Type": "application/json"
+}
+PARAMS = {
+    "engagement": 1234,
+    "tags": "mcr_jira",
+    "limit": 1000
+}
+
+def fetch_tests():
+    """Fetch tests from the API."""
+    try:
+        response = requests.get(BASE_URL, headers=HEADERS, params=PARAMS)
+        response.raise_for_status()
+        return response.json().get('results', [])
+    except requests.RequestException as e:
+        print(f"Error fetching tests: {e}")
+        return []
+
+def find_duplicates(tests):
+    """Identify duplicate tests by title."""
+    title_to_tests = defaultdict(list)
+    for test in tests:
+        title = test.get('title')
+        if title:
+            title_to_tests[title].append(test)
+    
+    # Keep only the latest test (highest ID) for each title
+    duplicates_to_delete = []
+    for title, test_list in title_to_tests.items():
+        if len(test_list) > 1:
+            # Sort by ID descending to keep the latest
+            sorted_tests = sorted(test_list, key=lambda x: x.get('id', 0), reverse=True)
+            # Add all but the first (latest) to delete list
+            duplicates_to_delete.extend(sorted_tests[1:])
+    
+    return duplicates_to_delete
+
+def delete_test(test_id):
+    """Delete a test by ID."""
+    try:
+        url = f"{BASE_URL}{test_id}/"
+        response = requests.delete(url, headers=HEADERS)
+        if response.status_code == 204:
+            print(f"Successfully deleted test ID {test_id}")
+            return True
+        else:
+            print(f"Failed to delete test ID {test_id}: {response.status_code}")
+            return False
+    except requests.RequestException as e:
+        print(f"Error deleting test ID {test_id}: {e}")
+        return False
+
+def main():
+    # Fetch tests
+    print("Fetching tests...")
+    tests = fetch_tests()
+    if not tests:
+        print("No tests found or error occurred.")
+        return
+    
+    print(f"Found {len(tests)} tests.")
+    
+    # Find duplicates
+    duplicates = find_duplicates(tests)
+    if not duplicates:
+        print("No duplicate tests found.")
+        return
+    
+    print(f"Found {len(duplicates)} duplicate tests to delete.")
+    
+    # Delete duplicates
+    deleted_count = 0
+    for test in duplicates:
+        test_id = test.get('id')
+        if test_id and delete_test(test_id):
+            deleted_count += 1
+    
+    print(f"Deletion complete. Deleted {deleted_count} duplicate tests.")
+
+if __name__ == "__main__":
+    main()
