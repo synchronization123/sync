@@ -1,0 +1,109 @@
+function renderTestTable() {
+  const tableBody = document.getElementById("engagementTableBody");
+  const start = (jiraCurrentPage - 1) * jiraPageSize;
+  const pagedData = filteredJiraTests.slice(start, start + jiraPageSize);
+
+  tableBody.innerHTML = pagedData.map(t => `
+    <tr>
+      <td>${t.id}</td>
+      <td>${t.title || ''}</td>
+      <td>${t.description || ''}</td>
+      <td>${t.build_id || ''}</td>
+      <td>${t.commit_hash || ''}</td>
+      <td>${t.branch_tag || ''}</td>
+      <td>${engagementsMap.get(t.engagement) || 'Unknown'}</td>
+      <td>${t.lead_name || 'Unassigned'}</td>
+    </tr>
+  `).join('');
+}
+
+
+
+
+
+
+
+async function fetchTestsAndEngagements() {
+  loadingModal.show();
+  try {
+    // Fetch tests
+    const testRes = await fetch(`https://dojo.defectdojo.org/api/v2/tests/?limit=10000`);
+    const testData = await testRes.json();
+    jiraTests = testData.results;
+
+    // Fetch engagements for dropdown (filtered by tags=vapt)
+    const engRes = await fetch(`https://dojo.defectdojo.org/api/v2/engagements/?tags=vapt&limit=1000`);
+    const engData = await engRes.json();
+    engagementsMap = new Map(engData.results.map(e => [e.id, e.name]));
+
+    await enrichJiraWithLeadNames(jiraTests);
+    filteredJiraTests = [...jiraTests];
+
+    populateEngagementDropdown(engData.results);
+    renderTestTable();
+  } catch (err) {
+    console.error(err);
+    showToast('Failed to fetch data', 'error');
+  } finally {
+    loadingModal.hide();
+  }
+}
+
+
+
+
+
+<div class="filter-item">
+  <label class="filter-label" for="engagementFilter">Engagement</label>
+  <select class="form-select form-select-sm filter-input searchable-select" id="engagementFilter">
+    <option value="">All</option>
+  </select>
+</div>
+
+
+function populateEngagementDropdown(engagements) {
+  const dropdown = document.getElementById('engagementFilter');
+  dropdown.innerHTML = '<option value="">All</option>';
+  engagements.forEach(e => {
+    const option = document.createElement('option');
+    option.value = e.id;
+    option.textContent = `${e.id} - ${e.name}`;
+    dropdown.appendChild(option);
+  });
+
+  $('#engagementFilter').select2({
+    theme: 'bootstrap-5',
+    width: '100%',
+    placeholder: 'Select engagement',
+    allowClear: true
+  });
+}
+
+
+
+function applyJiraFilters() {
+  const engagementFilter = document.getElementById('engagementFilter').value;
+  // existing filters...
+
+  filteredJiraTests = jiraTests.filter(t => {
+    if (engagementFilter && String(t.engagement) !== engagementFilter) return false;
+    // other filters...
+    return true;
+  });
+
+  jiraCurrentPage = 1;
+  renderTestTable();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
