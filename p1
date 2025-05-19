@@ -1,67 +1,51 @@
-// Cache product names to avoid repeated API calls
-let productNameMap = {};
-
-async function fetchProductNames() {
-  if (Object.keys(productNameMap).length === 0) {
-    const response = await fetch('/api/v2/products');
-    const data = await response.json();
-    productNameMap = Object.fromEntries(data.results.map(p => [p.id, p.name]));
-  }
-}
+Need filter for Product (to display name instead of id), just like we have filter for lead displaying first_name last_name           
+so create similar things with similar type names productFilter
 
 
+		  
+		  <div class="filter-item">
+            <label class="filter-label" for="assignedToFilter">Assigned To</label>
+            <select class="form-select form-select-sm filter-input searchable-select" id="assignedToFilter">
+              <option value="">All</option>
+            </select>
+          </div>
+		  
+		  
+		  
+		  
+		  
+		  
+		  
+		      function populateFilterDropdowns() {
+      $('#assignedToFilter, #createdByFilter').select2('destroy');
+      
+      const assignedToSet = new Set(allEngagements.map(e => e.lead_name).filter(Boolean).sort());
+      const assignedToFilter = document.getElementById('assignedToFilter');
+      assignedToFilter.innerHTML = '<option value="">All</option>';
+      assignedToSet.forEach(name => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        assignedToFilter.appendChild(option);
+      });
+	  
+	  
+	  
+	  
+	  
+	   async function enrichWithLeadNames(engagements) {
+      const leadIds = [...new Set(engagements.map(e => e.lead).filter(Boolean))];
+      const leadMap = {};
 
+      await Promise.all(leadIds.map(async id => {
+        const res = await fetch(`https://appsecvm.ecwcloud.com/api/v2/users/${id}/`);
+        if (res.ok) {
+          const data = await res.json();
+          leadMap[id] = `${data.first_name} ${data.last_name}`;
+        }
+      }));
 
-
-
-
-async function renderTable() {
-  await fetchProductNames(); // Ensure productNameMap is populated
-
-  const start = (currentPage - 1) * pageSize;
-  const pagedData = filteredEngagements.slice(start, start + pageSize);
-  const today = new Date();
-  const totalPages = Math.ceil(filteredEngagements.length / pageSize);
-
-  // Fetch Jira data for all engagements in parallel
-  const jiraDataPromises = pagedData.map(e => fetchJiraData(e.id));
-  const jiraDataArray = await Promise.all(jiraDataPromises);
-
-  tableBody.innerHTML = pagedData.map((e, index) => {
-    const created = new Date(e.created);
-    const aging = Math.floor((today - created) / (1000 * 60 * 60 * 24));
-    const appSecETA = e.target_start ? e.target_start.slice(0, 10) : '';
-    const rmETA = e.target_end ? e.target_end.slice(0, 10) : '';
-    const appSecClass = getHighlightClass(appSecETA);
-    const rmClass = getHighlightClass(rmETA);
-    const jiraData = jiraDataArray[index];
-
-    const productName = productNameMap[e.product] || '';
-
-    return `
-      <tr>
-        <td>${e.id}</td>
-        <td>${aging} days</td>
-        <td>${e.name}</td>
-        <td>${jiraData.total}</td>
-        <td>${jiraData.security}</td>
-        <td>${jiraData.functional}</td>
-        <td>${jiraData.doable}</td>
-        <td>${jiraData.nonDoable}</td>
-        <td>${e.lead_name}</td>
-        <td>${productName}</td>
-        <td class="${appSecClass}">${appSecETA}</td>
-        <td class="${rmClass}">${rmETA}</td>
-        <td>${e.status}</td>
-        <td>${e.branch_tag || ''}</td>
-        <td>${e.commit_hash || ''}</td>
-        <td>${e.version || ''}</td>
-        <td>
-          <button class="btn btn-sm btn-success edit-btn" data-id="${e.id}" title="Edit"><i class="bi bi-pencil-square"></i></button>
-          <button class="btn btn-sm btn-danger close-btn" data-id="${e.id}" title="Close"><i class="bi bi-x-circle"></i></button>
-          <button class="btn btn-sm btn-info jira-btn" data-id="${e.id}" title="Jira"><i class="bi bi-ticket-detailed"></i></button>
-        </td>
-      </tr>
-    `;
-  }).join('');
-}
+      engagements.forEach(e => {
+        e.lead_name = leadMap[e.lead] || 'Unassigned';
+      });
+    }
