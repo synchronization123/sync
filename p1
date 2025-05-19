@@ -1,51 +1,43 @@
-Need filter for Product (to display name instead of id), just like we have filter for lead displaying first_name last_name           
-so create similar things with similar type names productFilter
+<div class="filter-item">
+  <label class="filter-label" for="productFilter">Product</label>
+  <select class="form-select form-select-sm filter-input searchable-select" id="productFilter">
+    <option value="">All</option>
+  </select>
+</div>
 
 
-		  
-		  <div class="filter-item">
-            <label class="filter-label" for="assignedToFilter">Assigned To</label>
-            <select class="form-select form-select-sm filter-input searchable-select" id="assignedToFilter">
-              <option value="">All</option>
-            </select>
-          </div>
-		  
-		  
-		  
-		  
-		  
-		  
-		  
-		      function populateFilterDropdowns() {
-      $('#assignedToFilter, #createdByFilter').select2('destroy');
-      
-      const assignedToSet = new Set(allEngagements.map(e => e.lead_name).filter(Boolean).sort());
-      const assignedToFilter = document.getElementById('assignedToFilter');
-      assignedToFilter.innerHTML = '<option value="">All</option>';
-      assignedToSet.forEach(name => {
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-        assignedToFilter.appendChild(option);
-      });
-	  
-	  
-	  
-	  
-	  
-	   async function enrichWithLeadNames(engagements) {
-      const leadIds = [...new Set(engagements.map(e => e.lead).filter(Boolean))];
-      const leadMap = {};
 
-      await Promise.all(leadIds.map(async id => {
-        const res = await fetch(`https://appsecvm.ecwcloud.com/api/v2/users/${id}/`);
-        if (res.ok) {
-          const data = await res.json();
-          leadMap[id] = `${data.first_name} ${data.last_name}`;
-        }
-      }));
 
-      engagements.forEach(e => {
-        e.lead_name = leadMap[e.lead] || 'Unassigned';
-      });
-    }
+
+async function populateFilterDropdowns() {
+  $('#assignedToFilter, #createdByFilter, #productFilter').select2('destroy');
+
+  // Assigned To
+  const assignedToSet = new Set(allEngagements.map(e => e.lead_name).filter(Boolean).sort());
+  const assignedToFilter = document.getElementById('assignedToFilter');
+  assignedToFilter.innerHTML = '<option value="">All</option>';
+  assignedToSet.forEach(name => {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    assignedToFilter.appendChild(option);
+  });
+
+  // Product Filter
+  await fetchProductNames(); // Ensure map is populated
+  const productSet = new Set(allEngagements.map(e => productNameMap[e.product]).filter(Boolean).sort());
+  const productFilter = document.getElementById('productFilter');
+  productFilter.innerHTML = '<option value="">All</option>';
+  productSet.forEach(name => {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    productFilter.appendChild(option);
+  });
+
+  $('#assignedToFilter, #createdByFilter, #productFilter').select2({
+    theme: 'bootstrap-5',
+    width: '100%'
+  });
+}
+
