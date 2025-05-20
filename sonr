@@ -379,6 +379,14 @@ class SonarQubeDataProcessor:
         print("Data downloaded, pivot table created, and formatting applied successfully!")
 
 if __name__ == "__main__":
+    # Delete Final.xlsx if it exists
+    if os.path.exists("Final.xlsx"):
+        try:
+            os.remove("Final.xlsx")
+            print("Existing Final.xlsx deleted successfully.")
+        except Exception as e:
+            print(f"Error deleting Final.xlsx: {e}")
+
     processor = SonarQubeDataProcessor(sonartoken="gdjdjdjdjdjrjjrjd")
     projects_df = processor.fetch_projects()
     vulnerabilities_df = processor.fetch_vulnerabilities(projects_df)
