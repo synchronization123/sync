@@ -184,9 +184,11 @@ class SonarQubeDataProcessor:
         else:
             existing_projects = set()
 
-        pivot_data = []
-        all_projects = unique_projects.union(existing_projects)
+        # Exclude specific projects from all_projects
+        excluded_projects = {"srm_ghiop", "Dev_hjiop"}
+        all_projects = unique_projects.union(existing_projects) - excluded_projects
 
+        pivot_data = []
         for project in all_projects:
             row = {"project": project}
             vuln_filtered = vulnerabilities_df[vulnerabilities_df["project"] == project]
@@ -216,6 +218,7 @@ class SonarQubeDataProcessor:
         if os.path.exists("Final.xlsx"):
             existing_df = pd.read_excel("Final.xlsx", header=2)
             existing_df.columns = ["project"] + list(existing_df.columns[1:])
+            existing_df = existing_df[~existing_df["project"].isin(excluded_projects)]  # Exclude projects from existing data
             existing_df = existing_df[existing_df["project"] != "Total"]
             combined_df = existing_df.set_index("project").combine_first(pivot_df.set_index("project")).reset_index()
             pivot_df = combined_df.copy()
