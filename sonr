@@ -9,8 +9,10 @@ import os
 import json
 
 class SonarQubeDataProcessor:
-    def __init__(self, sonartoken):
+    def __init__(self, sonartoken, sonar_url, sonartoken_2=None, sonar_url_2=None):
+        # First SonarQube instance
         self.sonartoken = sonartoken
+        self.sonar_url = sonar_url
         self.auth_string = f"{sonartoken}:"
         self.auth_encoded = base64.b64encode(self.auth_string.encode()).decode()
         self.headers = {
@@ -19,9 +21,23 @@ class SonarQubeDataProcessor:
             "Content-Type": "application/json"
         }
 
-    def fetch_projects(self):
-        project_url = "https://sonar.crm.com/api/components/search?qualifiers=TRK&ps=500"
-        response = requests.get(project_url, headers=self.headers)
+        # Second SonarQube instance (optional)
+        self.sonartoken_2 = sonartoken_2
+        self.sonar_url_2 = sonar_url_2
+        if sonartoken_2 and sonar_url_2:
+            self.auth_string_2 = f"{sonartoken_2}:"
+            self.auth_encoded_2 = base64.b64encode(self.auth_string_2.encode()).decode()
+            self.headers_2 = {
+                "Authorization": f"Basic {self.auth_encoded_2}",
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            }
+        else:
+            self.headers_2 = None
+
+    def fetch_projects(self, url, headers, output_file="Projects.xlsx"):
+        project_url = f"{url}/api/components/search?qualifiers=TRK&ps=500"
+        response = requests.get(project_url, headers=headers)
         projects_data = response.json()
 
         projects_list = []
@@ -33,16 +49,16 @@ class SonarQubeDataProcessor:
             })
 
         projects_df = pd.DataFrame(projects_list)
-        projects_df.to_excel("Projects.xlsx", index=False)
+        projects_df.to_excel(output_file, index=False)
         return projects_df
 
-    def fetch_vulnerabilities(self, projects_df):
+    def fetch_vulnerabilities(self, projects_df, url, headers, output_file="Vulnerabilities.xlsx"):
         vulnerabilities_list = []
         for key in projects_df["key"]:
             page = 1
             while True:
-                vuln_url = f"https://sonar.crm.com/api/issues/search?componentKeys={key}&types=VULNERABILITY&resolved=false&statuses=OPEN&p={page}"
-                response = requests.get(vuln_url, headers=self.headers)
+                vuln_url = f"{url}/api/issues/search?componentKeys={key}&types=VULNERABILITY&resolved=false&statuses=OPEN&p={page}"
+                response = requests.get(vuln_url, headers=headers)
                 vuln_data = response.json()
 
                 issues = vuln_data.get("issues", [])
@@ -67,16 +83,16 @@ class SonarQubeDataProcessor:
                 page += 1
 
         vulnerabilities_df = pd.DataFrame(vulnerabilities_list)
-        vulnerabilities_df.to_excel("Vulnerabilities.xlsx", index=False)
+        vulnerabilities_df.to_excel(output_file, index=False)
         return vulnerabilities_df
 
-    def fetch_hotspots(self, projects_df):
+    def fetch_hotspots(self, projects_df, url, headers, output_file="Hotspots.xlsx"):
         hotspots_list = []
         for key in projects_df["key"]:
             page = 1
             while True:
-                hotspot_url = f"https://sonar.crm.com/api/hotspots/search?projectKey={key}&status=TO_REVIEW&p={page}"
-                response = requests.get(hotspot_url, headers=self.headers)
+                hotspot_url = f"{url}/api/hotspots/search?projectKey={key}&status=TO_REVIEW&p={page}"
+                response = requests.get(hotspot_url, headers=headers)
                 hotspot_data = response.json()
 
                 hotspots = hotspot_data.get("hotspots", [])
@@ -103,11 +119,14 @@ class SonarQubeDataProcessor:
                 page += 1
 
         hotspots_df = pd.DataFrame(hotspots_list)
-        hotspots_df.to_excel("Hotspots.xlsx", index=False)
+        hotspots_df.to_excel(output_file, index=False)
         return hotspots_df
 
-    def create_pivot_table(self, vulnerabilities_df, hotspots_df):
+    def create_pivot_table(self, vulnerabilities_df, hotspots_df, vulnerabilities_df_2=None, hotspots_df_2=None):
         unique_projects = set(vulnerabilities_df["project"]).union(set(hotspots_df["project"]))
+        if vulnerabilities_df_2 is not None and hotspots_df_2 is not None:
+            unique_projects = unique_projects.union(set(vulnerabilities_df_2["project"])).union(set(hotspots_df_2["project"]))
+        
         current_date = datetime.now()
         current_date_str = current_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
 
@@ -184,7 +203,7 @@ class SonarQubeDataProcessor:
         else:
             existing_projects = set()
 
-        # Exclude specific projects from all_projects
+        # Exclude specific projects from first SonarQube instance
         excluded_projects = {"srm_ghiop", "Dev_hjiop"}
         all_projects = unique_projects.union(existing_projects) - excluded_projects
 
@@ -193,14 +212,20 @@ class SonarQubeDataProcessor:
             row = {"project": project}
             vuln_filtered = vulnerabilities_df[vulnerabilities_df["project"] == project]
             hotspot_filtered = hotspots_df[hotspots_df["project"] == project]
+            vuln_filtered_2 = pd.DataFrame() if vulnerabilities_df_2 is None else vulnerabilities_df_2[vulnerabilities_df_2["project"] == project]
+            hotspot_filtered_2 = pd.DataFrame() if hotspots_df_2 is None else hotspots_df_2[hotspots_df_2["project"] == project]
 
             for category in vuln_categories:
                 count = len(vuln_filtered[vuln_filtered["severity"] == category])
-                row[f"{current_date_str}_VULNERABILITY_{category}"] = count if count > 0 else None
+                count_2 = len(vuln_filtered_2[vuln_filtered_2["severity"] == category]) if not vuln_filtered_2.empty else 0
+                total_count = count + count_2
+                row[f"{current_date_str}_VULNERABILITY_{category}"] = total_count if total_count > 0 else None
 
             for category in hotspot_categories:
                 count = len(hotspot_filtered[hotspot_filtered["vulnerabilityProbability"] == category])
-                row[f"{current_date_str}_HOTSPOT_{category}"] = count if count > 0 else None
+                count_2 = len(hotspot_filtered_2[hotspot_filtered_2["vulnerabilityProbability"] == category]) if not hotspot_filtered_2.empty else 0
+                total_count = count + count_2
+                row[f"{current_date_str}_HOTSPOT_{category}"] = total_count if total_count > 0 else None
 
             total = 0
             for category in vuln_categories:
@@ -211,14 +236,16 @@ class SonarQubeDataProcessor:
                 total += count if count is not None else 0
             row[f"{current_date_str}_Total"] = total if total > 0 else None
 
-            pivot_data.append(row)
+            if any(row.get(f"{current_date_str}_VULNERABILITY_{category}", 0) for category in vuln_categories) or \
+               any(row.get(f"{current_date_str}_HOTSPOT_{category}", 0) for category in hotspot_categories):
+                pivot_data.append(row)
 
         pivot_df = pd.DataFrame(pivot_data)
 
         if os.path.exists("Final.xlsx"):
             existing_df = pd.read_excel("Final.xlsx", header=2)
             existing_df.columns = ["project"] + list(existing_df.columns[1:])
-            existing_df = existing_df[~existing_df["project"].isin(excluded_projects)]  # Exclude projects from existing data
+            existing_df = existing_df[~existing_df["project"].isin(excluded_projects)]
             existing_df = existing_df[existing_df["project"] != "Total"]
             combined_df = existing_df.set_index("project").combine_first(pivot_df.set_index("project")).reset_index()
             pivot_df = combined_df.copy()
@@ -230,11 +257,19 @@ class SonarQubeDataProcessor:
             columns_order.append(f"{date}_Total")
         pivot_df = pivot_df[columns_order]
 
-        total_row = {"project": "Total"}
+        # Add total row only if there's non-zero data
+        has_non_zero_data = False
         for col in pivot_df.columns[1:]:
-            total_row[col] = pivot_df[col].sum()
-        total_df = pd.DataFrame([total_row])
-        pivot_df = pd.concat([pivot_df, total_df], ignore_index=True)
+            if pivot_df[col].sum() > 0:
+                has_non_zero_data = True
+                break
+
+        if has_non_zero_data:
+            total_row = {"project": "Total"}
+            for col in pivot_df.columns[1:]:
+                total_row[col] = pivot_df[col].sum()
+            total_df = pd.DataFrame([total_row])
+            pivot_df = pd.concat([pivot_df, total_df], ignore_index=True)
 
         with pd.ExcelWriter("Final.xlsx", engine="openpyxl") as writer:
             pivot_df.to_excel(writer, index=False, startrow=2)
@@ -304,7 +339,7 @@ class SonarQubeDataProcessor:
                     category = col_name.split("_")[-1]
                     cell.value = category
             else:
-                cell.value = "project"  # Explicitly set the header
+                cell.value = "project"
             cell.border = thin_border
 
         for row in range(4, ws.max_row + 1):
@@ -315,7 +350,7 @@ class SonarQubeDataProcessor:
                 else:
                     cell.alignment = Alignment(horizontal="center", vertical="center")
                 cell.border = thin_border
-                if row == ws.max_row:
+                if row == ws.max_row and has_non_zero_data:
                     cell.font = Font(bold=True)
 
         for i, date in enumerate(dates):
@@ -345,7 +380,7 @@ class SonarQubeDataProcessor:
                             top=Side(style="medium"),
                             bottom=cell.border.bottom
                         )
-                if row == ws.max_row:
+                if row == ws.max_row and has_non_zero_data:
                     for col in range(start_col, end_col + 1):
                         cell = ws.cell(row=row, column=col)
                         cell.border = Border(
@@ -370,7 +405,7 @@ class SonarQubeDataProcessor:
                     top=Side(style="medium"),
                     bottom=cell.border.bottom
                 )
-            if row == ws.max_row:
+            if row == ws.max_row and has_non_zero_data:
                 cell.border = Border(
                     left=cell.border.left,
                     right=cell.border.right,
@@ -390,8 +425,30 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Error deleting Final.xlsx: {e}")
 
-    processor = SonarQubeDataProcessor(sonartoken="gdjdjdjdjdjrjjrjd")
-    projects_df = processor.fetch_projects()
-    vulnerabilities_df = processor.fetch_vulnerabilities(projects_df)
-    hotspots_df = processor.fetch_hotspots(projects_df)
-    processor.create_pivot_table(vulnerabilities_df, hotspots_df)
+    # Initialize processor with both SonarQube instances
+    processor = SonarQubeDataProcessor(
+        sonartoken="gdjdjdjdjdjrjjrjd",
+        sonar_url="https://sonar.crm.com",
+        sonartoken_2="hdklelekeke",
+        sonar_url_2="https://sonar.crm_1.com"
+    )
+
+    # Fetch projects from first SonarQube instance
+    projects_df = processor.fetch_projects(processor.sonar_url, processor.headers, "Projects.xlsx")
+    
+    # Fetch vulnerabilities and hotspots from first SonarQube instance
+    vulnerabilities_df = processor.fetch_vulnerabilities(projects_df, processor.sonar_url, processor.headers, "Vulnerabilities.xlsx")
+    hotspots_df = processor.fetch_hotspots(projects_df, processor.sonar_url, processor.headers, "Hotspots.xlsx")
+
+    # Fetch projects from second SonarQube instance, limited to specified projects
+    allowed_projects = ["crm_1_develop", "crm_18", "gui_ty"]
+    projects_df_2 = processor.fetch_projects(processor.sonar_url_2, processor.headers_2, "Projects_1.xlsx")
+    projects_df_2 = projects_df_2[projects_df_2["project"].isin(allowed_projects)]
+    projects_df_2.to_excel("Projects_1.xlsx", index=False)
+
+    # Fetch vulnerabilities and hotspots from second SonarQube instance for allowed projects
+    vulnerabilities_df_2 = processor.fetch_vulnerabilities(projects_df_2, processor.sonar_url_2, processor.headers_2, "Vulnerabilities_1.xlsx")
+    hotspots_df_2 = processor.fetch_hotspots(projects_df_2, processor.sonar_url_2, processor.headers_2, "Hotspots_1.xlsx")
+
+    # Create pivot table combining data from both instances
+    processor.create_pivot_table(vulnerabilities_df, hotspots_df, vulnerabilities_df_2, hotspots_df_2)
