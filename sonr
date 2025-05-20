@@ -117,7 +117,7 @@ unique_projects = set(vulnerabilities_df["project"]).union(set(hotspots_df["proj
 
 # Dynamically get the current date
 current_date = datetime.now()
-current_date_str = current_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
+current_date_str = current_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")  # e.g., "20-May-25"
 
 # Define categories for vulnerabilities and hotspots separately
 vuln_categories = ["BLOCKER", "CRITICAL", "MAJOR", "MINOR", "INFO"]
@@ -137,19 +137,28 @@ if os.path.exists("Final.xlsx"):
     for col in range(2, ws.max_column + 1, total_cols_per_date):  # Start from column B, step by 11 columns
         date_cell = ws.cell(row=1, column=col).value
         if date_cell:
-            # Convert datetime objects to strings in the same format
-            if isinstance(date_cell, datetime):
-                date_str = date_cell.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
+            # Normalize date formats to "dd-MMM-yy"
+            try:
+                if isinstance(date_cell, datetime):
+                    date_str = date_cell.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
+                else:
+                    # Handle various date string formats
+                    date_str = str(date_cell).strip()
+                    # Try parsing common formats
+                    for fmt in ["%d-%b-%y", "%d-%b-%Y", "%d-%B-%Y", "%d-%b-%Y"]:
+                        try:
+                            parsed_date = datetime.strptime(date_str, fmt)
+                            date_str = parsed_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
+                            break
+                        except ValueError:
+                            continue
+                    else:
+                        # If parsing fails, skip this date
+                        continue
                 existing_dates.add(date_str)
-            else:
-                # Handle string dates, ensuring consistent format
-                try:
-                    parsed_date = datetime.strptime(str(date_cell), "%d-%b-%y")
-                    date_str = parsed_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
-                    existing_dates.add(date_str)
-                except ValueError:
-                    # If the date format doesn't match, skip or log it
-                    continue
+            except Exception as e:
+                print(f"Error parsing date {date_cell}: {e}")
+                continue
     wb.close()
 
     dates = list(existing_dates) + [current_date_str]
@@ -168,6 +177,37 @@ if os.path.exists("Final.xlsx"):
     
     # Rename the first column to "project"
     existing_df.columns = ["project"] + list(existing_df.columns[1:])
+    
+    # Normalize column names in existing_df to match expected format
+    renamed_columns = ["project"]
+    for col in existing_df.columns[1:]:
+        # Split the column name to check its format
+        parts = col.split("_")
+        if len(parts) >= 3:
+            date_part = parts[0]
+            type_part = parts[1].upper()
+            category_part = parts[2].upper()
+            # Reconstruct the date part if needed
+            try:
+                parsed_date = datetime.strptime(date_part, "%d-%b-%y")
+                date_part = parsed_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
+            except ValueError:
+                # If date parsing fails, assume it's already in the correct format
+                pass
+            renamed_columns.append(f"{date_part}_{type_part}_{category_part}")
+        else:
+            # For "Total" columns (e.g., "15-May-25_Total")
+            if col.endswith("_Total"):
+                date_part = col.replace("_Total", "")
+                try:
+                    parsed_date = datetime.strptime(date_part, "%d-%b-%y")
+                    date_part = parsed_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
+                except ValueError:
+                    pass
+                renamed_columns.append(f"{date_part}_Total")
+            else:
+                renamed_columns.append(col)
+    existing_df.columns = renamed_columns
     
     # Extract existing projects, excluding "Total" row
     existing_projects = set(existing_df["project"].values)
@@ -220,6 +260,8 @@ if os.path.exists("Final.xlsx"):
     
     # Rename the first column to "project"
     existing_df.columns = ["project"] + list(existing_df.columns[1:])
+    
+    # Normalize column names in existing_df (already done above)
     
     # Remove the Total row if it exists
     existing_df = existing_df[existing_df["project"] != "Total"]
