@@ -11,7 +11,6 @@ import tkinter as tk
 from tkinter import messagebox, scrolledtext
 import threading
 import sys
-import time
 from queue import Queue
 
 class TextRedirector:
@@ -31,7 +30,6 @@ class TextRedirector:
 class SonarQubeDataProcessor:
     def __init__(self, sonartoken, sonar_url, sonartoken_2=None, sonar_url_2=None, sonartoken_3=None, sonar_url_3=None, output_dir="."):
         self.output_dir = output_dir
-        # First SonarQube instance
         self.sonartoken = sonartoken
         self.sonar_url = sonar_url
         self.auth_string = f"{sonartoken}:"
@@ -42,7 +40,6 @@ class SonarQubeDataProcessor:
             "Content-Type": "application/json"
         }
 
-        # Second SonarQube instance (optional)
         self.sonartoken_2 = sonartoken_2
         self.sonar_url_2 = sonar_url_2
         if sonartoken_2 and sonar_url_2:
@@ -56,7 +53,6 @@ class SonarQubeDataProcessor:
         else:
             self.headers_2 = None
 
-        # Third SonarQube instance (optional)
         self.sonartoken_3 = sonartoken_3
         self.sonar_url_3 = sonar_url_3
         if sonartoken_3 and sonar_url_3:
@@ -103,22 +99,23 @@ class SonarQubeDataProcessor:
 
         projects_df = pd.DataFrame(projects_list)
         if projects_df.empty:
-            print(f"No projects found for {url}")
+            print(f"No projects found for {url}. Saved to {output_path}")
             projects_df = pd.DataFrame(columns=["key", "name", "project"])
             projects_df.to_excel(output_path, index=False)
             return projects_df
 
         projects_df.to_excel(output_path, index=False)
-        print(f"All projects saved to {output_path}: {list(projects_df['project'])}")
-
         if allowed_projects:
-            projects_df = projects_df[projects_df["project"].isin(allowed_projects)]
-            if projects_df.empty:
-                print(f"No projects matched allowed_projects {allowed_projects} for {url}. Available projects: {list(pd.DataFrame(projects_list)['project'])}")
+            filtered_df = projects_df[projects_df["project"].isin(allowed_projects)]
+            if filtered_df.empty:
+                print(f"Saved projects to {output_path}: {list(projects_df['project'])}. No matches for allowed_projects {allowed_projects}")
                 projects_df = pd.DataFrame(columns=["key", "name", "project"])
             else:
-                print(f"Filtered projects for {url}: {list(projects_df['project'])}")
-                projects_df.to_excel(output_path, index=False)
+                projects_df = filtered_df
+                print(f"Saved projects to {output_path}: {list(projects_df['project'])}. Filtered to: {list(projects_df['project'])}")
+            projects_df.to_excel(output_path, index=False)
+        else:
+            print(f"Saved projects to {output_path}: {list(projects_df['project'])}")
 
         return projects_df
 
@@ -590,14 +587,18 @@ def run_sonarqube_processor(root, text_widget):
 
 def start_processing(root, text_widget, start_button):
     start_button.config(state="disabled")
+    text_widget.config(state="normal")
     text_widget.delete(1.0, tk.END)
+    text_widget.config(state="disabled")
     threading.Thread(target=run_sonarqube_processor, args=(root, text_widget), daemon=True).start()
 
 def update_text_widget(root, queue, text_widget):
     try:
         while not queue.empty():
+            text_widget.config(state="normal")
             text_widget.insert(tk.END, queue.get_nowait())
             text_widget.see(tk.END)
+            text_widget.config(state="disabled")
             text_widget.update_idletasks()
     except:
         pass
@@ -611,7 +612,7 @@ def main():
     start_button = tk.Button(root, text="Start", font=("Arial", 14), command=lambda: start_processing(root, text_widget, start_button))
     start_button.pack(pady=10)
 
-    text_widget = scrolledtext.ScrolledText(root, wrap=tk.WORD, height=30, font=("Arial", 10))
+    text_widget = scrolledtext.ScrolledText(root, wrap=tk.WORD, height=30, font=("Arial", 10), state="disabled")
     text_widget.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
     queue = Queue()
