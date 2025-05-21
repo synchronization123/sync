@@ -1,0 +1,624 @@
+import requests
+import base64
+import pandas as pd
+from datetime import datetime
+from openpyxl import load_workbook, Workbook
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
+import os
+import json
+import tkinter as tk
+from tkinter import messagebox, scrolledtext
+import threading
+import sys
+import time
+from queue import Queue
+
+class TextRedirector:
+    def __init__(self, widget, queue):
+        self.widget = widget
+        self.queue = queue
+
+    def write(self, text):
+        self.queue.put(text)
+        self.widget.insert(tk.END, text)
+        self.widget.see(tk.END)
+        self.widget.update_idletasks()
+
+    def flush(self):
+        pass
+
+class SonarQubeDataProcessor:
+    def __init__(self, sonartoken, sonar_url, sonartoken_2=None, sonar_url_2=None, sonartoken_3=None, sonar_url_3=None, output_dir="."):
+        self.output_dir = output_dir
+        # First SonarQube instance
+        self.sonartoken = sonartoken
+        self.sonar_url = sonar_url
+        self.auth_string = f"{sonartoken}:"
+        self.auth_encoded = base64.b64encode(self.auth_string.encode()).decode()
+        self.headers = {
+            "Authorization": f"Basic {self.auth_encoded}",
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
+
+        # Second SonarQube instance (optional)
+        self.sonartoken_2 = sonartoken_2
+        self.sonar_url_2 = sonar_url_2
+        if sonartoken_2 and sonar_url_2:
+            self.auth_string_2 = f"{sonartoken_2}:"
+            self.auth_encoded_2 = base64.b64encode(self.auth_string_2.encode()).decode()
+            self.headers_2 = {
+                "Authorization": f"Basic {self.auth_encoded_2}",
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            }
+        else:
+            self.headers_2 = None
+
+        # Third SonarQube instance (optional)
+        self.sonartoken_3 = sonartoken_3
+        self.sonar_url_3 = sonar_url_3
+        if sonartoken_3 and sonar_url_3:
+            self.auth_string_3 = f"{sonartoken_3}:"
+            self.auth_encoded_3 = base64.b64encode(self.auth_string_3.encode()).decode()
+            self.headers_3 = {
+                "Authorization": f"Basic {self.auth_encoded_3}",
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            }
+        else:
+            self.headers_3 = None
+
+    def fetch_projects(self, url, headers, output_file="Projects.xlsx", allowed_projects=None):
+        output_path = os.path.join(self.output_dir, output_file)
+        project_url = f"{url}/api/components/search?qualifiers=TRK&ps=500"
+        projects_list = []
+        page = 1
+        while True:
+            try:
+                response = requests.get(f"{project_url}&p={page}", headers=headers)
+                response.raise_for_status()
+                projects_data = response.json()
+            except requests.RequestException as e:
+                print(f"Error fetching projects from {url}: {e}")
+                return pd.DataFrame(columns=["key", "name", "project"])
+
+            for component in projects_data.get("components", []):
+                projects_list.append({
+                    "key": component.get("key", ""),
+                    "name": component.get("name", ""),
+                    "project": component.get("name", "")
+                })
+
+            paging = projects_data.get("paging", {})
+            total = paging.get("total", 0)
+            page_size = paging.get("pageSize", 500)
+            current_page = paging.get("pageIndex", 1)
+
+            if len(projects_data.get("components", [])) < page_size or (current_page * page_size) >= total:
+                break
+
+            page += 1
+
+        projects_df = pd.DataFrame(projects_list)
+        if projects_df.empty:
+            print(f"No projects found for {url}")
+            projects_df = pd.DataFrame(columns=["key", "name", "project"])
+            projects_df.to_excel(output_path, index=False)
+            return projects_df
+
+        projects_df.to_excel(output_path, index=False)
+        print(f"All projects saved to {output_path}: {list(projects_df['project'])}")
+
+        if allowed_projects:
+            projects_df = projects_df[projects_df["project"].isin(allowed_projects)]
+            if projects_df.empty:
+                print(f"No projects matched allowed_projects {allowed_projects} for {url}. Available projects: {list(pd.DataFrame(projects_list)['project'])}")
+                projects_df = pd.DataFrame(columns=["key", "name", "project"])
+            else:
+                print(f"Filtered projects for {url}: {list(projects_df['project'])}")
+                projects_df.to_excel(output_path, index=False)
+
+        return projects_df
+
+    def fetch_vulnerabilities(self, projects_df, url, headers, output_file="Vulnerabilities.xlsx", branch=None):
+        output_path = os.path.join(self.output_dir, output_file)
+        if projects_df.empty:
+            print(f"No projects to fetch vulnerabilities for {url}")
+            return pd.DataFrame(columns=["key", "severity", "component", "project", "line", "status", "message"])
+
+        vulnerabilities_list = []
+        for key in projects_df["key"]:
+            page = 1
+            while True:
+                vuln_url = f"{url}/api/issues/search?componentKeys={key}&types=VULNERABILITY&resolved=false&statuses=OPEN&ps=500&p={page}"
+                if branch:
+                    vuln_url += f"&branch={branch}"
+                try:
+                    response = requests.get(vuln_url, headers=headers)
+                    response.raise_for_status()
+                    vuln_data = response.json()
+                except requests.RequestException as e:
+                    print(f"Error fetching vulnerabilities for project {key} from {url}: {e}")
+                    break
+
+                issues = vuln_data.get("issues", [])
+                if not issues:
+                    print(f"No vulnerabilities found for project {key} {'on branch ' + branch if branch else ''}")
+                for issue in issues:
+                    project_key = issue.get("project", "")
+                    if not project_key:
+                        print(f"Warning: No project key found for issue {issue.get('key', 'unknown')} in {url}")
+                    vulnerabilities_list.append({
+                        "key": issue.get("key", ""),
+                        "severity": issue.get("severity", ""),
+                        "component": issue.get("component", ""),
+                        "project": project_key,
+                        "line": issue.get("line", ""),
+                        "status": issue.get("status", ""),
+                        "message": issue.get("message", "")
+                    })
+
+                total = vuln_data.get("total", 0)
+                page_size = vuln_data.get("ps", 500)
+                current_page = vuln_data.get("p", 1)
+
+                if len(issues) < page_size or (current_page * page_size) >= total:
+                    break
+
+                page += 1
+
+        vulnerabilities_df = pd.DataFrame(vulnerabilities_list)
+        if vulnerabilities_df.empty:
+            print(f"No vulnerabilities found for {url}")
+            vulnerabilities_df = pd.DataFrame(columns=["key", "severity", "component", "project", "line", "status", "message"])
+        else:
+            vulnerabilities_df.to_excel(output_path, index=False)
+            print(f"Vulnerabilities saved to {output_path}")
+        return vulnerabilities_df
+
+    def fetch_hotspots(self, projects_df, url, headers, output_file="Hotspots.xlsx", branch=None):
+        output_path = os.path.join(self.output_dir, output_file)
+        if projects_df.empty:
+            print(f"No projects to fetch hotspots for {url}")
+            return pd.DataFrame(columns=["key", "component", "project", "securityCategory", "vulnerabilityProbability", "status", "line", "message"])
+
+        hotspots_list = []
+        for key in projects_df["key"]:
+            page = 1
+            while True:
+                hotspot_url = f"{url}/api/hotspots/search?projectKey={key}&status=TO_REVIEW&ps=500&p={page}"
+                if branch:
+                    hotspot_url += f"&branch={branch}"
+                try:
+                    response = requests.get(hotspot_url, headers=headers)
+                    response.raise_for_status()
+                    hotspot_data = response.json()
+                except requests.RequestException as e:
+                    print(f"Error fetching hotspots for project {key} from {url}: {e}")
+                    break
+
+                hotspots = hotspot_data.get("hotspots", [])
+                if not hotspots:
+                    print(f"No hotspots found for project {key} {'on branch ' + branch if branch else ''}")
+                for hotspot in hotspots:
+                    project_key = hotspot.get("project", "")
+                    if not project_key:
+                        print(f"Warning: No project key found for hotspot {hotspot.get('key', 'unknown')} in {url}")
+                    hotspots_list.append({
+                        "key": hotspot.get("key", ""),
+                        "component": hotspot.get("component", ""),
+                        "project": project_key,
+                        "securityCategory": hotspot.get("securityCategory", ""),
+                        "vulnerabilityProbability": hotspot.get("vulnerabilityProbability", ""),
+                        "status": hotspot.get("status", ""),
+                        "line": hotspot.get("line", ""),
+                        "message": hotspot.get("message", "")
+                    })
+
+                paging = hotspot_data.get("paging", {})
+                total = paging.get("total", 0)
+                page_size = paging.get("pageSize", 500)
+                current_page = paging.get("pageIndex", 1)
+
+                if len(hotspots) < page_size or (current_page * page_size) >= total:
+                    break
+
+                page += 1
+
+        hotspots_df = pd.DataFrame(hotspots_list)
+        if hotspots_df.empty:
+            print(f"No hotspots found for {url}")
+            hotspots_df = pd.DataFrame(columns=["key", "component", "project", "securityCategory", "vulnerabilityProbability", "status", "line", "message"])
+        else:
+            hotspots_df.to_excel(output_path, index=False)
+            print(f"Hotspots saved to {output_path}")
+        return hotspots_df
+
+    def create_pivot_table(self, vulnerabilities_df, hotspots_df, vulnerabilities_df_2=None, hotspots_df_2=None, 
+                         vulnerabilities_df_3=None, hotspots_df_3=None):
+        unique_projects = set(vulnerabilities_df["project"]).union(set(hotspots_df["project"]))
+        if vulnerabilities_df_2 is not None and hotspots_df_2 is not None:
+            unique_projects = unique_projects.union(set(vulnerabilities_df_2["project"])).union(set(hotspots_df_2["project"]))
+        if vulnerabilities_df_3 is not None and hotspots_df_3 is not None:
+            if "project" in vulnerabilities_df_3.columns and "project" in hotspots_df_3.columns:
+                unique_projects = unique_projects.union(set(vulnerabilities_df_3["project"])).union(set(hotspots_df_3["project"]))
+            else:
+                print("Error: 'project' column missing in SonarQube 3 data")
+                if "project" not in vulnerabilities_df_3.columns:
+                    print(f"Vulnerabilities DataFrame 3 columns: {vulnerabilities_df_3.columns}")
+                if "project" not in hotspots_df_3.columns:
+                    print(f"Hotspots DataFrame 3 columns: {hotspots_df_3.columns}")
+
+        current_date = datetime.now()
+        current_date_str = current_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
+
+        vuln_categories = ["BLOCKER", "CRITICAL", "MAJOR", "MINOR", "INFO"]
+        hotspot_categories = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "OTHER"]
+        vuln_cols_per_date = len(vuln_categories)
+        hotspot_cols_per_date = len(hotspot_categories)
+        total_cols_per_date = vuln_cols_per_date + hotspot_cols_per_date + 1
+
+        final_path = os.path.join(self.output_dir, "Final.xlsx")
+        if os.path.exists(final_path):
+            wb = load_workbook(final_path)
+            ws = wb.active
+            existing_dates = set()
+            for col in range(2, ws.max_column + 1, total_cols_per_date):
+                date_cell = ws.cell(row=1, column=col).value
+                if date_cell:
+                    try:
+                        if isinstance(date_cell, datetime):
+                            date_str = date_cell.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
+                        else:
+                            date_str = str(date_cell).strip()
+                            for fmt in ["%d-%b-%y", "%d-%b-%Y", "%d-%B-%Y", "%d-%b-%Y"]:
+                                try:
+                                    parsed_date = datetime.strptime(date_str, fmt)
+                                    date_str = parsed_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
+                                    break
+                                except ValueError:
+                                    continue
+                            else:
+                                continue
+                        existing_dates.add(date_str)
+                    except Exception as e:
+                        print(f"Error parsing date {date_cell}: {e}")
+                        continue
+            wb.close()
+            dates = list(existing_dates) + [current_date_str]
+        else:
+            dates = [current_date_str]
+            existing_projects = set()
+
+        dates = sorted(list(set(dates)))
+
+        if os.path.exists(final_path):
+            existing_df = pd.read_excel(final_path, header=2)
+            existing_df.columns = ["project"] + list(existing_df.columns[1:])
+            renamed_columns = ["project"]
+            for col in existing_df.columns[1:]:
+                parts = col.split("_")
+                if len(parts) >= 3:
+                    date_part = parts[0]
+                    type_part = parts[1].upper()
+                    category_part = parts[2].upper()
+                    try:
+                        parsed_date = datetime.strptime(date_part, "%d-%b-%y")
+                        date_part = parsed_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
+                    except ValueError:
+                        pass
+                    renamed_columns.append(f"{date_part}_{type_part}_{category_part}")
+                else:
+                    if col.endswith("_Total"):
+                        date_part = col.replace("_Total", "")
+                        try:
+                            parsed_date = datetime.strptime(date_part, "%d-%b-%y")
+                            date_part = parsed_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
+                        except ValueError:
+                            pass
+                        renamed_columns.append(f"{date_part}_Total")
+                    else:
+                        renamed_columns.append(col)
+            existing_df.columns = renamed_columns
+            existing_projects = set(existing_df["project"].values)
+            if "Total" in existing_projects:
+                existing_projects.remove("Total")
+        else:
+            existing_projects = set()
+
+        excluded_projects = {"srm_ghiop", "Dev_hjiop"}
+        all_projects = unique_projects.union(existing_projects) - excluded_projects
+
+        pivot_data = []
+        for project in all_projects:
+            row = {"project": project}
+            vuln_filtered = vulnerabilities_df[vulnerabilities_df["project"] == project]
+            hotspot_filtered = hotspots_df[hotspots_df["project"] == project]
+            vuln_filtered_2 = pd.DataFrame() if vulnerabilities_df_2 is None else vulnerabilities_df_2[vulnerabilities_df_2["project"] == project]
+            hotspot_filtered_2 = pd.DataFrame() if hotspots_df_2 is None else hotspots_df_2[hotspots_df_2["project"] == project]
+            vuln_filtered_3 = pd.DataFrame() if vulnerabilities_df_3 is None else vulnerabilities_df_3[vulnerabilities_df_3["project"] == project]
+            hotspot_filtered_3 = pd.DataFrame() if hotspots_df_3 is None else hotspots_df_3[hotspots_df_3["project"] == project]
+
+            for category in vuln_categories:
+                count = len(vuln_filtered[vuln_filtered["severity"] == category])
+                count_2 = len(vuln_filtered_2[vuln_filtered_2["severity"] == category]) if not vuln_filtered_2.empty else 0
+                count_3 = len(vuln_filtered_3[vuln_filtered_3["severity"] == category]) if not vuln_filtered_3.empty else 0
+                total_count = count + count_2 + count_3
+                row[f"{current_date_str}_VULNERABILITY_{category}"] = total_count if total_count > 0 else None
+
+            for category in hotspot_categories:
+                count = len(hotspot_filtered[hotspot_filtered["vulnerabilityProbability"] == category])
+                count_2 = len(hotspot_filtered_2[hotspot_filtered_2["vulnerabilityProbability"] == category]) if not hotspot_filtered_2.empty else 0
+                count_3 = len(hotspot_filtered_3[hotspot_filtered_3["vulnerabilityProbability"] == category]) if not hotspot_filtered_3.empty else 0
+                total_count = count + count_2 + count_3
+                row[f"{current_date_str}_HOTSPOT_{category}"] = total_count if total_count > 0 else None
+
+            total = 0
+            for category in vuln_categories:
+                count = row.get(f"{current_date_str}_VULNERABILITY_{category}", 0)
+                total += count if count is not None else 0
+            for category in hotspot_categories:
+                count = row.get(f"{current_date_str}_HOTSPOT_{category}", 0)
+                total += count if count is not None else 0
+            row[f"{current_date_str}_Total"] = total if total > 0 else None
+
+            if row.get(f"{current_date_str}_Total", 0):
+                pivot_data.append(row)
+
+        pivot_df = pd.DataFrame(pivot_data)
+        if pivot_df.empty:
+            print("No projects with non-zero vulnerabilities or hotspots found")
+            pivot_df = pd.DataFrame(columns=["project"] + [f"{date}_VULNERABILITY_{cat}" for date in dates for cat in vuln_categories] +
+                                    [f"{date}_HOTSPOT_{cat}" for date in dates for cat in hotspot_categories] +
+                                    [f"{date}_Total" for date in dates])
+
+        if os.path.exists(final_path):
+            existing_df = pd.read_excel(final_path, header=2)
+            existing_df.columns = ["project"] + list(existing_df.columns[1:])
+            existing_df = existing_df[~existing_df["project"].isin(excluded_projects)]
+            existing_df = existing_df[existing_df["project"] != "Total"]
+            combined_df = existing_df.set_index("project").combine_first(pivot_df.set_index("project")).reset_index()
+            pivot_df = combined_df.copy()
+
+        columns_order = ["project"]
+        for date in dates:
+            columns_order.extend([f"{date}_VULNERABILITY_{category}" for category in vuln_categories])
+            columns_order.extend([f"{date}_HOTSPOT_{category}" for category in hotspot_categories])
+            columns_order.append(f"{date}_Total")
+        pivot_df = pivot_df[columns_order]
+
+        has_non_zero_data = False
+        for col in pivot_df.columns[1:]:
+            if pivot_df[col].sum() > 0:
+                has_non_zero_data = True
+                break
+
+        if has_non_zero_data:
+            total_row = {"project": "Total"}
+            for col in pivot_df.columns[1:]:
+                total_row[col] = pivot_df[col].sum()
+            total_df = pd.DataFrame([total_row])
+            pivot_df = pd.concat([pivot_df, total_df], ignore_index=True)
+
+        with pd.ExcelWriter(final_path, engine="openpyxl") as writer:
+            pivot_df.to_excel(writer, index=False, startrow=2)
+
+        wb = load_workbook(final_path)
+        ws = wb.active
+
+        thin_border = Border(
+            left=Side(style="thin"),
+            right=Side(style="thin"),
+            top=Side(style="thin"),
+            bottom=Side(style="thin")
+        )
+        bold_border = Border(
+            left=Side(style="medium"),
+            right=Side(style="medium"),
+            top=Side(style="medium"),
+            bottom=Side(style="medium")
+        )
+        gray_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+
+        for i, date in enumerate(dates):
+            start_col = 2 + i * total_cols_per_date
+            end_col = start_col + total_cols_per_date - 1
+            start_col_letter = get_column_letter(start_col)
+            end_col_letter = get_column_letter(end_col)
+            ws.merge_cells(f"{start_col_letter}1:{end_col_letter}1")
+            date_cell = ws[f"{start_col_letter}1"]
+            date_cell.value = date
+            date_cell.alignment = Alignment(horizontal="center", vertical="center")
+            date_cell.font = Font(bold=True)
+            date_cell.fill = gray_fill
+            for col in range(start_col, end_col + 1):
+                ws.cell(row=1, column=col).border = thin_border
+
+        for i, date in enumerate(dates):
+            vuln_start_col = 2 + i * total_cols_per_date
+            vuln_end_col = vuln_start_col + vuln_cols_per_date - 1
+            vuln_start_col_letter = get_column_letter(vuln_start_col)
+            vuln_end_col_letter = get_column_letter(vuln_end_col)
+            ws.merge_cells(f"{vuln_start_col_letter}2:{vuln_end_col_letter}2")
+            vuln_cell = ws[f"{vuln_start_col_letter}2"]
+            vuln_cell.value = "VULNERABILITY"
+            vuln_cell.alignment = Alignment(horizontal="center", vertical="center")
+            vuln_cell.font = Font(bold=True)
+            for col in range(vuln_start_col, vuln_end_col + 1):
+                ws.cell(row=2, column=col).border = thin_border
+
+            hotspot_start_col = vuln_end_col + 1
+            hotspot_end_col = hotspot_start_col + hotspot_cols_per_date - 1
+            hotspot_start_col_letter = get_column_letter(hotspot_start_col)
+            hotspot_end_col_letter = get_column_letter(hotspot_end_col)
+            ws.merge_cells(f"{hotspot_start_col_letter}2:{hotspot_end_col_letter}2")
+            hotspot_cell = ws[f"{hotspot_start_col_letter}2"]
+            hotspot_cell.value = "HOTSPOT"
+            hotspot_cell.alignment = Alignment(horizontal="center", vertical="center")
+            hotspot_cell.font = Font(bold=True)
+            for col in range(hotspot_start_col, hotspot_end_col + 1):
+                ws.cell(row=2, column=col).border = thin_border
+
+        for col_idx, col_name in enumerate(pivot_df.columns, start=1):
+            cell = ws.cell(row=3, column=col_idx)
+            if col_name != "project":
+                if col_name.endswith("_Total"):
+                    cell.value = "Total"
+                else:
+                    category = col_name.split("_")[-1]
+                    cell.value = category
+            else:
+                cell.value = "project"
+            cell.border = thin_border
+
+        for row in range(4, ws.max_row + 1):
+            for col in range(1, ws.max_column + 1):
+                cell = ws.cell(row=row, column=col)
+                if col == 1:
+                    cell.alignment = Alignment(horizontal="left", vertical="center")
+                else:
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = thin_border
+                if row == ws.max_row and has_non_zero_data:
+                    cell.font = Font(bold=True)
+
+        for i, date in enumerate(dates):
+            start_col = 2 + i * total_cols_per_date
+            end_col = start_col + total_cols_per_date - 1
+            for row in range(1, ws.max_row + 1):
+                cell = ws.cell(row=row, column=start_col)
+                cell.border = Border(
+                    left=Side(style="medium"),
+                    right=cell.border.right,
+                    top=cell.border.top,
+                    bottom=cell.border.bottom
+                )
+                cell = ws.cell(row=row, column=end_col)
+                cell.border = Border(
+                    left=cell.border.left,
+                    right=Side(style="medium"),
+                    top=cell.border.top,
+                    bottom=cell.border.bottom
+                )
+                if row == 1:
+                    for col in range(start_col, end_col + 1):
+                        cell = ws.cell(row=row, column=col)
+                        cell.border = Border(
+                            left=cell.border.left,
+                            right=cell.border.right,
+                            top=Side(style="medium"),
+                            bottom=cell.border.bottom
+                        )
+                if row == ws.max_row and has_non_zero_data:
+                    for col in range(start_col, end_col + 1):
+                        cell = ws.cell(row=row, column=col)
+                        cell.border = Border(
+                            left=cell.border.left,
+                            right=cell.border.right,
+                            top=cell.border.top,
+                            bottom=Side(style="medium")
+                        )
+
+        for row in range(1, ws.max_row + 1):
+            cell = ws.cell(row=row, column=1)
+            cell.border = Border(
+                left=Side(style="medium"),
+                right=cell.border.right,
+                top=cell.border.top,
+                bottom=cell.border.bottom
+            )
+            if row == 1:
+                cell.border = Border(
+                    left=cell.border.left,
+                    right=cell.border.right,
+                    top=Side(style="medium"),
+                    bottom=cell.border.bottom
+                )
+            if row == ws.max_row and has_non_zero_data:
+                cell.border = Border(
+                    left=cell.border.left,
+                    right=cell.border.right,
+                    top=cell.border.top,
+                    bottom=Side(style="medium")
+                )
+
+        wb.save(final_path)
+        print(f"Data downloaded, pivot table created, and formatting applied successfully! Final Excel saved to {final_path}")
+
+def run_sonarqube_processor(root, text_widget):
+    final_path = os.path.join(os.path.dirname(__file__), "Final.xlsx")
+    if os.path.exists(final_path):
+        try:
+            os.remove(final_path)
+            print(f"Existing {final_path} deleted successfully.")
+        except Exception as e:
+            print(f"Error deleting {final_path}: {e}")
+
+    processor = SonarQubeDataProcessor(
+        sonartoken="gdjdjdjdjdjrjjrjd",
+        sonar_url="https://sonar.crm.com",
+        sonartoken_2="hdklelekeke",
+        sonar_url_2="https://sonar.crm_1.com",
+        sonartoken_3="jsjdjdjdj",
+        sonar_url_3="https://sonar.crm_2.com",
+        output_dir=os.path.dirname(__file__)
+    )
+
+    projects_df = processor.fetch_projects(processor.sonar_url, processor.headers, "Projects.xlsx")
+    vulnerabilities_df = processor.fetch_vulnerabilities(projects_df, processor.sonar_url, processor.headers, "Vulnerabilities.xlsx")
+    hotspots_df = processor.fetch_hotspots(projects_df, processor.sonar_url, processor.headers, "Hotspots.xlsx")
+
+    allowed_projects_2 = ["crm_1_develop", "crm_18", "gui_ty"]
+    projects_df_2 = processor.fetch_projects(processor.sonar_url_2, processor.headers_2, "Projects_1.xlsx", allowed_projects=allowed_projects_2)
+    vulnerabilities_df_2 = processor.fetch_vulnerabilities(projects_df_2, processor.sonar_url_2, processor.headers_2, "Vulnerabilities_1.xlsx")
+    hotspots_df_2 = processor.fetch_hotspots(projects_df_2, processor.sonar_url_2, processor.headers_2, "Hotspots_1.xlsx")
+
+    allowed_projects_3 = ["Crm_3debelop", "crty", "djjdkd"]
+    projects_df_3 = processor.fetch_projects(processor.sonar_url_3, processor.headers_3, "Projects_2.xlsx", allowed_projects=allowed_projects_3)
+    vulnerabilities_df_3 = processor.fetch_vulnerabilities(projects_df_3, processor.sonar_url_3, processor.headers_3, "Vulnerabilities_2.xlsx", branch="develop")
+    hotspots_df_3 = processor.fetch_hotspots(projects_df_3, processor.sonar_url_3, processor.headers_3, "Hotspots_2.xlsx", branch="develop")
+
+    processor.create_pivot_table(
+        vulnerabilities_df, hotspots_df,
+        vulnerabilities_df_2, hotspots_df_2,
+        vulnerabilities_df_3, hotspots_df_3
+    )
+
+    root.after(0, lambda: messagebox.showinfo("Success", f"Excel files generated successfully in {os.path.dirname(__file__)}!\nFinal Excel: {final_path}"))
+
+def start_processing(root, text_widget, start_button):
+    start_button.config(state="disabled")
+    text_widget.delete(1.0, tk.END)
+    threading.Thread(target=run_sonarqube_processor, args=(root, text_widget), daemon=True).start()
+
+def update_text_widget(root, queue, text_widget):
+    try:
+        while not queue.empty():
+            text_widget.insert(tk.END, queue.get_nowait())
+            text_widget.see(tk.END)
+            text_widget.update_idletasks()
+    except:
+        pass
+    root.after(100, update_text_widget, root, queue, text_widget)
+
+def main():
+    root = tk.Tk()
+    root.title("SonarQube Data Processor")
+    root.geometry("800x600")
+
+    start_button = tk.Button(root, text="Start", font=("Arial", 14), command=lambda: start_processing(root, text_widget, start_button))
+    start_button.pack(pady=10)
+
+    text_widget = scrolledtext.ScrolledText(root, wrap=tk.WORD, height=30, font=("Arial", 10))
+    text_widget.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+
+    queue = Queue()
+    sys.stdout = TextRedirector(text_widget, queue)
+
+    root.after(100, update_text_widget, root, queue, text_widget)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
