@@ -49,7 +49,7 @@ class SonarQubeDataProcessor:
         else:
             self.headers_3 = None
 
-    def fetch_projects(self, url, headers, output_file="Projects.xlsx"):
+    def fetch_projects(self, url, headers, output_file="Projects.xlsx", allowed_projects=None):
         project_url = f"{url}/api/components/search?qualifiers=TRK&ps=500"
         projects_list = []
         page = 1
@@ -83,12 +83,30 @@ class SonarQubeDataProcessor:
         if projects_df.empty:
             print(f"No projects found for {url}")
             projects_df = pd.DataFrame(columns=["key", "name", "project"])
-        else:
             projects_df.to_excel(output_file, index=False)
-            print(f"Projects saved to {output_file}")
+            return projects_df
+
+        # Save all projects to Excel before filtering
+        projects_df.to_excel(output_file, index=False)
+        print(f"All projects saved to {output_file}: {list(projects_df['project'])}")
+
+        # Apply filtering if allowed_projects is provided
+        if allowed_projects:
+            projects_df = projects_df[projects_df["project"].isin(allowed_projects)]
+            if projects_df.empty:
+                print(f"No projects matched allowed_projects {allowed_projects} for {url}. Available projects: {list(pd.DataFrame(projects_list)['project'])}")
+                projects_df = pd.DataFrame(columns=["key", "name", "project"])
+            else:
+                print(f"Filtered projects for {url}: {list(projects_df['project'])}")
+                projects_df.to_excel(output_file, index=False)  # Overwrite with filtered projects
+
         return projects_df
 
     def fetch_vulnerabilities(self, projects_df, url, headers, output_file="Vulnerabilities.xlsx", instance=1):
+        if projects_df.empty:
+            print(f"No projects to fetch vulnerabilities for {url}")
+            return pd.DataFrame(columns=["key", "severity", "component", "project", "line", "status", "message"])
+
         vulnerabilities_list = []
         for key in projects_df["key"]:
             page = 1
@@ -114,7 +132,7 @@ class SonarQubeDataProcessor:
                         "key": issue.get("key", ""),
                         "severity": issue.get("severity", ""),
                         "component": issue.get("component", ""),
-                        "project": project_key,  # Ensure project column is populated
+                        "project": project_key,
                         "line": issue.get("line", ""),
                         "status": issue.get("status", ""),
                         "message": issue.get("message", "")
@@ -139,6 +157,10 @@ class SonarQubeDataProcessor:
         return vulnerabilities_df
 
     def fetch_hotspots(self, projects_df, url, headers, output_file="Hotspots.xlsx", instance=1):
+        if projects_df.empty:
+            print(f"No projects to fetch hotspots for {url}")
+            return pd.DataFrame(columns=["key", "component", "project", "securityCategory", "vulnerabilityProbability", "status", "line", "message"])
+
         hotspots_list = []
         for key in projects_df["key"]:
             page = 1
@@ -163,7 +185,7 @@ class SonarQubeDataProcessor:
                     hotspots_list.append({
                         "key": hotspot.get("key", ""),
                         "component": hotspot.get("component", ""),
-                        "project": project_key,  # Ensure project column is populated
+                        "project": project_key,
                         "securityCategory": hotspot.get("securityCategory", ""),
                         "vulnerabilityProbability": hotspot.get("vulnerabilityProbability", ""),
                         "status": hotspot.get("status", ""),
@@ -531,10 +553,7 @@ if __name__ == "__main__":
 
     # Fetch projects from second SonarQube instance, limited to specified projects
     allowed_projects_2 = ["crm_1_develop", "crm_18", "gui_ty"]
-    projects_df_2 = processor.fetch_projects(processor.sonar_url_2, processor.headers_2, "Projects_1.xlsx")
-    projects_df_2 = projects_df_2[projects_df_2["project"].isin(allowed_projects_2)]
-    projects_df_2.to_excel("Projects_1.xlsx", index=False)
-    print(f"Filtered projects for SonarQube 2: {list(projects_df_2['project'])}")
+    projects_df_2 = processor.fetch_projects(processor.sonar_url_2, processor.headers_2, "Projects_1.xlsx", allowed_projects=allowed_projects_2)
 
     # Fetch vulnerabilities and hotspots from second SonarQube instance for allowed projects
     vulnerabilities_df_2 = processor.fetch_vulnerabilities(projects_df_2, processor.sonar_url_2, processor.headers_2, "Vulnerabilities_1.xlsx", instance=2)
@@ -542,10 +561,7 @@ if __name__ == "__main__":
 
     # Fetch projects from third SonarQube instance, limited to specified projects
     allowed_projects_3 = ["Crm_3debelop", "crty", "djjdkd"]
-    projects_df_3 = processor.fetch_projects(processor.sonar_url_3, processor.headers_3, "Projects_2.xlsx")
-    projects_df_3 = projects_df_3[projects_df_3["project"].isin(allowed_projects_3)]
-    projects_df_3.to_excel("Projects_2.xlsx", index=False)
-    print(f"Filtered projects for SonarQube 3: {list(projects_df_3['project'])}")
+    projects_df_3 = processor.fetch_projects(processor.sonar_url_3, processor.headers_3, "Projects_2.xlsx", allowed_projects=allowed_projects_3)
 
     # Fetch vulnerabilities and hotspots from third SonarQube instance for allowed projects
     vulnerabilities_df_3 = processor.fetch_vulnerabilities(projects_df_3, processor.sonar_url_3, processor.headers_3, "Vulnerabilities_2.xlsx", instance=3)
