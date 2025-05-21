@@ -1,7 +1,7 @@
 import requests
 import base64
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 from openpyxl import load_workbook, Workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
@@ -51,19 +51,41 @@ class SonarQubeDataProcessor:
 
     def fetch_projects(self, url, headers, output_file="Projects.xlsx"):
         project_url = f"{url}/api/components/search?qualifiers=TRK&ps=500"
-        response = requests.get(project_url, headers=headers)
-        projects_data = response.json()
-
         projects_list = []
-        for component in projects_data.get("components", []):
-            projects_list.append({
-                "key": component["key"],
-                "name": component["name"],
-                "project": component["name"]
-            })
+        page = 1
+        while True:
+            try:
+                response = requests.get(f"{project_url}&p={page}", headers=headers)
+                response.raise_for_status()
+                projects_data = response.json()
+            except requests.RequestException as e:
+                print(f"Error fetching projects from {url}: {e}")
+                return pd.DataFrame(columns=["key", "name", "project"])
+
+            for component in projects_data.get("components", []):
+                projects_list.append({
+                    "key": component.get("key", ""),
+                    "name": component.get("name", ""),
+                    "project": component.get("name", "")  # Ensure project is set to name
+                })
+
+            paging = projects_data.get("paging", {})
+            total = paging.get("total", 0)
+            page_size = paging.get("pageSize", 500)
+            current_page = paging.get("pageIndex", 1)
+
+            if len(projects_data.get("components", [])) < page_size or (current_page * page_size) >= total:
+                break
+
+            page += 1
 
         projects_df = pd.DataFrame(projects_list)
-        projects_df.to_excel(output_file, index=False)
+        if projects_df.empty:
+            print(f"No projects found for {url}")
+            projects_df = pd.DataFrame(columns=["key", "name", "project"])
+        else:
+            projects_df.to_excel(output_file, index=False)
+            print(f"Projects saved to {output_file}")
         return projects_df
 
     def fetch_vulnerabilities(self, projects_df, url, headers, output_file="Vulnerabilities.xlsx", instance=1):
@@ -75,23 +97,31 @@ class SonarQubeDataProcessor:
                     vuln_url = f"{url}/api/issues/search?resolved=false&statuses=OPEN&ps=500&impactSoftwareQualities=SECURITY&branch=develop&components={key}&p={page}"
                 else:
                     vuln_url = f"{url}/api/issues/search?componentKeys={key}&types=VULNERABILITY&resolved=false&statuses=OPEN&p={page}"
-                response = requests.get(vuln_url, headers=headers)
-                vuln_data = response.json()
+                try:
+                    response = requests.get(vuln_url, headers=headers)
+                    response.raise_for_status()
+                    vuln_data = response.json()
+                except requests.RequestException as e:
+                    print(f"Error fetching vulnerabilities for project {key} from {url}: {e}")
+                    break
 
                 issues = vuln_data.get("issues", [])
                 for issue in issues:
+                    project_key = issue.get("project", "")
+                    if not project_key:
+                        print(f"Warning: No project key found for issue {issue.get('key', 'unknown')} in {url}")
                     vulnerabilities_list.append({
-                        "key": issue["key"],
+                        "key": issue.get("key", ""),
                         "severity": issue.get("severity", ""),
                         "component": issue.get("component", ""),
-                        "project": issue.get("project", ""),
+                        "project": project_key,  # Ensure project column is populated
                         "line": issue.get("line", ""),
                         "status": issue.get("status", ""),
                         "message": issue.get("message", "")
                     })
 
                 total = vuln_data.get("total", 0)
-                page_size = vuln_data.get("ps", 100)
+                page_size = vuln_data.get("ps", 500 if instance == 3 else 100)
                 current_page = vuln_data.get("p", 1)
 
                 if len(issues) < page_size or (current_page * page_size) >= total:
@@ -100,7 +130,12 @@ class SonarQubeDataProcessor:
                 page += 1
 
         vulnerabilities_df = pd.DataFrame(vulnerabilities_list)
-        vulnerabilities_df.to_excel(output_file, index=False)
+        if vulnerabilities_df.empty:
+            print(f"No vulnerabilities found for {url}")
+            vulnerabilities_df = pd.DataFrame(columns=["key", "severity", "component", "project", "line", "status", "message"])
+        else:
+            vulnerabilities_df.to_excel(output_file, index=False)
+            print(f"Vulnerabilities saved to {output_file}")
         return vulnerabilities_df
 
     def fetch_hotspots(self, projects_df, url, headers, output_file="Hotspots.xlsx", instance=1):
@@ -112,15 +147,23 @@ class SonarQubeDataProcessor:
                     hotspot_url = f"{url}/api/hotspots/search?branch=develop&status=TO_REVIEW&ps=500&project={key}&p={page}"
                 else:
                     hotspot_url = f"{url}/api/hotspots/search?projectKey={key}&status=TO_REVIEW&p={page}"
-                response = requests.get(hotspot_url, headers=headers)
-                hotspot_data = response.json()
+                try:
+                    response = requests.get(hotspot_url, headers=headers)
+                    response.raise_for_status()
+                    hotspot_data = response.json()
+                except requests.RequestException as e:
+                    print(f"Error fetching hotspots for project {key} from {url}: {e}")
+                    break
 
                 hotspots = hotspot_data.get("hotspots", [])
                 for hotspot in hotspots:
+                    project_key = hotspot.get("project", "")
+                    if not project_key:
+                        print(f"Warning: No project key found for hotspot {hotspot.get('key', 'unknown')} in {url}")
                     hotspots_list.append({
-                        "key": hotspot["key"],
+                        "key": hotspot.get("key", ""),
                         "component": hotspot.get("component", ""),
-                        "project": hotspot.get("project", ""),
+                        "project": project_key,  # Ensure project column is populated
                         "securityCategory": hotspot.get("securityCategory", ""),
                         "vulnerabilityProbability": hotspot.get("vulnerabilityProbability", ""),
                         "status": hotspot.get("status", ""),
@@ -130,7 +173,7 @@ class SonarQubeDataProcessor:
 
                 paging = hotspot_data.get("paging", {})
                 total = paging.get("total", 0)
-                page_size = paging.get("pageSize", 100)
+                page_size = paging.get("pageSize", 500 if instance == 3 else 100)
                 current_page = paging.get("pageIndex", 1)
 
                 if len(hotspots) < page_size or (current_page * page_size) >= total:
@@ -139,7 +182,12 @@ class SonarQubeDataProcessor:
                 page += 1
 
         hotspots_df = pd.DataFrame(hotspots_list)
-        hotspots_df.to_excel(output_file, index=False)
+        if hotspots_df.empty:
+            print(f"No hotspots found for {url}")
+            hotspots_df = pd.DataFrame(columns=["key", "component", "project", "securityCategory", "vulnerabilityProbability", "status", "line", "message"])
+        else:
+            hotspots_df.to_excel(output_file, index=False)
+            print(f"Hotspots saved to {output_file}")
         return hotspots_df
 
     def create_pivot_table(self, vulnerabilities_df, hotspots_df, vulnerabilities_df_2=None, hotspots_df_2=None, 
@@ -148,8 +196,15 @@ class SonarQubeDataProcessor:
         if vulnerabilities_df_2 is not None and hotspots_df_2 is not None:
             unique_projects = unique_projects.union(set(vulnerabilities_df_2["project"])).union(set(hotspots_df_2["project"]))
         if vulnerabilities_df_3 is not None and hotspots_df_3 is not None:
-            unique_projects = unique_projects.union(set(vulnerabilities_df_3["project"])).union(set(hotspots_df_3["project"]))
-        
+            if "project" in vulnerabilities_df_3.columns and "project" in hotspots_df_3.columns:
+                unique_projects = unique_projects.union(set(vulnerabilities_df_3["project"])).union(set(hotspots_df_3["project"]))
+            else:
+                print("Error: 'project' column missing in SonarQube 3 data")
+                if "project" not in vulnerabilities_df_3.columns:
+                    print(f"Vulnerabilities DataFrame 3 columns: {vulnerabilities_df_3.columns}")
+                if "project" not in hotspots_df_3.columns:
+                    print(f"Hotspots DataFrame 3 columns: {hotspots_df_3.columns}")
+
         current_date = datetime.now()
         current_date_str = current_date.strftime("%d-%b-%y").replace("May", "May").replace("Jan", "Jan")
 
@@ -268,6 +323,11 @@ class SonarQubeDataProcessor:
                 pivot_data.append(row)
 
         pivot_df = pd.DataFrame(pivot_data)
+        if pivot_df.empty:
+            print("No projects with non-zero vulnerabilities or hotspots found")
+            pivot_df = pd.DataFrame(columns=["project"] + [f"{date}_VULNERABILITY_{cat}" for date in dates for cat in vuln_categories] +
+                                    [f"{date}_HOTSPOT_{cat}" for date in dates for cat in hotspot_categories] +
+                                    [f"{date}_Total" for date in dates])
 
         if os.path.exists("Final.xlsx"):
             existing_df = pd.read_excel("Final.xlsx", header=2)
@@ -474,6 +534,7 @@ if __name__ == "__main__":
     projects_df_2 = processor.fetch_projects(processor.sonar_url_2, processor.headers_2, "Projects_1.xlsx")
     projects_df_2 = projects_df_2[projects_df_2["project"].isin(allowed_projects_2)]
     projects_df_2.to_excel("Projects_1.xlsx", index=False)
+    print(f"Filtered projects for SonarQube 2: {list(projects_df_2['project'])}")
 
     # Fetch vulnerabilities and hotspots from second SonarQube instance for allowed projects
     vulnerabilities_df_2 = processor.fetch_vulnerabilities(projects_df_2, processor.sonar_url_2, processor.headers_2, "Vulnerabilities_1.xlsx", instance=2)
@@ -484,6 +545,7 @@ if __name__ == "__main__":
     projects_df_3 = processor.fetch_projects(processor.sonar_url_3, processor.headers_3, "Projects_2.xlsx")
     projects_df_3 = projects_df_3[projects_df_3["project"].isin(allowed_projects_3)]
     projects_df_3.to_excel("Projects_2.xlsx", index=False)
+    print(f"Filtered projects for SonarQube 3: {list(projects_df_3['project'])}")
 
     # Fetch vulnerabilities and hotspots from third SonarQube instance for allowed projects
     vulnerabilities_df_3 = processor.fetch_vulnerabilities(projects_df_3, processor.sonar_url_3, processor.headers_3, "Vulnerabilities_2.xlsx", instance=3)
@@ -491,7 +553,7 @@ if __name__ == "__main__":
 
     # Create pivot table combining data from all three instances
     processor.create_pivot_table(
-        vulnerabilities_df, hotspots_df, 
-        vulnerabilities_df_2, hotspots_df_2, 
+        vulnerabilities_df, hotspots_df,
+        vulnerabilities_df_2, hotspots_df_2,
         vulnerabilities_df_3, hotspots_df_3
     )
