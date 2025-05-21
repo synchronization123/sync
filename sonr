@@ -66,7 +66,7 @@ class SonarQubeDataProcessor:
                 projects_list.append({
                     "key": component.get("key", ""),
                     "name": component.get("name", ""),
-                    "project": component.get("name", "")  # Ensure project is set to name
+                    "project": component.get("name", "")
                 })
 
             paging = projects_data.get("paging", {})
@@ -102,7 +102,7 @@ class SonarQubeDataProcessor:
 
         return projects_df
 
-    def fetch_vulnerabilities(self, projects_df, url, headers, output_file="Vulnerabilities.xlsx", instance=1):
+    def fetch_vulnerabilities(self, projects_df, url, headers, output_file="Vulnerabilities.xlsx", branch=None):
         if projects_df.empty:
             print(f"No projects to fetch vulnerabilities for {url}")
             return pd.DataFrame(columns=["key", "severity", "component", "project", "line", "status", "message"])
@@ -111,10 +111,9 @@ class SonarQubeDataProcessor:
         for key in projects_df["key"]:
             page = 1
             while True:
-                if instance == 3:
-                    vuln_url = f"{url}/api/issues/search?resolved=false&statuses=OPEN&ps=500&impactSoftwareQualities=SECURITY&branch=develop&components={key}&p={page}"
-                else:
-                    vuln_url = f"{url}/api/issues/search?componentKeys={key}&types=VULNERABILITY&resolved=false&statuses=OPEN&p={page}"
+                vuln_url = f"{url}/api/issues/search?componentKeys={key}&types=VULNERABILITY&resolved=false&statuses=OPEN&ps=500&p={page}"
+                if branch:
+                    vuln_url += f"&branch={branch}"
                 try:
                     response = requests.get(vuln_url, headers=headers)
                     response.raise_for_status()
@@ -124,6 +123,8 @@ class SonarQubeDataProcessor:
                     break
 
                 issues = vuln_data.get("issues", [])
+                if not issues:
+                    print(f"No vulnerabilities found for project {key} on branch {branch if branch else 'main'}")
                 for issue in issues:
                     project_key = issue.get("project", "")
                     if not project_key:
@@ -139,7 +140,7 @@ class SonarQubeDataProcessor:
                     })
 
                 total = vuln_data.get("total", 0)
-                page_size = vuln_data.get("ps", 500 if instance == 3 else 100)
+                page_size = vuln_data.get("ps", 500)
                 current_page = vuln_data.get("p", 1)
 
                 if len(issues) < page_size or (current_page * page_size) >= total:
@@ -156,7 +157,7 @@ class SonarQubeDataProcessor:
             print(f"Vulnerabilities saved to {output_file}")
         return vulnerabilities_df
 
-    def fetch_hotspots(self, projects_df, url, headers, output_file="Hotspots.xlsx", instance=1):
+    def fetch_hotspots(self, projects_df, url, headers, output_file="Hotspots.xlsx", branch=None):
         if projects_df.empty:
             print(f"No projects to fetch hotspots for {url}")
             return pd.DataFrame(columns=["key", "component", "project", "securityCategory", "vulnerabilityProbability", "status", "line", "message"])
@@ -165,10 +166,9 @@ class SonarQubeDataProcessor:
         for key in projects_df["key"]:
             page = 1
             while True:
-                if instance == 3:
-                    hotspot_url = f"{url}/api/hotspots/search?branch=develop&status=TO_REVIEW&ps=500&project={key}&p={page}"
-                else:
-                    hotspot_url = f"{url}/api/hotspots/search?projectKey={key}&status=TO_REVIEW&p={page}"
+                hotspot_url = f"{url}/api/hotspots/search?projectKey={key}&status=TO_REVIEW&ps=500&p={page}"
+                if branch:
+                    hotspot_url += f"&branch={branch}"
                 try:
                     response = requests.get(hotspot_url, headers=headers)
                     response.raise_for_status()
@@ -178,6 +178,8 @@ class SonarQubeDataProcessor:
                     break
 
                 hotspots = hotspot_data.get("hotspots", [])
+                if not hotspots:
+                    print(f"No hotspots found for project {key} on branch {branch if branch else 'main'}")
                 for hotspot in hotspots:
                     project_key = hotspot.get("project", "")
                     if not project_key:
@@ -195,7 +197,7 @@ class SonarQubeDataProcessor:
 
                 paging = hotspot_data.get("paging", {})
                 total = paging.get("total", 0)
-                page_size = paging.get("pageSize", 500 if instance == 3 else 100)
+                page_size = paging.get("pageSize", 500)
                 current_page = paging.get("pageIndex", 1)
 
                 if len(hotspots) < page_size or (current_page * page_size) >= total:
@@ -548,24 +550,24 @@ if __name__ == "__main__":
     projects_df = processor.fetch_projects(processor.sonar_url, processor.headers, "Projects.xlsx")
     
     # Fetch vulnerabilities and hotspots from first SonarQube instance
-    vulnerabilities_df = processor.fetch_vulnerabilities(projects_df, processor.sonar_url, processor.headers, "Vulnerabilities.xlsx", instance=1)
-    hotspots_df = processor.fetch_hotspots(projects_df, processor.sonar_url, processor.headers, "Hotspots.xlsx", instance=1)
+    vulnerabilities_df = processor.fetch_vulnerabilities(projects_df, processor.sonar_url, processor.headers, "Vulnerabilities.xlsx")
+    hotspots_df = processor.fetch_hotspots(projects_df, processor.sonar_url, processor.headers, "Hotspots.xlsx")
 
     # Fetch projects from second SonarQube instance, limited to specified projects
     allowed_projects_2 = ["crm_1_develop", "crm_18", "gui_ty"]
     projects_df_2 = processor.fetch_projects(processor.sonar_url_2, processor.headers_2, "Projects_1.xlsx", allowed_projects=allowed_projects_2)
 
-    # Fetch vulnerabilities and hotspots from second SonarQube instance for allowed projects
-    vulnerabilities_df_2 = processor.fetch_vulnerabilities(projects_df_2, processor.sonar_url_2, processor.headers_2, "Vulnerabilities_1.xlsx", instance=2)
-    hotspots_df_2 = processor.fetch_hotspots(projects_df_2, processor.sonar_url_2, processor.headers_2, "Hotspots_1.xlsx", instance=2)
+    # Fetch vulnerabilities and hotspots from second SonarQube instance
+    vulnerabilities_df_2 = processor.fetch_vulnerabilities(projects_df_2, processor.sonar_url_2, processor.headers_2, "Vulnerabilities_1.xlsx")
+    hotspots_df_2 = processor.fetch_hotspots(projects_df_2, processor.sonar_url_2, processor.headers_2, "Hotspots_1.xlsx")
 
     # Fetch projects from third SonarQube instance, limited to specified projects
     allowed_projects_3 = ["Crm_3debelop", "crty", "djjdkd"]
     projects_df_3 = processor.fetch_projects(processor.sonar_url_3, processor.headers_3, "Projects_2.xlsx", allowed_projects=allowed_projects_3)
 
-    # Fetch vulnerabilities and hotspots from third SonarQube instance for allowed projects
-    vulnerabilities_df_3 = processor.fetch_vulnerabilities(projects_df_3, processor.sonar_url_3, processor.headers_3, "Vulnerabilities_2.xlsx", instance=3)
-    hotspots_df_3 = processor.fetch_hotspots(projects_df_3, processor.sonar_url_3, processor.headers_3, "Hotspots_2.xlsx", instance=3)
+    # Fetch vulnerabilities and hotspots from third SonarQube instance with branch=develop
+    vulnerabilities_df_3 = processor.fetch_vulnerabilities(projects_df_3, processor.sonar_url_3, processor.headers_3, "Vulnerabilities_2.xlsx", branch="develop")
+    hotspots_df_3 = processor.fetch_hotspots(projects_df_3, processor.sonar_url_3, processor.headers_3, "Hotspots_2.xlsx", branch="develop")
 
     # Create pivot table combining data from all three instances
     processor.create_pivot_table(
