@@ -124,7 +124,7 @@ class SonarQubeDataProcessor:
 
                 issues = vuln_data.get("issues", [])
                 if not issues:
-                    print(f"No vulnerabilities found for project {key} on branch {branch if branch else 'main'}")
+                    print(f"No vulnerabilities found for project {key} {'on branch ' + branch if branch else ''}")
                 for issue in issues:
                     project_key = issue.get("project", "")
                     if not project_key:
@@ -179,7 +179,7 @@ class SonarQubeDataProcessor:
 
                 hotspots = hotspot_data.get("hotspots", [])
                 if not hotspots:
-                    print(f"No hotspots found for project {key} on branch {branch if branch else 'main'}")
+                    print(f"No hotspots found for project {key} {'on branch ' + branch if branch else ''}")
                 for hotspot in hotspots:
                     project_key = hotspot.get("project", "")
                     if not project_key:
@@ -549,7 +549,7 @@ if __name__ == "__main__":
     # Fetch projects from first SonarQube instance
     projects_df = processor.fetch_projects(processor.sonar_url, processor.headers, "Projects.xlsx")
     
-    # Fetch vulnerabilities and hotspots from first SonarQube instance
+    # Fetch vulnerabilities and hotspots from first SonarQube instance (no branch parameter)
     vulnerabilities_df = processor.fetch_vulnerabilities(projects_df, processor.sonar_url, processor.headers, "Vulnerabilities.xlsx")
     hotspots_df = processor.fetch_hotspots(projects_df, processor.sonar_url, processor.headers, "Hotspots.xlsx")
 
@@ -557,7 +557,7 @@ if __name__ == "__main__":
     allowed_projects_2 = ["crm_1_develop", "crm_18", "gui_ty"]
     projects_df_2 = processor.fetch_projects(processor.sonar_url_2, processor.headers_2, "Projects_1.xlsx", allowed_projects=allowed_projects_2)
 
-    # Fetch vulnerabilities and hotspots from second SonarQube instance
+    # Fetch vulnerabilities and hotspots from second SonarQube instance (no branch parameter)
     vulnerabilities_df_2 = processor.fetch_vulnerabilities(projects_df_2, processor.sonar_url_2, processor.headers_2, "Vulnerabilities_1.xlsx")
     hotspots_df_2 = processor.fetch_hotspots(projects_df_2, processor.sonar_url_2, processor.headers_2, "Hotspots_1.xlsx")
 
