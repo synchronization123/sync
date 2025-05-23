@@ -1,0 +1,310 @@
+# Save this file as contrast_traces.py
+import requests
+import pandas as pd
+from datetime import datetime
+import os
+import tkinter as tk
+from tkinter import ttk, messagebox
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from openpyxl import load_workbook
+from openpyxl.styles import Border, Side, Alignment, Font
+
+# Set the working directory to the script's directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(script_dir)
+
+# GUI Class
+class App:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Contrast Traces Processor")
+        self.root.geometry("600x400")
+
+        # Frame for button, loading, and progress
+        self.top_frame = ttk.Frame(self.root)
+        self.top_frame.pack(pady=10)
+
+        # Run button
+        self.run_button = ttk.Button(self.top_frame, text="Run Script", command=self.start_script)
+        self.run_button.pack(side=tk.LEFT, padx=5)
+
+        # Loading label
+        self.loading_label = ttk.Label(self.top_frame, text="")
+        self.loading_label.pack(side=tk.LEFT, padx=10)
+
+        # Progress bar
+        self.progress = ttk.Progressbar(self.top_frame, length=300, mode='determinate')
+        self.progress.pack(side=tk.LEFT, padx=5)
+
+        # Text area for console logs
+        self.log_frame = ttk.Frame(self.root)
+        self.log_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        self.log_text = tk.Text(self.log_frame, height=15, width=70, state='disabled')
+        self.log_text.pack(fill=tk.BOTH, expand=True)
+
+        # Scrollbar for log text
+        scrollbar = ttk.Scrollbar(self.log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_text['yscrollcommand'] = scrollbar.set
+
+    def log(self, message):
+        self.log_text.configure(state='normal')
+        self.log_text.insert(tk.END, f"{datetime.now().strftime('%H:%M:%S')}: {message}\n")
+        self.log_text.configure(state='disabled')
+        self.log_text.see(tk.END)
+
+    def start_script(self):
+        self.run_button.config(state='disabled')
+        self.loading_label.config(text="Loading")
+        self.animate_loading()
+        threading.Thread(target=self.run_script_thread, daemon=True).start()
+
+    def animate_loading(self):
+        def update_dots():
+            if self.loading_label.cget("text").startswith("Loading"):
+                dots = self.loading_label.cget("text")[7:]
+                if dots == "...":
+                    self.loading_label.config(text="Loading")
+                else:
+                    self.loading_label.config(text="Loading" + dots + ".")
+                self.root.after(1000, update_dots)
+        self.root.after(1000, update_dots)
+
+    def run_script_thread(self):
+        self.progress['value'] = 0
+        self.log("Starting script execution...")
+
+        # Step 1: Fetch applications (30% progress)
+        self.log("Fetching applications data...")
+        self.progress['value'] = 10
+        applications = self.fetch_applications()
+        self.progress['value'] = 30
+
+        # Step 2: Fetch traces (40% progress)
+        self.log("Fetching traces data...")
+        traces = self.fetch_traces(applications)
+        self.progress['value'] = 70
+
+        # Step 3: Fetch notes and generate Final.xlsx (30% progress)
+        self.log("Fetching notes and generating Final.xlsx...")
+        self.generate_final_xlsx(traces)
+        self.progress['value'] = 100
+
+        # Finalize
+        self.loading_label.config(text="")
+        self.run_button.config(state='normal')
+        self.log("Script execution completed.")
+        self.root.after(0, lambda: messagebox.showinfo("Success", "Final Excel data is ready in Final.xlsx"))
+
+    def fetch_applications(self):
+        contrast_token = 'dhdjdjdjdjrjrjrjdj=='  # Replace with actual token
+        org_uuid = 'gshdhdhd'  # Replace with actual Org UUID
+        api_key = 'hhjkkjdddjdkdk'  # Replace with actual API key
+
+        headers = {
+            'Authorization': contrast_token,
+            'Api-key': api_key,
+            'Accept': 'application/json'
+        }
+
+        base_url = 'https://crm.contrast.com/api/ng/'
+        url = f"{base_url}{org_uuid}/applications/filter"
+        applications = []
+
+        with requests.Session() as session:
+            session.headers.update(headers)
+            try:
+                response = session.get(url, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    for app in data.get('applications', []):
+                        applications.append({
+                            'name': app.get('name', ''),
+                            'app_id': app.get('app_id', '')
+                        })
+                    # Save to applications.xlsx
+                    df = pd.DataFrame(applications)
+                    df.to_excel(os.path.join(script_dir, 'applications.xlsx'), index=False)
+                    self.log("Applications saved to applications.xlsx")
+                else:
+                    self.log(f"Error fetching applications: {response.status_code} - {response.text}")
+            except Exception as e:
+                self.log(f"Exception fetching applications: {e}")
+        
+        return applications
+
+    def fetch_traces(self, applications):
+        contrast_token = 'dhdjdjdjdjrjrjrjdj=='  # Replace with actual token
+        org_uuid = 'gshdhdhd'  # Replace with actual Org UUID
+        api_key = 'hhjkkjdddjdkdk'  # Replace with actual API key
+
+        headers = {
+            'Authorization': contrast_token,
+            'Api-key': api_key,
+            'Accept': 'application/json'
+        }
+
+        base_url = 'https://crm.contrast.com/api/ng/'
+        traces = []
+
+        def fetch_traces_for_app(app):
+            app_id = app['app_id']
+            url = f"{base_url}{org_uuid}/traces/{app_id}/filter?limit=500&status=Confirmed"
+            try:
+                response = session.get(url, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    app_traces = []
+                    for trace in data.get('traces', []):
+                        app_traces.append({
+                            'name': app['name'],
+                            'app_id': app_id,
+                            'severity': trace.get('severity', ''),
+                            'uuid': trace.get('uuid', ''),
+                            'rule_name': trace.get('rule_name', ''),
+                            'rule_title': trace.get('rule_title', ''),
+                            'status': trace.get('status', '')
+                        })
+                    return app_traces
+                else:
+                    self.log(f"Error for App ID {app_id}: {response.status_code} - {response.text}")
+                    return []
+            except Exception as e:
+                self.log(f"Exception for App ID {app_id}: {e}")
+                return []
+
+        with requests.Session() as session:
+            session.headers.update(headers)
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                results = list(executor.map(fetch_traces_for_app, applications))
+
+        for result in results:
+            traces.extend(result)
+
+        # Save to Traces.xlsx
+        df = pd.DataFrame(traces)
+        df.to_excel(os.path.join(script_dir, 'Traces.xlsx'), index=False)
+        self.log("Traces saved to Traces.xlsx")
+        return traces
+
+    def generate_final_xlsx(self, traces):
+        contrast_token = 'dhdjdjdjdjrjrjrjdj=='  # Replace with actual token
+        org_uuid = 'gshdhdhd'  # Replace with actual Org UUID
+        api_key = 'hhjkkjdddjdkdk'  # Replace with actual API key
+
+        headers = {
+            'Authorization': contrast_token,
+            'Api-key': api_key,
+            'Accept': 'application/json'
+        }
+
+        base_url = 'https://crm.contrast.com/api/ng/'
+        final_data = []
+        max_notes = 0  # Track the maximum number of notes for any trace
+
+        def fetch_notes(trace):
+            nonlocal max_notes
+            app_id = trace['app_id']
+            trace_uuid = trace['uuid']
+            url = f"{base_url}{org_uuid}/applications/{app_id}/traces/{trace_uuid}/notes"
+            try:
+                response = session.get(url, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    notes = data.get('notes', [])
+                    if notes:  # Only process traces with notes
+                        trace_data = {
+                            'name': trace['name'],
+                            'app_id': trace['app_id'],
+                            'severity': trace['severity'],
+                            'uuid': trace['uuid'],
+                            'rule_name': trace['rule_name'],
+                            'rule_title': trace['rule_title'],
+                            'status': trace['status']
+                        }
+                        # Add notes as separate columns (note_1, creator_1, creator_uid_1, etc.)
+                        for i, note in enumerate(notes, 1):
+                            trace_data[f'note_{i}'] = note.get('note', '')
+                            trace_data[f'creator_{i}'] = note.get('creator', '')
+                            trace_data[f'creator_uid_{i}'] = note.get('creator_uid', '')
+                        max_notes = max(max_notes, len(notes))
+                        final_data.append(trace_data)
+                else:
+                    self.log(f"Error for Trace {trace_uuid}: {response.status_code} - {response.text}")
+            except Exception as e:
+                self.log(f"Exception for Trace {trace_uuid}: {e}")
+
+        with requests.Session() as session:
+            session.headers.update(headers)
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                executor.map(fetch_notes, traces)
+
+        if not final_data:
+            self.log("No traces with notes found.")
+            return
+
+        # Create DataFrame with dynamic columns based on max_notes
+        columns = ['name', 'app_id', 'severity', 'uuid', 'rule_name', 'rule_title', 'status']
+        for i in range(1, max_notes + 1):
+            columns.extend([f'note_{i}', f'creator_{i}', f'creator_uid_{i}'])
+        
+        # Convert final_data to DataFrame, ensuring all columns are present
+        df = pd.DataFrame(final_data)
+        for col in columns:
+            if col not in df.columns:
+                df[col] = ''
+        df = df[columns]  # Reorder columns
+
+        # Save to Final.xlsx
+        excel_file = os.path.join(script_dir, 'Final.xlsx')
+        df.to_excel(excel_file, index=False)
+        self.log("Final data saved to Final.xlsx")
+
+        # Apply formatting
+        wb = load_workbook(excel_file)
+        ws = wb.active
+
+        # Define borders
+        medium_border = Border(
+            left=Side(style='medium'), right=Side(style='medium'),
+            top=Side(style='medium'), bottom=Side(style='medium')
+        )
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin')
+        )
+        center_align = Alignment(horizontal='center', vertical='center')
+        left_align = Alignment(horizontal='left', vertical='center')
+        bold_font = Font(bold=True)
+
+        # Apply formatting to headers
+        for col_idx in range(1, ws.max_column + 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.font = bold_font
+            cell.alignment = center_align if col_idx > 1 else left_align
+            cell.border = thin_border
+
+        # Apply formatting to data rows
+        for row_idx in range(2, ws.max_row + 1):
+            for col_idx in range(1, ws.max_column + 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                cell.alignment = center_align if col_idx > 1 else left_align
+                # Apply medium borders to note, creator, creator_uid groups
+                if col_idx > 7 and (col_idx - 8) % 3 == 0:  # Start of each note group (note_i)
+                    cell.border = medium_border
+                elif col_idx > 7 and (col_idx - 9) % 3 == 0:  # creator_i
+                    cell.border = medium_border
+                elif col_idx > 7 and (col_idx - 10) % 3 == 0:  # creator_uid_i
+                    cell.border = medium_border
+                else:
+                    cell.border = thin_border
+
+        wb.save(excel_file)
+        self.log("Formatting applied to Final.xlsx")
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = App(root)
+    root.mainloop()
