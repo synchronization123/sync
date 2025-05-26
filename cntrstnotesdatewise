@@ -1,4 +1,4 @@
-# Save this file as contrast_traces_jira.py
+# Save this file as contrast_traces.py
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
@@ -19,7 +19,7 @@ os.chdir(script_dir)
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("Contrast Traces and Jira Processor")
+        self.root.title("Contrast Traces Processor")
         self.root.geometry("600x500")
 
         # Frame for date inputs
@@ -136,32 +136,27 @@ class App:
         end_epoch = int(end_date.timestamp() * 1000)
         self.log(f"Filtering notes between {start_date.strftime('%Y-%m-%d')} and {end_date.strftime('%Y-%m-%d')} (Epoch: {start_epoch} to {end_epoch})")
 
-        # Step 1: Fetch applications (25% progress)
+        # Step 1: Fetch applications (33% progress)
         self.log("Fetching applications data...")
         self.progress['value'] = 10
         applications = self.fetch_applications()
-        self.progress['value'] = 25
+        self.progress['value'] = 33
 
-        # Step 2: Fetch traces (30% progress)
+        # Step 2: Fetch traces (33% progress)
         self.log("Fetching traces data...")
         traces = self.fetch_traces(applications)
-        self.progress['value'] = 55
+        self.progress['value'] = 66
 
-        # Step 3: Fetch notes and generate Final.xlsx (25% progress)
+        # Step 3: Fetch notes and generate Final.xlsx (34% progress)
         self.log("Fetching notes and generating Final.xlsx...")
         self.generate_final_xlsx(traces, start_epoch, end_epoch)
-        self.progress['value'] = 80
-
-        # Step 4: Fetch Jira issues and append to Final.xlsx (20% progress)
-        self.log("Fetching Jira issues and updating Final.xlsx...")
-        self.fetch_jira_issues()
         self.progress['value'] = 100
 
         # Finalize
         self.loading_label.config(text="")
         self.run_button.config(state='normal')
         self.log("Script execution completed.")
-        self.root.after(0, lambda: messagebox.showinfo("Success", "Final Excel data with Jira issues is ready in Final.xlsx"))
+        self.root.after(0, lambda: messagebox.showinfo("Success", "Final Excel data is ready in Final.xlsx"))
 
     def fetch_applications(self):
         contrast_token = 'dhdjdjdjdjrjrjrjdj=='  # Replace with actual token
@@ -379,141 +374,6 @@ class App:
 
         wb.save(excel_file)
         self.log("Formatting applied to Final.xlsx")
-
-    def fetch_jira_issues(self):
-        jira_token = 'hdjdjdjdjdj'  # Replace with actual Jira token
-        headers = {
-            'Authorization': f'Bearer {jira_token}',
-            'Content-Type': 'application/json'
-        }
-        jira_base_url = 'https://jira.crm.com/rest/api/2/search'
-        excel_file = os.path.join(script_dir, 'Final.xlsx')
-
-        # Read existing Final.xlsx
-        try:
-            df = pd.read_excel(excel_file)
-        except FileNotFoundError:
-            self.log("Final.xlsx not found. Skipping Jira issue fetch.")
-            return
-
-        max_jira_issues = 0  # Track maximum number of Jira issues for any trace
-        jira_data = []
-
-        def fetch_jira_for_trace(row):
-            nonlocal max_jira_issues
-            trace_uuid = row['uuid']
-            url = f"{jira_base_url}?jql=text~{trace_uuid}"
-            try:
-                response = session.get(url, timeout=10)
-                if response.status_code == 200:
-                    data = response.json()
-                    issues = data.get('issues', [])
-                    if issues:  # Only process traces with Jira issues
-                        jira_info = {'uuid': trace_uuid}
-                        for i, issue in enumerate(issues, 1):
-                            jira_info[f'Jira_{i}'] = issue.get('key', '')
-                            jira_info[f'Jira_Status_{i}'] = issue.get('fields', {}).get('status', {}).get('name', '')
-                        max_jira_issues = max(max_jira_issues, len(issues))
-                        return jira_info
-                else:
-                    self.log(f"Error for Jira search UUID {trace_uuid}: {response.status_code} - {response.text}")
-                return None
-            except Exception as e:
-                self.log(f"Exception for Jira search UUID {trace_uuid}: {e}")
-                return None
-
-        with requests.Session() as session:
-            session.headers.update(headers)
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                results = list(executor.map(fetch_jira_for_trace, df.to_dict('records')))
-
-        # Filter out None results and collect Jira data
-        for result in results:
-            if result:
-                jira_data.append(result)
-
-        if not jira_data:
-            self.log("No Jira issues found for any traces.")
-            return
-
-        # Merge Jira data with existing DataFrame
-        jira_df = pd.DataFrame(jira_data)
-        merged_df = df.merge(jira_df, on='uuid', how='left')
-
-        # Ensure all Jira columns are present
-        jira_columns = []
-        for i in range(1, max_jira_issues + 1):
-            jira_columns.extend([f'Jira_{i}', f'Jira_Status_{i}'])
-        for col in jira_columns:
-            if col not in merged_df.columns:
-                merged_df[col] = ''
-
-        # Reorder columns: base columns, note columns, then Jira columns
-        base_columns = ['name', 'app_id', 'severity', 'uuid', 'rule_name', 'rule_title', 'status']
-        note_columns = [col for col in merged_df.columns if col.startswith(('note_', 'creator_', 'creation_'))]
-        final_columns = base_columns + note_columns + jira_columns
-        merged_df = merged_df[final_columns]
-
-        # Save updated Final.xlsx
-        merged_df.to_excel(excel_file, index=False)
-        self.log("Jira issues appended to Final.xlsx")
-
-        # Apply formatting
-        wb = load_workbook(excel_file)
-        ws = wb.active
-
-        # Define borders
-        medium_border = Border(
-            left=Side(style='medium'), right=Side(style='medium'),
-            top=Side(style='medium'), bottom=Side(style='medium')
-        )
-        thin_border = Border(
-            left=Side(style='thin'), right=Side(style='thin'),
-            top=Side(style='thin'), bottom=Side(style='thin')
-        )
-        center_align = Alignment(horizontal='center', vertical='center')
-        left_align = Alignment(horizontal='left', vertical='center')
-        bold_font = Font(bold=True)
-
-        # Determine column indices for note and Jira groups
-        note_start_idx = len(base_columns) + 1
-        jira_start_idx = note_start_idx + len(note_columns)
-
-        # Apply formatting to headers
-        for col_idx in range(1, ws.max_column + 1):
-            cell = ws.cell(row=1, column=col_idx)
-            cell.font = bold_font
-            cell.alignment = center_align if col_idx > 1 else left_align
-            cell.border = thin_border
-
-        # Apply formatting to data rows
-        for row_idx in range(2, ws.max_row + 1):
-            for col_idx in range(1, ws.max_column + 1):
-                cell = ws.cell(row=row_idx, column=col_idx)
-                cell.alignment = center_align if col_idx > 1 else left_align
-                if note_start_idx <= col_idx < jira_start_idx:
-                    if (col_idx - note_start_idx) % 4 == 0:  # note_i
-                        cell.border = medium_border
-                    elif (col_idx - note_start_idx + 1) % 4 == 0:  # creator_i
-                        cell.border = medium_border
-                    elif (col_idx - note_start_idx + 2) % 4 == 0:  # creator_uid_i
-                        cell.border = medium_border
-                    elif (col_idx - note_start_idx + 3) % 4 == 0:  # creation_i
-                        cell.border = medium_border
-                    else:
-                        cell.border = thin_border
-                elif col_idx >= jira_start_idx:
-                    if (col_idx - jira_start_idx) % 2 == 0:  # Jira_i
-                        cell.border = medium_border
-                    elif (col_idx - jira_start_idx + 1) % 2 == 0:  # Jira_Status_i
-                        cell.border = medium_border
-                    else:
-                        cell.border = thin_border
-                else:
-                    cell.border = thin_border
-
-        wb.save(excel_file)
-        self.log("Jira formatting applied to Final.xlsx")
 
 if __name__ == "__main__":
     root = tk.Tk()
