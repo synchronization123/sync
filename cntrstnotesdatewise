@@ -290,15 +290,26 @@ class App:
                             'uuid': trace['uuid'],
                             'rule_name': trace['rule_name'],
                             'rule_title': trace['rule_title'],
-                            'status': trace['status']
+                            'current_status': trace['status']
                         }
-                        # Add notes as separate columns (note_1, creator_1, creator_uid_1, etc.)
+                        # Process notes and extract previous status and creator
                         for i, note in enumerate(filtered_notes, 1):
                             trace_data[f'note_{i}'] = note.get('note', '')
-                            trace_data[f'creator_{i}'] = note.get('creator', '')
+                            trace_data[f'current_creator_{i}'] = note.get('creator', '')
                             trace_data[f'creator_uid_{i}'] = note.get('creator_uid', '')
                             creation_time = note.get('creation', 0) / 1000  # Convert to seconds
                             trace_data[f'creation_{i}'] = datetime.fromtimestamp(creation_time).strftime('%Y-%m-%d %H:%M:%S')
+                            # Extract previous status and creator from Properties
+                            properties = note.get('properties', [])
+                            previous_status = ''
+                            previous_creator = ''
+                            for prop in properties:
+                                if prop.get('name') == 'status.change.previous.status':
+                                    previous_status = prop.get('value', '')
+                                if prop.get('name') == 'status.changed.creator':
+                                    previous_creator = prop.get('value', '')
+                            trace_data[f'previous_status_{i}'] = previous_status
+                            trace_data[f'previous_creator_{i}'] = previous_creator
                         max_notes = max(max_notes, len(filtered_notes))
                         final_data.append(trace_data)
                 else:
@@ -316,9 +327,11 @@ class App:
             return
 
         # Create DataFrame with dynamic columns based on max_notes
-        columns = ['name', 'app_id', 'severity', 'uuid', 'rule_name', 'rule_title', 'status']
+        columns = ['name', 'app_id', 'severity', 'uuid', 'rule_name', 'rule_title', 'current_status']
         for i in range(1, max_notes + 1):
-            columns.extend([f'note_{i}', f'creator_{i}', f'creator_uid_{i}', f'creation_{i}'])
+            columns.extend([f'previous_status_{i}', f'previous_creator_{i}'])
+        for i in range(1, max_notes + 1):
+            columns.extend([f'note_{i}', f'current_creator_{i}', f'creator_uid_{i}', f'creation_{i}'])
         
         # Convert final_data to DataFrame, ensuring all columns are present
         df = pd.DataFrame(final_data)
@@ -361,13 +374,17 @@ class App:
             for col_idx in range(1, ws.max_column + 1):
                 cell = ws.cell(row=row_idx, column=col_idx)
                 cell.alignment = center_align if col_idx > 1 else left_align
-                if col_idx > 7 and (col_idx - 8) % 4 == 0:  # note_i
+                # Apply medium borders to previous status/creator groups (2 columns)
+                if col_idx > 7 and col_idx <= (7 + max_notes * 2) and (col_idx - 8) % 2 == 0:
                     cell.border = medium_border
-                elif col_idx > 7 and (col_idx - 9) % 4 == 0:  # creator_i
+                # Apply medium borders to note groups (4 columns)
+                elif col_idx > (7 + max_notes * 2) and (col_idx - 8 - max_notes * 2) % 4 == 0:
                     cell.border = medium_border
-                elif col_idx > 7 and (col_idx - 10) % 4 == 0:  # creator_uid_i
+                elif col_idx > (7 + max_notes * 2) and (col_idx - 9 - max_notes * 2) % 4 == 0:
                     cell.border = medium_border
-                elif col_idx > 7 and (col_idx - 11) % 4 == 0:  # creation_i
+                elif col_idx > (7 + max_notes * 2) and (col_idx - 10 - max_notes * 2) % 4 == 0:
+                    cell.border = medium_border
+                elif col_idx > (7 + max_notes * 2) and (col_idx - 11 - max_notes * 2) % 4 == 0:
                     cell.border = medium_border
                 else:
                     cell.border = thin_border
