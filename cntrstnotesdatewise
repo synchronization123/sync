@@ -9,7 +9,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from openpyxl import load_workbook
 from openpyxl.styles import Border, Side, Alignment, Font
-import time
+from tkcalendar import DateEntry  # Requires tkcalendar: pip install tkcalendar
 
 # Set the working directory to the script's directory
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -20,23 +20,41 @@ class App:
     def __init__(self, root):
         self.root = root
         self.root.title("Contrast Traces and Jira Processor")
-        self.root.geometry("600x500")  # Increased height for date inputs
+        self.root.geometry("600x500")
 
         # Frame for date inputs
         self.date_frame = ttk.Frame(self.root)
         self.date_frame.pack(pady=10)
 
-        # Start date
-        ttk.Label(self.date_frame, text="Start Date (YYYY-MM-DD):").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        self.start_date_entry = ttk.Entry(self.date_frame)
+        # Start date picker
+        ttk.Label(self.date_frame, text="Start Date:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.start_date_entry = DateEntry(
+            self.date_frame,
+            width=12,
+            background='darkblue',
+            foreground='white',
+            borderwidth=2,
+            year=2025,
+            month=1,
+            day=1,
+            date_pattern='yyyy-mm-dd'
+        )
         self.start_date_entry.grid(row=0, column=1, padx=5, pady=5)
-        self.start_date_entry.insert(0, "2025-01-01")  # Default start date
 
-        # End date
-        ttk.Label(self.date_frame, text="End Date (YYYY-MM-DD):").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        self.end_date_entry = ttk.Entry(self.date_frame)
+        # End date picker
+        ttk.Label(self.date_frame, text="End Date:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        self.end_date_entry = DateEntry(
+            self.date_frame,
+            width=12,
+            background='darkblue',
+            foreground='white',
+            borderwidth=2,
+            year=datetime.now().year,
+            month=datetime.now().month,
+            day=datetime.now().day,
+            date_pattern='yyyy-mm-dd'
+        )
         self.end_date_entry.grid(row=1, column=1, padx=5, pady=5)
-        self.end_date_entry.insert(0, datetime.now().strftime("%Y-%m-%d"))  # Default to today
 
         # Frame for button, loading, and progress
         self.top_frame = ttk.Frame(self.root)
@@ -74,17 +92,17 @@ class App:
 
     def validate_dates(self):
         try:
-            start_date = datetime.strptime(self.start_date_entry.get(), "%Y-%m-%d")
-            end_date = datetime.strptime(self.end_date_entry.get(), "%Y-%m-%d")
-            # Set time to midnight
-            start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+            start_date = self.start_date_entry.get_date()
+            end_date = self.end_date_entry.get_date()
+            # Convert to datetime and set time to midnight
+            start_date = datetime.combine(start_date, datetime.min.time())
+            end_date = datetime.combine(end_date, datetime.max.time())
             if start_date > end_date:
                 raise ValueError("Start date cannot be after end date.")
             return start_date, end_date
         except ValueError as e:
             self.log(f"Date validation error: {e}")
-            messagebox.showerror("Error", f"Invalid date format or logic: {e}")
+            messagebox.showerror("Error", f"Invalid date selection: {e}")
             return None, None
 
     def start_script(self):
@@ -116,7 +134,7 @@ class App:
         # Convert dates to epoch milliseconds
         start_epoch = int(start_date.timestamp() * 1000)
         end_epoch = int(end_date.timestamp() * 1000)
-        self.log(f"Filtering notes between {start_date} and {end_date} (Epoch: {start_epoch} to {end_epoch})")
+        self.log(f"Filtering notes between {start_date.strftime('%Y-%m-%d')} and {end_date.strftime('%Y-%m-%d')} (Epoch: {start_epoch} to {end_epoch})")
 
         # Step 1: Fetch applications (25% progress)
         self.log("Fetching applications data...")
@@ -201,12 +219,15 @@ class App:
             app_id = app['app_id']
             app_traces = []
             for status in statuses:
-                url = f"{base_url}{org_uuid}/traces/{app_id}/filter?limit=500&status={status}"
+                # Limit to last 1000 traces per status
+                url = f"{base_url}{org_uuid}/traces/{app_id}/filter?limit=1000&status={status}&sort=-last_time_seen"
                 try:
                     response = session.get(url, timeout=10)
                     if response.status_code == 200:
                         data = response.json()
-                        for trace in data.get('traces', []):
+                        traces_fetched = data.get('traces', [])
+                        self.log(f"Fetched {len(traces_fetched)} traces for App ID {app_id}, Status {status}")
+                        for trace in traces_fetched[:1000]:  # Ensure no more than 1000 traces
                             app_traces.append({
                                 'name': app['name'],
                                 'app_id': app_id,
@@ -233,7 +254,7 @@ class App:
         # Save to Traces.xlsx
         df = pd.DataFrame(traces)
         df.to_excel(os.path.join(script_dir, 'Traces.xlsx'), index=False)
-        self.log("Traces saved to Traces.xlsx")
+        self.log(f"Traces saved to Traces.xlsx (Total: {len(traces)})")
         return traces
 
     def generate_final_xlsx(self, traces, start_epoch, end_epoch):
@@ -281,7 +302,6 @@ class App:
                             trace_data[f'note_{i}'] = note.get('note', '')
                             trace_data[f'creator_{i}'] = note.get('creator', '')
                             trace_data[f'creator_uid_{i}'] = note.get('creator_uid', '')
-                            # Optionally add creation date for reference
                             creation_time = note.get('creation', 0) / 1000  # Convert to seconds
                             trace_data[f'creation_{i}'] = datetime.fromtimestamp(creation_time).strftime('%Y-%m-%d %H:%M:%S')
                         max_notes = max(max_notes, len(filtered_notes))
@@ -346,8 +366,7 @@ class App:
             for col_idx in range(1, ws.max_column + 1):
                 cell = ws.cell(row=row_idx, column=col_idx)
                 cell.alignment = center_align if col_idx > 1 else left_align
-                # Apply medium borders to note, creator, creator_uid, creation groups
-                if col_idx > 7 and (col_idx - 8) % 4 == 0:  # Start of each note group (note_i)
+                if col_idx > 7 and (col_idx - 8) % 4 == 0:  # note_i
                     cell.border = medium_border
                 elif col_idx > 7 and (col_idx - 9) % 4 == 0:  # creator_i
                     cell.border = medium_border
@@ -450,7 +469,7 @@ class App:
         )
         thin_border = Border(
             left=Side(style='thin'), right=Side(style='thin'),
-            top=Side(style='thin'), bottom=Side('thin')
+            top=Side(style='thin'), bottom=Side(style='thin')
         )
         center_align = Alignment(horizontal='center', vertical='center')
         left_align = Alignment(horizontal='left', vertical='center')
@@ -472,7 +491,6 @@ class App:
             for col_idx in range(1, ws.max_column + 1):
                 cell = ws.cell(row=row_idx, column=col_idx)
                 cell.alignment = center_align if col_idx > 1 else left_align
-                # Apply medium borders to note groups
                 if note_start_idx <= col_idx < jira_start_idx:
                     if (col_idx - note_start_idx) % 4 == 0:  # note_i
                         cell.border = medium_border
@@ -484,7 +502,6 @@ class App:
                         cell.border = medium_border
                     else:
                         cell.border = thin_border
-                # Apply medium borders to Jira groups
                 elif col_idx >= jira_start_idx:
                     if (col_idx - jira_start_idx) % 2 == 0:  # Jira_i
                         cell.border = medium_border
