@@ -1,0 +1,504 @@
+# Save this file as contrast_traces_jira.py
+import requests
+import pandas as pd
+from datetime import datetime, timedelta
+import os
+import tkinter as tk
+from tkinter import ttk, messagebox
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from openpyxl import load_workbook
+from openpyxl.styles import Border, Side, Alignment, Font
+import time
+
+# Set the working directory to the script's directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(script_dir)
+
+# GUI Class
+class App:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Contrast Traces and Jira Processor")
+        self.root.geometry("600x500")  # Increased height for date inputs
+
+        # Frame for date inputs
+        self.date_frame = ttk.Frame(self.root)
+        self.date_frame.pack(pady=10)
+
+        # Start date
+        ttk.Label(self.date_frame, text="Start Date (YYYY-MM-DD):").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.start_date_entry = ttk.Entry(self.date_frame)
+        self.start_date_entry.grid(row=0, column=1, padx=5, pady=5)
+        self.start_date_entry.insert(0, "2025-01-01")  # Default start date
+
+        # End date
+        ttk.Label(self.date_frame, text="End Date (YYYY-MM-DD):").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        self.end_date_entry = ttk.Entry(self.date_frame)
+        self.end_date_entry.grid(row=1, column=1, padx=5, pady=5)
+        self.end_date_entry.insert(0, datetime.now().strftime("%Y-%m-%d"))  # Default to today
+
+        # Frame for button, loading, and progress
+        self.top_frame = ttk.Frame(self.root)
+        self.top_frame.pack(pady=10)
+
+        # Run button
+        self.run_button = ttk.Button(self.top_frame, text="Run Script", command=self.start_script)
+        self.run_button.pack(side=tk.LEFT, padx=5)
+
+        # Loading label
+        self.loading_label = ttk.Label(self.top_frame, text="")
+        self.loading_label.pack(side=tk.LEFT, padx=10)
+
+        # Progress bar
+        self.progress = ttk.Progressbar(self.top_frame, length=300, mode='determinate')
+        self.progress.pack(side=tk.LEFT, padx=5)
+
+        # Text area for console logs
+        self.log_frame = ttk.Frame(self.root)
+        self.log_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        self.log_text = tk.Text(self.log_frame, height=15, width=70, state='disabled')
+        self.log_text.pack(fill=tk.BOTH, expand=True)
+
+        # Scrollbar for log text
+        scrollbar = ttk.Scrollbar(self.log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_text['yscrollcommand'] = scrollbar.set
+
+    def log(self, message):
+        self.log_text.configure(state='normal')
+        self.log_text.insert(tk.END, f"{datetime.now().strftime('%H:%M:%S')}: {message}\n")
+        self.log_text.configure(state='disabled')
+        self.log_text.see(tk.END)
+
+    def validate_dates(self):
+        try:
+            start_date = datetime.strptime(self.start_date_entry.get(), "%Y-%m-%d")
+            end_date = datetime.strptime(self.end_date_entry.get(), "%Y-%m-%d")
+            # Set time to midnight
+            start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+            if start_date > end_date:
+                raise ValueError("Start date cannot be after end date.")
+            return start_date, end_date
+        except ValueError as e:
+            self.log(f"Date validation error: {e}")
+            messagebox.showerror("Error", f"Invalid date format or logic: {e}")
+            return None, None
+
+    def start_script(self):
+        start_date, end_date = self.validate_dates()
+        if start_date is None or end_date is None:
+            self.run_button.config(state='normal')
+            return
+
+        self.run_button.config(state='disabled')
+        self.loading_label.config(text="Loading")
+        self.animate_loading()
+        threading.Thread(target=self.run_script_thread, args=(start_date, end_date), daemon=True).start()
+
+    def animate_loading(self):
+        def update_dots():
+            if self.loading_label.cget("text").startswith("Loading"):
+                dots = self.loading_label.cget("text")[7:]
+                if dots == "...":
+                    self.loading_label.config(text="Loading")
+                else:
+                    self.loading_label.config(text="Loading" + dots + ".")
+                self.root.after(1000, update_dots)
+        self.root.after(1000, update_dots)
+
+    def run_script_thread(self, start_date, end_date):
+        self.progress['value'] = 0
+        self.log("Starting script execution...")
+
+        # Convert dates to epoch milliseconds
+        start_epoch = int(start_date.timestamp() * 1000)
+        end_epoch = int(end_date.timestamp() * 1000)
+        self.log(f"Filtering notes between {start_date} and {end_date} (Epoch: {start_epoch} to {end_epoch})")
+
+        # Step 1: Fetch applications (25% progress)
+        self.log("Fetching applications data...")
+        self.progress['value'] = 10
+        applications = self.fetch_applications()
+        self.progress['value'] = 25
+
+        # Step 2: Fetch traces (30% progress)
+        self.log("Fetching traces data...")
+        traces = self.fetch_traces(applications)
+        self.progress['value'] = 55
+
+        # Step 3: Fetch notes and generate Final.xlsx (25% progress)
+        self.log("Fetching notes and generating Final.xlsx...")
+        self.generate_final_xlsx(traces, start_epoch, end_epoch)
+        self.progress['value'] = 80
+
+        # Step 4: Fetch Jira issues and append to Final.xlsx (20% progress)
+        self.log("Fetching Jira issues and updating Final.xlsx...")
+        self.fetch_jira_issues()
+        self.progress['value'] = 100
+
+        # Finalize
+        self.loading_label.config(text="")
+        self.run_button.config(state='normal')
+        self.log("Script execution completed.")
+        self.root.after(0, lambda: messagebox.showinfo("Success", "Final Excel data with Jira issues is ready in Final.xlsx"))
+
+    def fetch_applications(self):
+        contrast_token = 'dhdjdjdjdjrjrjrjdj=='  # Replace with actual token
+        org_uuid = 'gshdhdhd'  # Replace with actual Org UUID
+        api_key = 'hhjkkjdddjdkdk'  # Replace with actual API key
+
+        headers = {
+            'Authorization': contrast_token,
+            'Api-key': api_key,
+            'Accept': 'application/json'
+        }
+
+        base_url = 'https://crm.contrast.com/api/ng/'
+        url = f"{base_url}{org_uuid}/applications/filter"
+        applications = []
+
+        with requests.Session() as session:
+            session.headers.update(headers)
+            try:
+                response = session.get(url, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    for app in data.get('applications', []):
+                        applications.append({
+                            'name': app.get('name', ''),
+                            'app_id': app.get('app_id', '')
+                        })
+                    # Save to applications.xlsx
+                    df = pd.DataFrame(applications)
+                    df.to_excel(os.path.join(script_dir, 'applications.xlsx'), index=False)
+                    self.log("Applications saved to applications.xlsx")
+                else:
+                    self.log(f"Error fetching applications: {response.status_code} - {response.text}")
+            except Exception as e:
+                self.log(f"Exception fetching applications: {e}")
+        
+        return applications
+
+    def fetch_traces(self, applications):
+        contrast_token = 'dhdjdjdjdjrjrjrjdj=='  # Replace with actual token
+        org_uuid = 'gshdhdhd'  # Replace with actual Org UUID
+        api_key = 'hhjkkjdddjdkdk'  # Replace with actual API key
+
+        headers = {
+            'Authorization': contrast_token,
+            'Api-key': api_key,
+            'Accept': 'application/json'
+        }
+
+        base_url = 'https://crm.contrast.com/api/ng/'
+        traces = []
+        statuses = ['Confirmed', 'Not a Problem', 'Remediated', 'Fixed', 'Suspicious']
+
+        def fetch_traces_for_app(app):
+            app_id = app['app_id']
+            app_traces = []
+            for status in statuses:
+                url = f"{base_url}{org_uuid}/traces/{app_id}/filter?limit=500&status={status}"
+                try:
+                    response = session.get(url, timeout=10)
+                    if response.status_code == 200:
+                        data = response.json()
+                        for trace in data.get('traces', []):
+                            app_traces.append({
+                                'name': app['name'],
+                                'app_id': app_id,
+                                'severity': trace.get('severity', ''),
+                                'uuid': trace.get('uuid', ''),
+                                'rule_name': trace.get('rule_name', ''),
+                                'rule_title': trace.get('rule_title', ''),
+                                'status': trace.get('status', '')
+                            })
+                    else:
+                        self.log(f"Error for App ID {app_id}, Status {status}: {response.status_code} - {response.text}")
+                except Exception as e:
+                    self.log(f"Exception for App ID {app_id}, Status {status}: {e}")
+            return app_traces
+
+        with requests.Session() as session:
+            session.headers.update(headers)
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                results = list(executor.map(fetch_traces_for_app, applications))
+
+        for result in results:
+            traces.extend(result)
+
+        # Save to Traces.xlsx
+        df = pd.DataFrame(traces)
+        df.to_excel(os.path.join(script_dir, 'Traces.xlsx'), index=False)
+        self.log("Traces saved to Traces.xlsx")
+        return traces
+
+    def generate_final_xlsx(self, traces, start_epoch, end_epoch):
+        contrast_token = 'dhdjdjdjdjrjrjrjdj=='  # Replace with actual token
+        org_uuid = 'gshdhdhd'  # Replace with actual Org UUID
+        api_key = 'hhjkkjdddjdkdk'  # Replace with actual API key
+
+        headers = {
+            'Authorization': contrast_token,
+            'Api-key': api_key,
+            'Accept': 'application/json'
+        }
+
+        base_url = 'https://crm.contrast.com/api/ng/'
+        final_data = []
+        max_notes = 0  # Track the maximum number of notes for any trace
+
+        def fetch_notes(trace):
+            nonlocal max_notes
+            app_id = trace['app_id']
+            trace_uuid = trace['uuid']
+            url = f"{base_url}{org_uuid}/applications/{app_id}/traces/{trace_uuid}/notes"
+            try:
+                response = session.get(url, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    notes = data.get('notes', [])
+                    # Filter notes by creation date (epoch milliseconds)
+                    filtered_notes = [
+                        note for note in notes
+                        if start_epoch <= note.get('creation', 0) <= end_epoch
+                    ]
+                    if filtered_notes:  # Only process traces with notes in date range
+                        trace_data = {
+                            'name': trace['name'],
+                            'app_id': trace['app_id'],
+                            'severity': trace['severity'],
+                            'uuid': trace['uuid'],
+                            'rule_name': trace['rule_name'],
+                            'rule_title': trace['rule_title'],
+                            'status': trace['status']
+                        }
+                        # Add notes as separate columns (note_1, creator_1, creator_uid_1, etc.)
+                        for i, note in enumerate(filtered_notes, 1):
+                            trace_data[f'note_{i}'] = note.get('note', '')
+                            trace_data[f'creator_{i}'] = note.get('creator', '')
+                            trace_data[f'creator_uid_{i}'] = note.get('creator_uid', '')
+                            # Optionally add creation date for reference
+                            creation_time = note.get('creation', 0) / 1000  # Convert to seconds
+                            trace_data[f'creation_{i}'] = datetime.fromtimestamp(creation_time).strftime('%Y-%m-%d %H:%M:%S')
+                        max_notes = max(max_notes, len(filtered_notes))
+                        final_data.append(trace_data)
+                else:
+                    self.log(f"Error for Trace {trace_uuid}: {response.status_code} - {response.text}")
+            except Exception as e:
+                self.log(f"Exception for Trace {trace_uuid}: {e}")
+
+        with requests.Session() as session:
+            session.headers.update(headers)
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                executor.map(fetch_notes, traces)
+
+        if not final_data:
+            self.log("No traces with notes found in the specified date range.")
+            return
+
+        # Create DataFrame with dynamic columns based on max_notes
+        columns = ['name', 'app_id', 'severity', 'uuid', 'rule_name', 'rule_title', 'status']
+        for i in range(1, max_notes + 1):
+            columns.extend([f'note_{i}', f'creator_{i}', f'creator_uid_{i}', f'creation_{i}'])
+        
+        # Convert final_data to DataFrame, ensuring all columns are present
+        df = pd.DataFrame(final_data)
+        for col in columns:
+            if col not in df.columns:
+                df[col] = ''
+        df = df[columns]  # Reorder columns
+
+        # Save to Final.xlsx
+        excel_file = os.path.join(script_dir, 'Final.xlsx')
+        df.to_excel(excel_file, index=False)
+        self.log("Final data saved to Final.xlsx")
+
+        # Apply formatting
+        wb = load_workbook(excel_file)
+        ws = wb.active
+
+        # Define borders
+        medium_border = Border(
+            left=Side(style='medium'), right=Side(style='medium'),
+            top=Side(style='medium'), bottom=Side(style='medium')
+        )
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin')
+        )
+        center_align = Alignment(horizontal='center', vertical='center')
+        left_align = Alignment(horizontal='left', vertical='center')
+        bold_font = Font(bold=True)
+
+        # Apply formatting to headers
+        for col_idx in range(1, ws.max_column + 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.font = bold_font
+            cell.alignment = center_align if col_idx > 1 else left_align
+            cell.border = thin_border
+
+        # Apply formatting to data rows
+        for row_idx in range(2, ws.max_row + 1):
+            for col_idx in range(1, ws.max_column + 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                cell.alignment = center_align if col_idx > 1 else left_align
+                # Apply medium borders to note, creator, creator_uid, creation groups
+                if col_idx > 7 and (col_idx - 8) % 4 == 0:  # Start of each note group (note_i)
+                    cell.border = medium_border
+                elif col_idx > 7 and (col_idx - 9) % 4 == 0:  # creator_i
+                    cell.border = medium_border
+                elif col_idx > 7 and (col_idx - 10) % 4 == 0:  # creator_uid_i
+                    cell.border = medium_border
+                elif col_idx > 7 and (col_idx - 11) % 4 == 0:  # creation_i
+                    cell.border = medium_border
+                else:
+                    cell.border = thin_border
+
+        wb.save(excel_file)
+        self.log("Formatting applied to Final.xlsx")
+
+    def fetch_jira_issues(self):
+        jira_token = 'hdjdjdjdjdj'  # Replace with actual Jira token
+        headers = {
+            'Authorization': f'Bearer {jira_token}',
+            'Content-Type': 'application/json'
+        }
+        jira_base_url = 'https://jira.crm.com/rest/api/2/search'
+        excel_file = os.path.join(script_dir, 'Final.xlsx')
+
+        # Read existing Final.xlsx
+        try:
+            df = pd.read_excel(excel_file)
+        except FileNotFoundError:
+            self.log("Final.xlsx not found. Skipping Jira issue fetch.")
+            return
+
+        max_jira_issues = 0  # Track maximum number of Jira issues for any trace
+        jira_data = []
+
+        def fetch_jira_for_trace(row):
+            nonlocal max_jira_issues
+            trace_uuid = row['uuid']
+            url = f"{jira_base_url}?jql=text~{trace_uuid}"
+            try:
+                response = session.get(url, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    issues = data.get('issues', [])
+                    if issues:  # Only process traces with Jira issues
+                        jira_info = {'uuid': trace_uuid}
+                        for i, issue in enumerate(issues, 1):
+                            jira_info[f'Jira_{i}'] = issue.get('key', '')
+                            jira_info[f'Jira_Status_{i}'] = issue.get('fields', {}).get('status', {}).get('name', '')
+                        max_jira_issues = max(max_jira_issues, len(issues))
+                        return jira_info
+                else:
+                    self.log(f"Error for Jira search UUID {trace_uuid}: {response.status_code} - {response.text}")
+                return None
+            except Exception as e:
+                self.log(f"Exception for Jira search UUID {trace_uuid}: {e}")
+                return None
+
+        with requests.Session() as session:
+            session.headers.update(headers)
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                results = list(executor.map(fetch_jira_for_trace, df.to_dict('records')))
+
+        # Filter out None results and collect Jira data
+        for result in results:
+            if result:
+                jira_data.append(result)
+
+        if not jira_data:
+            self.log("No Jira issues found for any traces.")
+            return
+
+        # Merge Jira data with existing DataFrame
+        jira_df = pd.DataFrame(jira_data)
+        merged_df = df.merge(jira_df, on='uuid', how='left')
+
+        # Ensure all Jira columns are present
+        jira_columns = []
+        for i in range(1, max_jira_issues + 1):
+            jira_columns.extend([f'Jira_{i}', f'Jira_Status_{i}'])
+        for col in jira_columns:
+            if col not in merged_df.columns:
+                merged_df[col] = ''
+
+        # Reorder columns: base columns, note columns, then Jira columns
+        base_columns = ['name', 'app_id', 'severity', 'uuid', 'rule_name', 'rule_title', 'status']
+        note_columns = [col for col in merged_df.columns if col.startswith(('note_', 'creator_', 'creation_'))]
+        final_columns = base_columns + note_columns + jira_columns
+        merged_df = merged_df[final_columns]
+
+        # Save updated Final.xlsx
+        merged_df.to_excel(excel_file, index=False)
+        self.log("Jira issues appended to Final.xlsx")
+
+        # Apply formatting
+        wb = load_workbook(excel_file)
+        ws = wb.active
+
+        # Define borders
+        medium_border = Border(
+            left=Side(style='medium'), right=Side(style='medium'),
+            top=Side(style='medium'), bottom=Side(style='medium')
+        )
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side('thin')
+        )
+        center_align = Alignment(horizontal='center', vertical='center')
+        left_align = Alignment(horizontal='left', vertical='center')
+        bold_font = Font(bold=True)
+
+        # Determine column indices for note and Jira groups
+        note_start_idx = len(base_columns) + 1
+        jira_start_idx = note_start_idx + len(note_columns)
+
+        # Apply formatting to headers
+        for col_idx in range(1, ws.max_column + 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.font = bold_font
+            cell.alignment = center_align if col_idx > 1 else left_align
+            cell.border = thin_border
+
+        # Apply formatting to data rows
+        for row_idx in range(2, ws.max_row + 1):
+            for col_idx in range(1, ws.max_column + 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                cell.alignment = center_align if col_idx > 1 else left_align
+                # Apply medium borders to note groups
+                if note_start_idx <= col_idx < jira_start_idx:
+                    if (col_idx - note_start_idx) % 4 == 0:  # note_i
+                        cell.border = medium_border
+                    elif (col_idx - note_start_idx + 1) % 4 == 0:  # creator_i
+                        cell.border = medium_border
+                    elif (col_idx - note_start_idx + 2) % 4 == 0:  # creator_uid_i
+                        cell.border = medium_border
+                    elif (col_idx - note_start_idx + 3) % 4 == 0:  # creation_i
+                        cell.border = medium_border
+                    else:
+                        cell.border = thin_border
+                # Apply medium borders to Jira groups
+                elif col_idx >= jira_start_idx:
+                    if (col_idx - jira_start_idx) % 2 == 0:  # Jira_i
+                        cell.border = medium_border
+                    elif (col_idx - jira_start_idx + 1) % 2 == 0:  # Jira_Status_i
+                        cell.border = medium_border
+                    else:
+                        cell.border = thin_border
+                else:
+                    cell.border = thin_border
+
+        wb.save(excel_file)
+        self.log("Jira formatting applied to Final.xlsx")
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = App(root)
+    root.mainloop()
