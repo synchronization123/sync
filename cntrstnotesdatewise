@@ -230,7 +230,7 @@ class App:
                                 'uuid': trace.get('uuid', ''),
                                 'rule_name': trace.get('rule_name', ''),
                                 'rule_title': trace.get('rule_title', ''),
-                                'status': trace.get('status', '')
+                                'current_status': trace.get('status', '')
                             })
                     else:
                         self.log(f"Error for App ID {app_id}, Status {status}: {response.status_code} - {response.text}")
@@ -284,32 +284,31 @@ class App:
                     ]
                     if filtered_notes:  # Only process traces with notes in date range
                         trace_data = {
-                            'name': trace['name'],
-                            'app_id': trace['app_id'],
-                            'severity': trace['severity'],
-                            'uuid': trace['uuid'],
-                            'rule_name': trace['rule_name'],
-                            'rule_title': trace['rule_title'],
-                            'current_status': trace['status']
+                            'Application Name': trace['name'],
+                            'Application ID': trace['app_id'],
+                            'Severity': trace['severity'],
+                            'Trace ID': trace['uuid'],
+                            'Rule Name': trace['rule_name'],
+                            'Rule Title': trace['rule_title'],
+                            'Current Trace Status': trace['current_status']
                         }
                         # Process notes and extract previous status and creator
                         for i, note in enumerate(filtered_notes, 1):
-                            trace_data[f'note_{i}'] = note.get('note', '')
-                            trace_data[f'current_creator_{i}'] = note.get('creator', '')
-                            trace_data[f'creator_uid_{i}'] = note.get('creator_uid', '')
-                            creation_time = note.get('creation', 0) / 1000  # Convert to seconds
-                            trace_data[f'creation_{i}'] = datetime.fromtimestamp(creation_time).strftime('%Y-%m-%d %H:%M:%S')
+                            trace_data[f'Previous Status {i}'] = ''
+                            trace_data[f'Previous Creator {i}'] = ''
+                            trace_data[f'Creation Date {i}'] = datetime.fromtimestamp(note.get('creation', 0) / 1000).strftime('%Y-%m-%d %H:%M:%S')
+                            trace_data[f'Current Creator {i}'] = note.get('creator', '')
+                            trace_data[f'Current Creator {i} uid'] = note.get('creator_uid', '')
+                            trace_data[f'Current Creator Note {i}'] = note.get('note', '')
                             # Extract previous status and creator from Properties
                             properties = note.get('properties', [])
-                            previous_status = ''
-                            previous_creator = ''
                             for prop in properties:
                                 if prop.get('name') == 'status.change.previous.status':
-                                    previous_status = prop.get('value', '')
+                                    trace_data[f'Previous Status {i}'] = prop.get('value', '')
                                 if prop.get('name') == 'status.changed.creator':
-                                    previous_creator = prop.get('value', '')
-                            trace_data[f'previous_status_{i}'] = previous_status
-                            trace_data[f'previous_creator_{i}'] = previous_creator
+                                    trace_data[f'Previous Creator {i}'] = prop.get('value', '')
+                            # Add blank column placeholder
+                            trace_data[f'Blank_{i}'] = ''
                         max_notes = max(max_notes, len(filtered_notes))
                         final_data.append(trace_data)
                 else:
@@ -327,11 +326,17 @@ class App:
             return
 
         # Create DataFrame with dynamic columns based on max_notes
-        columns = ['name', 'app_id', 'severity', 'uuid', 'rule_name', 'rule_title', 'current_status']
+        columns = ['Trace ID', 'Current Trace Status']
         for i in range(1, max_notes + 1):
-            columns.extend([f'previous_status_{i}', f'previous_creator_{i}'])
-        for i in range(1, max_notes + 1):
-            columns.extend([f'note_{i}', f'current_creator_{i}', f'creator_uid_{i}', f'creation_{i}'])
+            columns.extend([
+                f'Previous Status {i}',
+                f'Creation Date {i}',
+                f'Current Creator {i}',
+                f'Current Creator {i} uid',
+                f'Current Creator Note {i}',
+                f'Blank_{i}'
+            ])
+        columns.extend(['Application Name', 'Application ID', 'Severity', 'Rule Name', 'Rule Title'])
         
         # Convert final_data to DataFrame, ensuring all columns are present
         df = pd.DataFrame(final_data)
@@ -358,6 +363,7 @@ class App:
             left=Side(style='thin'), right=Side(style='thin'),
             top=Side(style='thin'), bottom=Side(style='thin')
         )
+        no_border = Border()  # No borders for blank columns
         center_align = Alignment(horizontal='center', vertical='center')
         left_align = Alignment(horizontal='left', vertical='center')
         bold_font = Font(bold=True)
@@ -367,25 +373,23 @@ class App:
             cell = ws.cell(row=1, column=col_idx)
             cell.font = bold_font
             cell.alignment = center_align if col_idx > 1 else left_align
-            cell.border = thin_border
+            cell.border = thin_border if not cell.value.startswith('Blank_') else no_border
 
         # Apply formatting to data rows
         for row_idx in range(2, ws.max_row + 1):
             for col_idx in range(1, ws.max_column + 1):
                 cell = ws.cell(row=row_idx, column=col_idx)
                 cell.alignment = center_align if col_idx > 1 else left_align
-                # Apply medium borders to previous status/creator groups (2 columns)
-                if col_idx > 7 and col_idx <= (7 + max_notes * 2) and (col_idx - 8) % 2 == 0:
+                # Apply medium borders to Trace ID and Current Trace Status (columns 1-2)
+                if 1 <= col_idx <= 2:
                     cell.border = medium_border
-                # Apply medium borders to note groups (4 columns)
-                elif col_idx > (7 + max_notes * 2) and (col_idx - 8 - max_notes * 2) % 4 == 0:
+                # Apply medium borders to note groups (5 columns: Previous Status i, Creation Date i, Current Creator i, Current Creator i uid, Current Creator Note i)
+                elif col_idx > 2 and (col_idx - 3) % 6 < 5:
                     cell.border = medium_border
-                elif col_idx > (7 + max_notes * 2) and (col_idx - 9 - max_notes * 2) % 4 == 0:
-                    cell.border = medium_border
-                elif col_idx > (7 + max_notes * 2) and (col_idx - 10 - max_notes * 2) % 4 == 0:
-                    cell.border = medium_border
-                elif col_idx > (7 + max_notes * 2) and (col_idx - 11 - max_notes * 2) % 4 == 0:
-                    cell.border = medium_border
+                # Apply no borders to blank columns (every 6th column starting from 8, 14, etc.)
+                elif col_idx > 2 and (col_idx - 3) % 6 == 5:
+                    cell.border = no_border
+                # Apply thin borders to Application Name, Application ID, Severity, Rule Name, Rule Title
                 else:
                     cell.border = thin_border
 
