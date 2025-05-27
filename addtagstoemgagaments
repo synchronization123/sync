@@ -1,0 +1,72 @@
+import pandas as pd
+import requests
+import sys
+
+# Configuration
+DEFECTDOJO_URL = "https://your-defectdojo-instance.com"  # Replace with your DefectDojo URL
+API_TOKEN = "jsjdjd"  # Your provided API token
+EXCEL_FILE = "engagement.xlsx"  # Path to your Excel file
+NEW_TAGS = ["new_tag1", "new_tag2"]  # List of new tags to add
+
+# API headers
+headers = {
+    "Authorization": f"Token {API_TOKEN}",
+    "Content-Type": "application/json"
+}
+
+def read_engagement_ids(file_path):
+    """Read engagement IDs from the Excel file."""
+    try:
+        df = pd.read_excel(file_path)
+        if 'id' not in df.columns:
+            print("Error: Excel file must contain an 'id' column.")
+            sys.exit(1)
+        return df['id'].tolist()
+    except Exception as e:
+        print(f"Error reading Excel file: {e}")
+        sys.exit(1)
+
+def get_engagement_tags(engagement_id):
+    """Fetch current tags for an engagement."""
+    url = f"{DEFECTDOJO_URL}/api/v2/engagements/{engagement_id}/"
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        return data.get('tags', [])
+    except requests.RequestException as e:
+        print(f"Error fetching tags for engagement ID {engagement_id}: {e}")
+        return []
+
+def update_engagement_tags(engagement_id, new_tags):
+    """Add new tags to an engagement without removing existing ones."""
+    # Get current tags
+    current_tags = get_engagement_tags(engagement_id)
+    
+    # Combine current and new tags, ensuring no duplicates
+    updated_tags = list(set(current_tags + new_tags))
+    
+    # Prepare payload
+    payload = {
+        "tags": updated_tags
+    }
+    
+    # Update engagement with new tags
+    url = f"{DEFECTDOJO_URL}/api/v2/engagements/{engagement_id}/"
+    try:
+        response = requests.patch(url, headers=headers, json=payload)
+        response.raise_for_status()
+        print(f"Successfully updated tags for engagement ID {engagement_id}: {updated_tags}")
+    except requests.RequestException as e:
+        print(f"Error updating tags for engagement ID {engagement_id}: {e}")
+
+def main():
+    # Read engagement IDs from Excel
+    engagement_ids = read_engagement_ids(EXCEL_FILE)
+    
+    # Process each engagement
+    for engagement_id in engagement_ids:
+        update_engagement_tags(engagement_id, NEW_TAGS)
+
+if __name__ == "__main__":
+    main()
