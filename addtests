@@ -1,0 +1,60 @@
+import requests
+import openpyxl
+
+# Config
+API_URL = "https://demo.defectdojo.org/api/v2"
+TOKEN = "hdjdjjd"
+HEADERS = {
+    "Authorization": f"Token {TOKEN}",
+    "Content-Type": "application/json",
+    "Accept": "application/json"
+}
+
+def get_engagement_details(engagement_id):
+    url = f"{API_URL}/engagements/{engagement_id}/"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print(f"Failed to get engagement {engagement_id}: {response.text}")
+        return None
+
+def add_test(test_data):
+    url = f"{API_URL}/tests/"
+    response = requests.post(url, json=test_data, headers=HEADERS)
+    if response.status_code == 201:
+        print(f"Test '{test_data['title']}' added successfully.")
+    else:
+        print(f"Failed to add test '{test_data['title']}': {response.text}")
+
+def main(excel_path):
+    wb = openpyxl.load_workbook(excel_path)
+    sheet = wb.active
+
+    headers = [cell.value for cell in sheet[1]]
+
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        row_data = dict(zip(headers, row))
+        engagement_id = row_data['engagement']
+
+        engagement = get_engagement_details(engagement_id)
+        if not engagement:
+            continue
+
+        test_payload = {
+            "title": row_data['title'],
+            "engagement": engagement_id,
+            "test_type": row_data['test_type'],
+            "test_type_name": row_data['test_type_name'],
+            "scan_type": row_data['scan_type'],
+            "target_start": engagement['target_start'],
+            "target_end": engagement['target_end'],
+            "lead": engagement['lead'],
+            "environment": row_data['environment'],
+            "tags": [tag.strip() for tag in str(row_data['tags']).split(',')] if row_data['tags'] else []
+        }
+
+        add_test(test_payload)
+
+if __name__ == "__main__":
+    main("tests.xlsx")
