@@ -1,0 +1,1 @@
+=IF(E15="Completed",TEXT(TODAY(),"YYYY-MM-DD"),"")
