@@ -1,0 +1,200 @@
+import sys
+import pandas as pd
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
+                             QFileDialog, QLabel, QListWidget, QListWidgetItem, QComboBox, QMessageBox)
+
+class ExcelVLookupApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Excel VLOOKUP Tool")
+        self.setGeometry(100, 100, 800, 600)
+        
+        # Central widget and layout
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QVBoxLayout(central_widget)
+        
+        # File selection section
+        file_layout = QHBoxLayout()
+        
+        # Main file controls
+        main_file_layout = QVBoxLayout()
+        self.main_file_label = QLabel("Main File: Not Selected")
+        main_file_btn = QPushButton("Load Main File")
+        main_file_btn.clicked.connect(lambda: self.load_file("main"))
+        main_file_layout.addWidget(self.main_file_label)
+        main_file_layout.addWidget(main_file_btn)
+        
+        # Lookup file controls
+        lookup_file_layout = QVBoxLayout()
+        self.lookup_file_label = QLabel("Lookup File: Not Selected")
+        lookup_file_btn = QPushButton("Load Lookup File")
+        lookup_file_btn.clicked.connect(lambda: self.load_file("lookup"))
+        lookup_file_layout.addWidget(self.lookup_file_label)
+        lookup_file_layout.addWidget(lookup_file_btn)
+        
+        file_layout.addLayout(main_file_layout)
+        file_layout.addLayout(lookup_file_layout)
+        main_layout.addLayout(file_layout)
+        
+        # Column selection section
+        columns_layout = QHBoxLayout()
+        
+        # Main file columns
+        self.main_columns_list = QListWidget()
+        main_col_layout = QVBoxLayout()
+        main_col_layout.addWidget(QLabel("Main File Columns"))
+        main_col_layout.addWidget(self.main_columns_list)
+        
+        # Lookup file columns
+        self.lookup_columns_list = QListWidget()
+        self.lookup_columns_list.setSelectionMode(QListWidget.MultiSelection)
+        lookup_col_layout = QVBoxLayout()
+        lookup_col_layout.addWidget(QLabel("Lookup File Columns"))
+        lookup_col_layout.addWidget(self.lookup_columns_list)
+        
+        columns_layout.addLayout(main_col_layout)
+        columns_layout.addLayout(lookup_col_layout)
+        main_layout.addLayout(columns_layout)
+        
+        # Key selection section
+        key_layout = QHBoxLayout()
+        
+        # Main key dropdown
+        self.main_key_combo = QComboBox()
+        key_layout.addWidget(QLabel("Main Key Column:"))
+        key_layout.addWidget(self.main_key_combo)
+        
+        # Lookup key dropdown
+        self.lookup_key_combo = QComboBox()
+        key_layout.addWidget(QLabel("Lookup Key Column:"))
+        key_layout.addWidget(self.lookup_key_combo)
+        
+        main_layout.addLayout(key_layout)
+        
+        # Action buttons
+        btn_layout = QHBoxLayout()
+        self.execute_btn = QPushButton("Perform VLOOKUP")
+        self.execute_btn.clicked.connect(self.execute_vlookup)
+        self.execute_btn.setEnabled(False)
+        
+        self.save_btn = QPushButton("Save Results")
+        self.save_btn.clicked.connect(self.save_results)
+        self.save_btn.setEnabled(False)
+        
+        btn_layout.addWidget(self.execute_btn)
+        btn_layout.addWidget(self.save_btn)
+        main_layout.addLayout(btn_layout)
+        
+        # Data storage
+        self.main_df = None
+        self.lookup_df = None
+        self.result_df = None
+
+    def load_file(self, file_type):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, 
+            f"Select {file_type.capitalize()} Excel File", 
+            "", 
+            "Excel Files (*.xlsx *.xls)"
+        )
+        
+        if not file_path:
+            return
+            
+        try:
+            df = pd.read_excel(file_path)
+            if file_type == "main":
+                self.main_df = df
+                self.main_file_label.setText(f"Main File: {file_path}")
+                self.populate_main_columns(df.columns)
+            else:
+                self.lookup_df = df
+                self.lookup_file_label.setText(f"Lookup File: {file_path}")
+                self.populate_lookup_columns(df.columns)
+                
+            self.check_ready_state()
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load file:\n{str(e)}")
+
+    def populate_main_columns(self, columns):
+        self.main_columns_list.clear()
+        self.main_key_combo.clear()
+        
+        for col in columns:
+            self.main_columns_list.addItem(col)
+            self.main_key_combo.addItem(col)
+
+    def populate_lookup_columns(self, columns):
+        self.lookup_columns_list.clear()
+        self.lookup_key_combo.clear()
+        
+        for col in columns:
+            self.lookup_columns_list.addItem(col)
+            self.lookup_key_combo.addItem(col)
+
+    def check_ready_state(self):
+        enabled = self.main_df is not None and self.lookup_df is not None
+        self.execute_btn.setEnabled(enabled)
+
+    def execute_vlookup(self):
+        main_key = self.main_key_combo.currentText()
+        lookup_key = self.lookup_key_combo.currentText()
+        
+        # Get selected lookup columns
+        lookup_columns = [item.text() for item in self.lookup_columns_list.selectedItems()]
+        
+        if not lookup_columns:
+            QMessageBox.warning(self, "Warning", "Please select at least one column from lookup file")
+            return
+            
+        try:
+            # Create lookup dataframe subset
+            lookup_subset = self.lookup_df[[lookup_key] + lookup_columns]
+            
+            # Perform merge (VLOOKUP equivalent)
+            self.result_df = pd.merge(
+                self.main_df,
+                lookup_subset,
+                left_on=main_key,
+                right_on=lookup_key,
+                how='left'
+            )
+            
+            self.save_btn.setEnabled(True)
+            QMessageBox.information(self, "Success", "VLOOKUP operation completed successfully!")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"VLOOKUP failed:\n{str(e)}")
+
+    def save_results(self):
+        if self.result_df is None:
+            return
+            
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Result File",
+            "",
+            "Excel Files (*.xlsx)"
+        )
+        
+        if not file_path:
+            return
+            
+        try:
+            # Ensure .xlsx extension
+            if not file_path.endswith('.xlsx'):
+                file_path += '.xlsx'
+                
+            self.result_df.to_excel(file_path, index=False)
+            QMessageBox.information(self, "Success", f"Results saved to:\n{file_path}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save results:\n{str(e)}")
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = ExcelVLookupApp()
+    window.show()
+    sys.exit(app.exec_())
