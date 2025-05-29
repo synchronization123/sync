@@ -9,7 +9,7 @@ import requests
 import json
 
 # ===== CONFIGURATION - EDIT THESE VALUES =====
-JIRA_URL = "https://demo.jira.com/rest/api/2/search/"  # Updated to REST API endpoint
+JIRA_URL = "https://demo.jira.com/rest/api/2/search/"  # Your Jira API endpoint
 JIRA_API_TOKEN = "hdjdjdjdjdj"  # Your Bearer token
 # =============================================
 
@@ -52,15 +52,22 @@ def generate_jql(cutoff_dates):
 
 def get_status_category(status):
     """Categorize status into development or testing"""
-    status = status.lower()
+    if not status:
+        return None
+    status = status.lower().strip()
     if status in ["done", "ready for testing"]:
         return "For Testing"
     else:
+        print(f"Status '{status}' categorized as 'In Development'")
         return "In Development"
 
 def fetch_issues(headers, jql):
-    """Fetch issues from Jira using the REST API"""
-    params = {"jql": jql, "maxResults": 1000}  # Adjust maxResults as needed
+    """Fetch issues from Jira using the REST API with specific fields"""
+    params = {
+        "jql": jql,
+        "maxResults": 1000,
+        "fields": "project,key,status"  # Request only project, key, status
+    }
     response = requests.get(JIRA_URL, headers=headers, params=params)
     
     if response.status_code != 200:
@@ -70,149 +77,189 @@ def fetch_issues(headers, jql):
     return data.get('issues', [])
 
 def process_issues(issues):
-    """Process issues into categorized counts"""
+    """Process issues into categorized counts and collect raw data"""
     counts = {
         'cmr': {'In Development': 0, 'For Testing': 0},
         'dmr': {'In Development': 0, 'For Testing': 0}
     }
+    raw_issues = []  # Store project, key, status for visualization
     
+    print(f"\nProcessing {len(issues)} issues...")
     for issue in issues:
-        project = issue['fields']['project']['key'].lower()
-        status = issue['fields']['status']['name']
-        category = get_status_category(status)
-        
-        if project in counts and category:
-            counts[project][category] += 1
+        try:
+            project = issue.get('fields', {}).get('project', {}).get('key', '').lower()
+            key = issue.get('key', '')
+            status = issue.get('fields', {}).get('status', {}).get('name', '')
+            category = get_status_category(status)
+            
+            # Store raw issue data
+            raw_issues.append({
+                'project': project.upper(),
+                'key': key,
+                'status': status
+            })
+            
+            print(f"Issue {key}: Project={project}, Status={status}, Category={category}")
+            
+            if project in counts and category:
+                counts[project][category] += 1
+            else:
+                print(f"Skipped issue {key}: Invalid project ({project}) or category ({category})")
+        except Exception as e:
+            print(f"Error processing issue {issue.get('key', 'unknown')}: {str(e)}")
     
-    return counts
+    print("\nFinal counts:")
+    print(json.dumps(counts, indent=2))
+    return counts, raw_issues
 
-def update_excel_report(today_str, counts):
-    """Update Excel report with new daily data"""
+def update_excel_report(today_str, counts, raw_issues):
+    """Update Excel report with counts and raw issue data"""
     filename = "sla_report.xlsx"
-    sheet_name = "SLA Report"
+    counts_sheet = "SLA Report"
+    raw_sheet = "Raw Issues"
     
     # Create new workbook if it doesn't exist
     if not os.path.exists(filename):
         wb = Workbook()
-        ws = wb.active
-        ws.title = sheet_name
-        ws.append(["Project"])
+        wb.active.title = counts_sheet
+        wb.create_sheet(raw_sheet)
         wb.save(filename)
     
-    # Load existing workbook
     wb = load_workbook(filename)
-    if sheet_name in wb.sheetnames:
-        ws = wb[sheet_name]
+    
+    # === Update Counts Sheet ===
+    if counts_sheet not in wb.sheetnames:
+        ws_counts = wb.create_sheet(counts_sheet)
     else:
-        ws = wb.create_sheet(sheet_name)
-        ws.append(["Project"])
+        ws_counts = wb[counts_sheet]
     
-    # Find next available column for today's date
     header_row = 1
-    max_col = ws.max_column
+    max_col = ws_counts.max_column
     
-    # Check if today's date already exists
     date_exists = False
     for col in range(1, max_col + 1):
-        if ws.cell(header_row, col).value == today_str:
+        if ws_counts.cell(header_row, col).value == today_str:
             date_exists = True
             break
     
     if not date_exists:
-        # Add date header (merged across two columns)
         start_col = max_col + 1
         end_col = start_col + 1
         
-        ws.cell(header_row, start_col, today_str)
-        ws.merge_cells(start_row=header_row, start_column=start_col, end_row=header_row, end_column=end_col)
+        ws_counts.cell(header_row, start_col, today_str)
+        ws_counts.merge_cells(start_row=header_row, start_column=start_col, end_row=header_row, end_column=end_col)
         
-        ws.cell(header_row + 1, start_col, "In Development")
-        ws.cell(header_row + 1, start_col + 1, "For Testing")
+        ws_counts.cell(header_row + 1, start_col, "In Development")
+        ws_counts.cell(header_row + 1, start_col + 1, "For Testing")
         
-        # Format headers
         header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
         header_font = Font(bold=True)
         
         for r in range(header_row, header_row + 2):
             for c in range(start_col, end_col + 1):
-                cell = ws.cell(r, c)
+                cell = ws_counts.cell(r, c)
                 cell.alignment = Alignment(horizontal="center", vertical="center")
                 cell.font = header_font
                 if r == header_row:
                     cell.fill = header_fill
     
-    # Find project rows
     projects = {}
-    for row in range(3, ws.max_row + 1):
-        project_cell = ws.cell(row, 1)
+    for row in range(3, ws_counts.max_row + 1):
+        project_cell = ws_counts.cell(row, 1)
         if project_cell.value:
             project_key = project_cell.value.lower()
             if project_key in ["cmr", "dmr"]:
                 projects[project_key] = row
     
-    # Add new projects if needed
     for project in ["cmr", "dmr"]:
         if project not in projects:
-            new_row = ws.max_row + 1
-            ws.cell(new_row, 1, project.upper())
+            new_row = ws_counts.max_row + 1
+            ws_counts.cell(new_row, 1, project.upper())
             projects[project] = new_row
     
-    # Update counts for each project
     for project, row_idx in projects.items():
-        in_dev_count = counts[project]["In Development"] or ""
-        for_test_count = counts[project]["For Testing"] or ""
+        in_dev_count = counts[project]["In Development"]
+        for_test_count = counts[project]["For Testing"]
+        
+        print(f"Writing for {project}: In Development={in_dev_count}, For Testing={for_test_count}")
         
         if not date_exists:
-            ws.cell(row_idx, start_col, in_dev_count)
-            ws.cell(row_idx, start_col + 1, for_test_count)
+            ws_counts.cell(row_idx, start_col, in_dev_count if in_dev_count > 0 else "")
+            ws_counts.cell(row_idx, start_col + 1, for_test_count if for_test_count > 0 else "")
         else:
-            for col in range(1, ws.max_column + 1):
-                if ws.cell(header_row, col).value == today_str:
-                    ws.cell(row_idx, col, in_dev_count)
-                    ws.cell(row_idx, col + 1, for_test_count)
+            for col in range(1, ws_counts.max_column + 1):
+                if ws_counts.cell(header_row, col).value == today_str:
+                    ws_counts.cell(row_idx, col, in_dev_count if in_dev_count > 0 else "")
+                    ws_counts.cell(row_idx, col + 1, for_test_count if for_test_count > 0 else "")
                     break
     
-    # Add/update total row
     total_row = None
-    for row in range(3, ws.max_row + 1):
-        if ws.cell(row, 1).value == "Total":
+    for row in range(3, ws_counts.max_row + 1):
+        if ws_counts.cell(row, 1).value == "Total":
             total_row = row
             break
     
     if not total_row:
-        total_row = ws.max_row + 1
-        ws.cell(total_row, 1, "Total")
+        total_row = ws_counts.max_row + 1
+        ws_counts.cell(total_row, 1, "Total")
     
-    # Calculate totals
-    for col in range(2, ws.max_column + 1):
+    for col in range(2, ws_counts.max_column + 1):
         if col == 2:
             continue
-            
         col_sum = 0
         for row in range(3, total_row):
-            value = ws.cell(row, col).value
+            value = ws_counts.cell(row, col).value
             if isinstance(value, (int, float)):
                 col_sum += value
-        
-        ws.cell(total_row, col, col_sum if col_sum > 0 else "")
+        ws_counts.cell(total_row, col, col_sum if col_sum > 0 else "")
+    
+    # === Update Raw Issues Sheet ===
+    if raw_sheet not in wb.sheetnames:
+        ws_raw = wb.create_sheet(raw_sheet)
+    else:
+        ws_raw = wb[raw_sheet]
+    
+    # Clear existing content in Raw Issues sheet
+    ws_raw.delete_rows(1, ws_raw.max_row)
+    
+    # Add headers
+    headers = ["Project", "Key", "Status"]
+    ws_raw.append(headers)
+    
+    # Add raw issue data
+    for issue in raw_issues:
+        ws_raw.append([issue['project'], issue['key'], issue['status']])
+    
+    # Format headers
+    header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+    header_font = Font(bold=True)
+    for cell in ws_raw[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
     
     # Apply center alignment to all cells
-    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
+    for row in ws_counts.iter_rows(min_row=1, max_row=ws_counts.max_row, min_col=1, max_col=ws_counts.max_column):
         for cell in row:
             cell.alignment = Alignment(horizontal="center", vertical="center")
     
-    # Auto-adjust column widths
-    for col_idx in range(1, ws.max_column + 1):
-        max_length = 0
-        col_letter = get_column_letter(col_idx)
-        for cell in ws[col_letter]:
-            try:
-                if cell.value and len(str(cell.value)) > max_length:
-                    max_length = len(str(cell.value))
-            except:
-                pass
-        adjusted_width = max_length + 2
-        ws.column_dimensions[col_letter].width = adjusted_width
+    for row in ws_raw.iter_rows(min_row=1, max_row=ws_raw.max_row, min_col=1, max_col=ws_raw.max_column):
+        for cell in row:
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+    
+    # Auto-adjust column widths for both sheets
+    for ws in [ws_counts, ws_raw]:
+        for col_idx in range(1, ws.max_column + 1):
+            max_length = 0
+            col_letter = get_column_letter(col_idx)
+            for cell in ws[col_letter]:
+                try:
+                    if cell.value and len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = max_length + 2
+            ws.column_dimensions[col_letter].width = adjusted_width
     
     wb.save(filename)
     print(f"\nReport updated: {filename}")
@@ -221,33 +268,27 @@ def main():
     print(f"Starting SLA report generation for {datetime.date.today().strftime('%d-%b-%Y')}")
     
     try:
-        # 1. Get headers for Jira API
         print("Preparing Jira API connection...")
         headers = get_jira_connection()
         print("Connection headers prepared successfully")
         
-        # 2. Calculate SLA cutoff dates
         cutoff_dates = calculate_cutoff_dates()
         
-        # 3. Generate JQL
         jql = generate_jql(cutoff_dates)
         print("\nGenerated JQL:\n")
         print(jql)
         
-        # 4. Save JQL to file
         with open("sla_query.txt", "w") as f:
             f.write(jql)
         print("\nJQL saved to sla_query.txt")
         
-        # 5. Fetch and process issues
         print("\nFetching issues from Jira...")
         issues = fetch_issues(headers, jql)
         print(f"Found {len(issues)} issues matching criteria")
-        counts = process_issues(issues)
+        counts, raw_issues = process_issues(issues)
         
-        # 6. Update Excel report
         today_str = datetime.date.today().strftime("%d-%b-%Y")
-        update_excel_report(today_str, counts)
+        update_excel_report(today_str, counts, raw_issues)
         
         print("\nReport generation completed successfully")
         
