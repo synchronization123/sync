@@ -4,17 +4,22 @@ import pandas as pd
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
-from openpyxl.utils.dataframe import dataframe_to_rows
-from jira import JIRA
 import os
-import getpass
+import requests
+import json
+
+# ===== CONFIGURATION - EDIT THESE VALUES =====
+JIRA_URL = "https://demo.jira.com/rest/api/2/search/"  # Updated to REST API endpoint
+JIRA_API_TOKEN = "hdjdjdjdjdj"  # Your Bearer token
+# =============================================
 
 def get_jira_connection():
-    """Authenticate to Jira server"""
-    server = input("Enter Jira server URL (e.g., https://yourcompany.atlassian.net): ")
-    email = input("Enter your Jira email: ")
-    token = getpass.getpass("Enter your Jira API token: ")
-    return JIRA(server=server, basic_auth=(email, token))
+    """Authenticate to Jira server using Bearer token"""
+    headers = {
+        "Authorization": f"Bearer {JIRA_API_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    return headers
 
 def calculate_cutoff_dates():
     """Calculate SLA cutoff dates based on severity"""
@@ -36,7 +41,7 @@ def generate_jql(cutoff_dates):
     AND project in (cmr, dmr) 
     AND issuetype not in (epic, story) 
     AND component = "techdebt" 
-    AND status not in (done, retrospected)
+    AND status not in (retrospected)
     AND (
         (severity = "Critical" AND created <= "{cutoff_dates['Critical']}")
         OR (severity = "High" AND created <= "{cutoff_dates['High']}")
@@ -48,15 +53,21 @@ def generate_jql(cutoff_dates):
 def get_status_category(status):
     """Categorize status into development or testing"""
     status = status.lower()
-    if status in ["todo", "in progress", "code review"]:
-        return "In Development"
-    elif status in ["ready for testing", "reporter review"]:
+    if status in ["done", "ready for testing"]:
         return "For Testing"
-    return None
+    else:
+        return "In Development"
 
-def fetch_issues(jira, jql):
-    """Fetch issues from Jira using the generated JQL"""
-    return jira.search_issues(jql, maxResults=False)
+def fetch_issues(headers, jql):
+    """Fetch issues from Jira using the REST API"""
+    params = {"jql": jql, "maxResults": 1000}  # Adjust maxResults as needed
+    response = requests.get(JIRA_URL, headers=headers, params=params)
+    
+    if response.status_code != 200:
+        raise Exception(f"Failed to fetch issues: {response.status_code} - {response.text}")
+    
+    data = response.json()
+    return data.get('issues', [])
 
 def process_issues(issues):
     """Process issues into categorized counts"""
@@ -66,8 +77,8 @@ def process_issues(issues):
     }
     
     for issue in issues:
-        project = issue.fields.project.key.lower()
-        status = issue.fields.status.name
+        project = issue['fields']['project']['key'].lower()
+        status = issue['fields']['status']['name']
         category = get_status_category(status)
         
         if project in counts and category:
@@ -85,7 +96,7 @@ def update_excel_report(today_str, counts):
         wb = Workbook()
         ws = wb.active
         ws.title = sheet_name
-        ws.append(["Project"])  # Initial header
+        ws.append(["Project"])
         wb.save(filename)
     
     # Load existing workbook
@@ -112,11 +123,9 @@ def update_excel_report(today_str, counts):
         start_col = max_col + 1
         end_col = start_col + 1
         
-        # Add merged header for date
         ws.cell(header_row, start_col, today_str)
         ws.merge_cells(start_row=header_row, start_column=start_col, end_row=header_row, end_column=end_col)
         
-        # Add sub-headers
         ws.cell(header_row + 1, start_col, "In Development")
         ws.cell(header_row + 1, start_col + 1, "For Testing")
         
@@ -126,40 +135,41 @@ def update_excel_report(today_str, counts):
         
         for r in range(header_row, header_row + 2):
             for c in range(start_col, end_col + 1):
-                ws.cell(r, c).alignment = Alignment(horizontal="center", vertical="center")
-                ws.cell(r, c).font = header_font
+                cell = ws.cell(r, c)
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.font = header_font
                 if r == header_row:
-                    ws.cell(r, c).fill = header_fill
+                    cell.fill = header_fill
     
     # Find project rows
     projects = {}
     for row in range(3, ws.max_row + 1):
-        project_cell = ws.cell(row, 1).value
-        if project_cell and project_cell.lower() in ["cmr", "dmr"]:
-            projects[project_cell.lower()] = row
+        project_cell = ws.cell(row, 1)
+        if project_cell.value:
+            project_key = project_cell.value.lower()
+            if project_key in ["cmr", "dmr"]:
+                projects[project_key] = row
     
     # Add new projects if needed
     for project in ["cmr", "dmr"]:
         if project not in projects:
             new_row = ws.max_row + 1
-            ws.cell(new_row, 1, project.capitalize())
+            ws.cell(new_row, 1, project.upper())
             projects[project] = new_row
     
     # Update counts for each project
-    for project, row in projects.items():
+    for project, row_idx in projects.items():
         in_dev_count = counts[project]["In Development"] or ""
         for_test_count = counts[project]["For Testing"] or ""
         
         if not date_exists:
-            # New date columns
-            ws.cell(row, start_col, in_dev_count)
-            ws.cell(row, start_col + 1, for_test_count)
+            ws.cell(row_idx, start_col, in_dev_count)
+            ws.cell(row_idx, start_col + 1, for_test_count)
         else:
-            # Find existing columns
             for col in range(1, ws.max_column + 1):
                 if ws.cell(header_row, col).value == today_str:
-                    ws.cell(row, col, in_dev_count)
-                    ws.cell(row, col + 1, for_test_count)
+                    ws.cell(row_idx, col, in_dev_count)
+                    ws.cell(row_idx, col + 1, for_test_count)
                     break
     
     # Add/update total row
@@ -175,7 +185,7 @@ def update_excel_report(today_str, counts):
     
     # Calculate totals
     for col in range(2, ws.max_column + 1):
-        if col == 2:  # Skip project column
+        if col == 2:
             continue
             
         col_sum = 0
@@ -184,57 +194,67 @@ def update_excel_report(today_str, counts):
             if isinstance(value, (int, float)):
                 col_sum += value
         
-        # Only show non-zero totals
         ws.cell(total_row, col, col_sum if col_sum > 0 else "")
     
     # Apply center alignment to all cells
-    for row in ws.iter_rows():
+    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
         for cell in row:
             cell.alignment = Alignment(horizontal="center", vertical="center")
     
     # Auto-adjust column widths
-    for col in range(1, ws.max_column + 1):
+    for col_idx in range(1, ws.max_column + 1):
         max_length = 0
-        column = get_column_letter(col)
-        for cell in ws[column]:
+        col_letter = get_column_letter(col_idx)
+        for cell in ws[col_letter]:
             try:
-                if len(str(cell.value)) > max_length:
+                if cell.value and len(str(cell.value)) > max_length:
                     max_length = len(str(cell.value))
             except:
                 pass
         adjusted_width = max_length + 2
-        ws.column_dimensions[column].width = adjusted_width
+        ws.column_dimensions[col_letter].width = adjusted_width
     
-    # Save the workbook
     wb.save(filename)
     print(f"\nReport updated: {filename}")
 
 def main():
-    # 1. Connect to Jira
-    jira = get_jira_connection()
+    print(f"Starting SLA report generation for {datetime.date.today().strftime('%d-%b-%Y')}")
     
-    # 2. Calculate SLA cutoff dates
-    cutoff_dates = calculate_cutoff_dates()
-    
-    # 3. Generate JQL
-    jql = generate_jql(cutoff_dates)
-    print("\nGenerated JQL:\n")
-    print(jql)
-    
-    # 4. Save JQL to file
-    with open("sla_query.txt", "w") as f:
-        f.write(jql)
-    print("\nJQL saved to sla_query.txt")
-    
-    # 5. Fetch and process issues
-    print("\nFetching issues from Jira...")
-    issues = fetch_issues(jira, jql)
-    print(f"Found {len(issues)} issues")
-    counts = process_issues(issues)
-    
-    # 6. Update Excel report
-    today_str = datetime.date.today().strftime("%d-%b-%Y")
-    update_excel_report(today_str, counts)
+    try:
+        # 1. Get headers for Jira API
+        print("Preparing Jira API connection...")
+        headers = get_jira_connection()
+        print("Connection headers prepared successfully")
+        
+        # 2. Calculate SLA cutoff dates
+        cutoff_dates = calculate_cutoff_dates()
+        
+        # 3. Generate JQL
+        jql = generate_jql(cutoff_dates)
+        print("\nGenerated JQL:\n")
+        print(jql)
+        
+        # 4. Save JQL to file
+        with open("sla_query.txt", "w") as f:
+            f.write(jql)
+        print("\nJQL saved to sla_query.txt")
+        
+        # 5. Fetch and process issues
+        print("\nFetching issues from Jira...")
+        issues = fetch_issues(headers, jql)
+        print(f"Found {len(issues)} issues matching criteria")
+        counts = process_issues(issues)
+        
+        # 6. Update Excel report
+        today_str = datetime.date.today().strftime("%d-%b-%Y")
+        update_excel_report(today_str, counts)
+        
+        print("\nReport generation completed successfully")
+        
+    except Exception as e:
+        print(f"\nError occurred: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
 
 if __name__ == "__main__":
     main()
