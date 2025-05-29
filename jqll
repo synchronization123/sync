@@ -1,0 +1,54 @@
+import datetime
+from datetime import timedelta
+import calendar
+
+def generate_jql():
+    # Get today's date and end of month
+    today = datetime.date.today()
+    last_day = calendar.monthrange(today.year, today.month)[1]
+    end_of_month = datetime.date(today.year, today.month, last_day)
+    
+    # Calculate date ranges for each severity
+    critical_start = today - timedelta(days=15)
+    critical_end = end_of_month - timedelta(days=15)
+    
+    high_start = today - timedelta(days=30)
+    high_end = end_of_month - timedelta(days=30)
+    
+    medium_start = today - timedelta(days=90)
+    medium_end = end_of_month - timedelta(days=90)
+    
+    low_start = today - timedelta(days=365)
+    low_end = end_of_month - timedelta(days=365)
+    
+    # Build JQL query
+    jql = f"""
+status NOT IN (Resolved, Closed, Done) AND (
+    (severity = "Critical" 
+        AND created >= "{critical_start}" 
+        AND created <= "{critical_end}")
+    OR (severity = "High" 
+        AND created >= "{high_start}" 
+        AND created <= "{high_end}")
+    OR (severity = "Medium" 
+        AND created >= "{medium_start}" 
+        AND created <= "{medium_end}")
+    OR (severity = "Low" 
+        AND created >= "{low_start}" 
+        AND created <= "{low_end}")
+)
+ORDER BY created ASC
+""".strip()
+    
+    return jql
+
+def save_jql_to_file(jql, filename="sla_breach_query.txt"):
+    with open(filename, "w") as file:
+        file.write(jql)
+    print(f"JQL query saved to {filename}")
+
+if __name__ == "__main__":
+    jql_query = generate_jql()
+    save_jql_to_file(jql_query)
+    print("\nGenerated JQL:\n")
+    print(jql_query)
