@@ -1,0 +1,74 @@
+import openpyxl
+from openpyxl.utils import get_column_letter
+
+def find_keywords_in_row():
+    # Load the workbook
+    input_file = 'v1.xlsx'  # Assuming your input file is named v1.xlsx
+    output_file = 'v1_output.xlsx'
+    
+    try:
+        wb = openpyxl.load_workbook(input_file)
+    except FileNotFoundError:
+        print(f"Error: File '{input_file}' not found.")
+        return
+    except Exception as e:
+        print(f"Error loading workbook: {e}")
+        return
+    
+    # Select the active worksheet (or specify by name)
+    ws = wb.active
+    
+    # Prepare the output workbook
+    output_wb = openpyxl.Workbook()
+    output_ws = output_wb.active
+    output_ws.title = "Results"
+    
+    # Write headers
+    output_ws['A1'] = ws['A1'].value if ws['A1'].value else "Column A"
+    output_ws['B1'] = ws['B1'].value if ws['B1'].value else "Column B"
+    output_ws['C1'] = ws['C1'].value if ws['C1'].value else "Keyword"
+    output_ws['D1'] = "Found In Columns"
+    output_ws['E1'] = "Found Values"
+    
+    # Process each row from 2 to 500
+    for row in range(2, 501):
+        keyword_cell = ws[f'C{row}']
+        keyword = keyword_cell.value if keyword_cell.value else None
+        
+        if not keyword:  # Skip if no keyword
+            continue
+            
+        # Get values from columns A and B
+        a_value = ws[f'A{row}'].value if ws[f'A{row}'].value else ""
+        b_value = ws[f'B{row}'].value if ws[f'B{row}'].value else ""
+        
+        # Search in columns G to V (columns 7 to 22)
+        found_columns = []
+        found_values = []
+        
+        for col in range(7, 23):  # G to V
+            cell = ws.cell(row=row, column=col)
+            if cell.value and str(keyword).lower() in str(cell.value).lower():
+                col_letter = get_column_letter(col)
+                found_columns.append(col_letter)
+                found_values.append(str(cell.value))
+        
+        if found_columns:  # Only write rows where keyword was found
+            # Write A, B, C values
+            output_ws[f'A{row}'] = a_value
+            output_ws[f'B{row}'] = b_value
+            output_ws[f'C{row}'] = keyword
+            
+            # Write found columns and values
+            output_ws[f'D{row}'] = ", ".join(found_columns)
+            output_ws[f'E{row}'] = " | ".join(found_values)
+    
+    # Save the output file
+    try:
+        output_wb.save(output_file)
+        print(f"Success! Results saved to {output_file}")
+    except Exception as e:
+        print(f"Error saving output file: {e}")
+
+if __name__ == "__main__":
+    find_keywords_in_row()
