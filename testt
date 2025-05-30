@@ -133,17 +133,18 @@
             .severity-low { background-color: yellow; }
             .severity-info { background-color: grey; }
             .hardcoded-line { border-top: 1px solid #000; margin-top: 1px; padding-top: 1px; border-width: 1px; }
-            .step-image { border: 1px solid #ccc; padding: 5px; margin-bottom: 10px; max-width: 1000px; max-height: 800px; }
+            .step-image { border: 1px solid #ccc; padding: 5px; margin-bottom: 10px; max-width: 1000px; max-height: 800px; width: auto; height: auto; display: block; }
             .steps_to_reproduce { list-style-type: none; padding-left: 0; }
             table { border-collapse: collapse; width: 100%; }
             th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
             .Sub-Title { font-size: 24px; }
             .chart-container { width: 400px; height: 200px; margin: 20px 0; }
+            .image-error { color: red; font-style: italic; }
           </style>
         </head>
         <body>
           <div class="cover-page">
-            <img src="logo" alt="Logo">
+            <img src="logo" alt="Logo" onerror="this.style.display='none';">
             <h2 class="report-heading">${reportName}</h2>
             <h1>Application Security</h1>
             <br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>
@@ -244,11 +245,13 @@
           let match;
           while ((match = imgRegex.exec(step)) !== null) {
             let imgUrl = match[1];
-            // Check if the URL is relative (starts with /access_file/)
             if (imgUrl.startsWith("/access_file/")) {
               imgUrl = `${BASE_URL}${imgUrl}`;
             }
-            modifiedStep = modifiedStep.replace(`![](${match[1]})`, `<img class="step-image" src="${imgUrl}" style="max-width: 1000px; max-height: 800px;"><br>`);
+            modifiedStep = modifiedStep.replace(
+              `![](${match[1]})`,
+              `<img class="step-image" src="${imgUrl}" style="max-width: 1000px; max-height: 800px; width: auto; height: auto; display: block;" onerror="this.style.display='none'; this.nextSibling.style.display='block';" alt="Finding Image"><span class="image-error" style="display: none;">Failed to load image: ${imgUrl}</span><br>`
+            );
           }
           htmlReport += `<li>${modifiedStep}</li>`;
         });
@@ -281,7 +284,8 @@
             method: "GET",
             headers: {
               "Content-Type": "application/json"
-            }
+            },
+            credentials: "include" // Include session cookies
           });
 
           if (response.ok) {
@@ -310,7 +314,7 @@
         a.download = "report.html";
         a.click();
         URL.revokeObjectURL(url);
-        statusDiv.innerHTML += `<p>HTML report generated and downloaded as report.html</p>`;
+        statusDiv.innerHTML += `<p>HTML report generated and downloaded as report.html. Note: Images may require viewing within an authenticated session to render correctly.</p>`;
       } else {
         statusDiv.innerHTML += `<p>No findings to generate report.</p>`;
       }
