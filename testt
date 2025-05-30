@@ -39,6 +39,7 @@
 
   <script>
     const API_URL = "https://demo.defectdojo.org/api/v2/findings/?test=";
+    const BASE_URL = "https://demo.defectdojo.org"; // Base URL for relative image paths
 
     function getSeverityColor(severity) {
       if (severity === "Critical") return "maroon";
@@ -55,16 +56,13 @@
     }
 
     function generatePieChartSvg(severityCounts) {
-      // Create a canvas element to render the chart
       const canvas = document.createElement("canvas");
       canvas.width = 400;
       canvas.height = 200;
       const ctx = canvas.getContext("2d");
 
-      // Calculate total for percentage labels
       const total = Object.values(severityCounts).reduce((a, b) => a + b, 0);
 
-      // Create Chart.js pie chart
       new Chart(ctx, {
         type: "pie",
         data: {
@@ -102,9 +100,7 @@
         }
       });
 
-      // Convert canvas to SVG using canvas-to-svg workaround
-      const svgData = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200">${canvas.toDataURL("image/png")}</svg>`;
-      return svgData.replace(/\n/g, " ");
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><image href="${canvas.toDataURL("image/png")}" width="400" height="200"/></svg>`;
     }
 
     function generateHtmlReport(findingData, reportName, startDate, endDate, preparedBy, reviewedBy, approvedBy) {
@@ -113,16 +109,13 @@
         return severityOrder.indexOf(a.severity) - severityOrder.indexOf(b.severity);
       });
 
-      // Count severity occurrences
       const severityCounts = { Critical: 0, High: 0, Medium: 0, Low: 0, Info: 0 };
       sortedFindings.forEach(finding => {
         severityCounts[finding.severity]++;
       });
 
-      // Generate pie chart SVG
       const chartSvg = generatePieChartSvg(severityCounts);
 
-      // Start HTML report
       let htmlReport = `
         <!DOCTYPE html>
         <html>
@@ -171,7 +164,6 @@
           <div class="chart-container">${chartSvg}</div>
       `;
 
-      // Group findings by severity
       const severityFindings = {};
       const severityColors = {
         Critical: { background: "maroon", font: "black" },
@@ -187,7 +179,6 @@
         severityFindings[severity].push(finding);
       });
 
-      // Findings index
       htmlReport += `<h2 id="top">Findings Index</h2>`;
       const severityOrder = ["Critical", "High", "Medium", "Low", "Info"];
       severityOrder.forEach(severity => {
@@ -208,7 +199,6 @@
 
       htmlReport += `<br><br><br><p><h2 id="top">Findings Details</h2></p>`;
 
-      // Findings details
       sortedFindings.forEach((finding, index) => {
         const findingTitle = finding.title;
         const vulnerabilityId = finding.vulnerability_ids[0] ? stripVulnerabilityId(finding.vulnerability_ids[0]) : "N/A";
@@ -247,15 +237,18 @@
           <ul class="steps_to_reproduce">
         `;
 
-        // Parse steps to reproduce and handle images
         const steps = stepsToReproduce.split("<br>");
         steps.forEach(step => {
-          const imgRegex = /!\[\]\((https?:\/\/[^\s]+)\)/g;
+          const imgRegex = /!\[\]\(([^)]+)\)/g;
           let modifiedStep = step;
           let match;
           while ((match = imgRegex.exec(step)) !== null) {
-            const imgUrl = match[1];
-            modifiedStep = modifiedStep.replace(`![](${imgUrl})`, `<img class="step-image" src="${imgUrl}" style="max-width: 1000px; max-height: 800px;"><br>`);
+            let imgUrl = match[1];
+            // Check if the URL is relative (starts with /access_file/)
+            if (imgUrl.startsWith("/access_file/")) {
+              imgUrl = `${BASE_URL}${imgUrl}`;
+            }
+            modifiedStep = modifiedStep.replace(`![](${match[1]})`, `<img class="step-image" src="${imgUrl}" style="max-width: 1000px; max-height: 800px;"><br>`);
           }
           htmlReport += `<li>${modifiedStep}</li>`;
         });
@@ -267,7 +260,6 @@
       return htmlReport;
     }
 
-    // Handle form submission
     document.getElementById("reportForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const statusDiv = document.getElementById("status");
@@ -294,7 +286,7 @@
 
           if (response.ok) {
             const reportData = await response.json();
-            const findings = reportData.results || []; // Assuming findings are in 'results' key
+            const findings = reportData.results || [];
             if (findings.length > 0) {
               findingData.push(...findings);
               statusDiv.innerHTML += `<p>Findings fetched for Test ID: ${testId}</p>`;
