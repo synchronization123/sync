@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DefectDojo Report Generator</title>
+  <!-- Include Chart.js from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <div style="padding: 20px; font-family: Arial, sans-serif;">
@@ -35,7 +37,6 @@
     <div id="status" style="margin-top: 20px;"></div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/pygal@3.0.0/dist/pygal.min.js"></script>
   <script>
     const API_URL = "https://demo.defectdojo.org/api/v2/findings/?test=";
 
@@ -53,6 +54,59 @@
       return vulnerabilityId.vulnerability_id ? vulnerabilityId.vulnerability_id.replace(/^{'vulnerability_id': '|'}$/g, "") : "N/A";
     }
 
+    function generatePieChartSvg(severityCounts) {
+      // Create a canvas element to render the chart
+      const canvas = document.createElement("canvas");
+      canvas.width = 400;
+      canvas.height = 200;
+      const ctx = canvas.getContext("2d");
+
+      // Calculate total for percentage labels
+      const total = Object.values(severityCounts).reduce((a, b) => a + b, 0);
+
+      // Create Chart.js pie chart
+      new Chart(ctx, {
+        type: "pie",
+        data: {
+          labels: Object.keys(severityCounts).map(severity => {
+            const count = severityCounts[severity];
+            const percentage = total > 0 ? ((count * 100) / total).toFixed(2) : 0;
+            return `${severity}, (${count}) (${percentage}%)`;
+          }),
+          datasets: [{
+            data: Object.values(severityCounts),
+            backgroundColor: Object.keys(severityCounts).map(severity => getSeverityColor(severity)),
+            borderColor: "#fff",
+            borderWidth: 2
+          }]
+        },
+        options: {
+          plugins: {
+            title: {
+              display: true,
+              text: "Findings by Severity",
+              font: { size: 16 }
+            },
+            legend: { display: true, position: "bottom" },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const label = context.label || "";
+                  return label;
+                }
+              }
+            }
+          },
+          responsive: false,
+          maintainAspectRatio: false
+        }
+      });
+
+      // Convert canvas to SVG using canvas-to-svg workaround
+      const svgData = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200">${canvas.toDataURL("image/png")}</svg>`;
+      return svgData.replace(/\n/g, " ");
+    }
+
     function generateHtmlReport(findingData, reportName, startDate, endDate, preparedBy, reviewedBy, approvedBy) {
       const sortedFindings = findingData.sort((a, b) => {
         const severityOrder = ["Critical", "High", "Medium", "Low", "Info"];
@@ -65,19 +119,8 @@
         severityCounts[finding.severity]++;
       });
 
-      // Generate pie chart using Pygal
-      const pieChart = pygal.Pie({
-        width: 400,
-        height: 200,
-        print_values: true,
-        value_formatter: x => `(${((x * 100) / Object.values(severityCounts).reduce((a, b) => a + b, 0)).toFixed(2)}%)`,
-        style: { value_font_size: 4 }
-      });
-      pieChart.title = "Findings by Severity";
-      Object.entries(severityCounts).forEach([severity, count]) => {
-        pieChart.add(`${severity}, (${count})`, count);
-      });
-      const chartSvg = pieChart.render().replace(/\n/g, " ");
+      // Generate pie chart SVG
+      const chartSvg = generatePieChartSvg(severityCounts);
 
       // Start HTML report
       let htmlReport = `
@@ -102,6 +145,7 @@
             table { border-collapse: collapse; width: 100%; }
             th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
             .Sub-Title { font-size: 24px; }
+            .chart-container { width: 400px; height: 200px; margin: 20px 0; }
           </style>
         </head>
         <body>
@@ -124,7 +168,7 @@
             </table>
           </div>
           <br><br><br><br><br>
-          <div>${chartSvg}</div>
+          <div class="chart-container">${chartSvg}</div>
       `;
 
       // Group findings by severity
