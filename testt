@@ -99,6 +99,7 @@
     }
 
     function removeMarkdownImages(text) {
+      if (typeof text !== "string") return "";
       const markdownImagePattern = /!\[\]\(([^)]+)\)/g;
       return text.replace(markdownImagePattern, (match, url) => {
         let imgUrl = url;
@@ -110,7 +111,10 @@
     }
 
     function getProofOfConceptImages(steps) {
-      if (!steps) return "N/A";
+      if (!steps || typeof steps !== "string") {
+        console.warn("Invalid steps value:", steps);
+        return "N/A";
+      }
       const cleanedSteps = removeMarkdownImages(steps.replace(/\r\n/g, "<br>"));
       const proofLinkPattern = /https?:\/\/[^\s)]+/g;
       const proofLinks = cleanedSteps.match(proofLinkPattern) || [];
@@ -136,7 +140,11 @@
 
     function renderField(field) {
       if (!field) return "N/A";
-      return getProofOfConceptImages(field);
+      if (typeof field === "string") {
+        return getProofOfConceptImages(field);
+      }
+      console.warn("Non-string field value:", field);
+      return String(field) || "N/A";
     }
 
     function renderPieChart(severityCounts) {
@@ -195,18 +203,19 @@
       const reportTitle = document.getElementById("reportTitle").value || "DefectDojo Report";
       const startDate = document.getElementById("startDate").value;
       const endDate = document.getElementById("endDate").value;
+ const endDate = document.getElementById("endDate").value;
       const preparedBy = document.getElementById("preparedBy").value;
       const prepareddate = document.getElementById("prepareddate").value;
       const reviewedBy = document.getElementById("reviewedBy").value;
       const revieweddate = document.getElementById("revieweddate").value;
 
-      findingsContainer.innerHTML = "";
-      if (indexTableBody) indexTableBody.innerHTML = "";
+      findingsContainer.innerHTML = '';
+      if (indexTableBody) indexTableBody.innerHTML = '';
 
       sortedFindings.forEach((finding, index) => {
         if (finding.severity in severityCounts) severityCounts[finding.severity]++;
         const findingHtml = `
-          <div class='report-container ${index > 0 ? "page-break" : ""}'>
+          <div class='report-container ${index > 0 ? "page-break" : ""}>
             <br><br>
             <h2 id="finding-${index + 1}">${index + 1}. ${finding.title}</h2>
             <table class='table table-bordered'>
