@@ -1,348 +1,341 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DefectDojo Report Generator</title>
-  <!-- Bootstrap CSS for styling -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <!-- Chart.js for pie chart -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
-  <style>
-    .report-container { margin-bottom: 20px; }
-    .page-break { page-break-before: always; }
-    .proof-image { max-width: 1000px; max-height: 800px; width: auto; height: auto; display: block; margin: 10px 0; }
-    .image-error { color: red; font-style: italic; display: none; }
-    .no-print { display: block; }
-    @media print {
-      .no-print { display: none; }
-      .page-break { page-break-before: always; }
-    }
-    .document-history-table { margin-bottom: 20px; }
-    .pie-chart-container { width: 400px; height: 200px; margin: 20px 0; }
-    .severity-table { margin-bottom: 20px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="mb-4 no-print">
-      <label for="testIds" class="form-label">Enter Test IDs (comma-separated):</label>
-      <input type="text" id="testIds" class="form-control" placeholder="Example: 1,2,3" required>
-      <button id="fetchDataBtn" class="btn btn-primary mt-2">Generate Report</button>
-      <button onclick="window.print()" class="btn btn-success mt-2">Print Preview</button>
-    </div>
+import requests
+import re
+import json
+import pygal
+from pygal.style import Style
+import io
+import base64
+import urllib.parse
 
-    <div class="document-history-table">
-      <img src="./e2137a85-d9bb-4d7d-9a5f-18fdb6018bcd_files/main-logo.png.webp" alt="Logo" style="max-width: 200px; margin-bottom: 10px;" onerror="this.style.display='none';">
-      <table class="table table-bordered">
-        <tbody>
-          <tr><th colspan="3"><center><h4>Application Security</h4></center></th></tr>
-          <tr>
-            <th>Report Name</th>
-            <td colspan="2"><input type="text" id="reportTitle" class="form-control"></td>
-          </tr>
-          <tr>
-            <th>Start Date</th>
-            <td colspan="2"><input type="date" id="startDate" class="form-control"></td>
-          </tr>
-          <tr>
-            <th>End Date</th>
-            <td colspan="2"><input type="date" id="endDate" class="form-control"></td>
-          </tr>
-          <tr>
-            <th>Prepared By</th>
-            <td><input type="text" id="preparedBy" class="form-control"></td>
-            <td><input type="date" id="prepareddate" class="form-control"></td>
-          </tr>
-          <tr>
-            <th>Reviewed By</th>
-            <td><input type="text" id="reviewedBy" class="form-control"></td>
-            <td><input type="date" id="revieweddate" class="form-control"></td>
-          </tr>
-        </tbody>
+def save_html_report(report, filename):
+    with io.open(filename, "w", encoding="utf-8") as file:
+        file.write(report)
+
+def get_severity_color(severity):
+    if severity == "Critical":
+        return "maroon"
+    elif severity == "High":
+        return "red"
+    elif severity == "Medium":
+        return "orange"
+    elif severity == "Low":
+        return "yellow"
+    elif severity == "Info":
+        return "grey"
+    else:
+        return "transparent"
+
+def strip_vulnerability_id(vulnerability_id):
+    if vulnerability_id is None or not isinstance(vulnerability_id, dict):
+        return "N/A"
+    vulnerability_id = vulnerability_id.get("vulnerability_id", "").strip("{'vulnerability_id': '").rstrip("'}")
+    return vulnerability_id
+
+def fetch_image_as_base64(url, headers):
+    """Fetch an image and convert it to a base64 data URI."""
+    try:
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code == 200:
+            content_type = response.headers.get("content-type", "image/png")
+            image_data = base64.b64encode(response.content).decode("utf-8")
+            return f"data:{content_type};base64,{image_data}"
+        else:
+            print(f"Failed to fetch image {url}: Status code {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"Error fetching image {url}: {e}")
+        return None
+
+def make_absolute_url(base_url, relative_url):
+    """Convert a relative URL to an absolute URL."""
+    if relative_url.startswith(("http://", "https://")):
+        return relative_url
+    # Ensure base_url ends with a slash for proper joining
+    if not base_url.endswith("/"):
+        base_url += "/"
+    return urllib.parse.urljoin(base_url, relative_url.lstrip("/"))
+
+def generate_html_report(finding_data, report_name, start_date, end_date, prepared_by, reviewed_by, approved_by, api_headers, base_url):
+    # Sorted findings
+    sorted_findings = sorted(finding_data, key=lambda x: ["Critical", "High", "Medium", "Low", "Info"].index(x["severity"]))
+    
+    # Count the occurrences of each severity
+    severity_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Info": 0}
+    for finding in sorted_findings:
+        severity = finding["severity"]
+        severity_counts[severity] += 1
+    
+    # Generate the HTML report
+    html_report = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>DefectDojo Findings Report</title>
+      <style>
+        body {{
+          border: 1px solid #ccc;
+          padding: 10px;
+          font-size: 16px;
+        }}
+        h1 {{
+          font-size: 18px;
+          font-weight: bold;
+        }}
+        .report-heading {{
+          font-size: 34px;
+          font-weight: bold;
+        }}
+        .finding-title {{
+          background-color: rgba(32, 166, 216, 0.75) !important;
+          color: white;
+          padding: 10px;
+          margin-top: 20px;
+        }}
+        .severity-box {{
+          display: inline-block;
+          padding: 5px;
+          margin-bottom: 10px;
+          color: white;
+        }}
+        .severity-critical {{
+          background-color: maroon;
+        }}
+        .severity-high {{
+          background-color: red;
+        }}
+        .severity-medium {{
+          background-color: orange;
+        }}
+        .severity-low {{
+          background-color: yellow;
+        }}
+        .severity-info {{
+          background-color: grey;
+        }}
+        .hardcoded-line {{
+          border-top: 1px solid #000;
+          margin-top: 1px;
+          padding-top: 1px;
+          border-width: 1px;
+        }}
+        .step-image {{
+          border: 1px solid #ccc;
+          padding: 5px;
+          margin-bottom: 10px;
+          max-width: 1000px;
+          max-height: 800px;
+        }}
+        .steps_to_reproduce {{
+          list-style-type: none;
+          padding-left: 0;
+        }}
+        table {{
+          border-collapse: collapse;
+          width: 100%;
+        }}
+        th, td {{
+          padding: 8px;
+          text-align: left;
+          border-bottom: 1px solid #ddd;
+        }}
+        .Sub-Title {{
+          font-size: 24px;
+        }}
+      </style>
+    </head>
+    <body>
+    <div class="cover-page">
+      <img src="logo">
+      <h2 class="report-heading">{report_name}</h2>
+      <h1>Application Security</h1>
+      <br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>
+      <br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>
+      <div class="Sub-Title">
+        <p><strong>Report Properties:</strong></p>
+        <p><strong>VAPT Dates:</strong></p>
+      </div>
+      <table>
+        <tr>
+          <th>Start Date: </th><td>{start_date}</td>
+        </tr>
+        <tr>
+          <th>End Date: </th><td>{end_date}</td> 
+        </tr>      
+        <tr>
+          <th>Report Prepared by: </th><td>{prepared_by}</td>
+        </tr>
+        <tr>
+          <th>Reviewed by: </th><td>{reviewed_by}</td>
+        </tr>
+        <tr>
+          <th>Approved by: </th><td>{approved_by}</td>
+        </tr>
       </table>
-      <br><br><br><br><br><br><br><br><br><br>
     </div>
+    <br><br><br><br><br><br>
+    """
 
-    <div id="indexSection" class="mb-4"></div>
-    <br><br><br><br><br><br><br>
-    <div class="pie-chart-container">
-      <canvas id="severityPieChart"></canvas>
-    </div>
-    <div id="severityTable" class="severity-table"></div>
+    # Generate the pie chart
+    custom_style = Style(value_font_size=12)
+    pie_chart = pygal.Pie(width=400, height=200, print_values=True, style=custom_style, value_formatter=lambda x: f"({x * 100 / sum(severity_counts.values()):.2f}%)")
+    pie_chart.title = "Findings by Severity"
+    for severity, count in severity_counts.items():
+        pie_chart.add(f"{severity} ({count})", count)
 
-    <div id="findingsContainer"></div>
-    <div id="status" class="mt-3"></div>
-  </div>
+    chart_svg = pie_chart.render()
+    chart_svg = chart_svg.decode("utf-8").replace("\n", " ")
+    html_report += f'<div>{chart_svg}</div>'
 
-  <script>
-    const API_URL = "https://demo.defectdojo.org/api/v2/findings/?test=";
-    const BASE_URL = "https://demo.defectdojo.org";
-    const ActiveVerified = "&verified=true&active=true";
-
-    let indexGenerated = false;
-
-    function getSeverityColor(severity) {
-      if (severity === "Critical") return "#ff0000";
-      if (severity === "High") return "#ff6600";
-      if (severity === "Medium") return "#ffcc00";
-      if (severity === "Low") return "#66cc00";
-      if (severity === "Info") return "#00ccff";
-      return "#000000";
+    severity_findings = {}
+    severity_colors = {
+        "Critical": {"background": "maroon", "font": "white"},
+        "High": {"background": "red", "font": "white"},
+        "Medium": {"background": "orange", "font": "white"},
+        "Low": {"background": "yellow", "font": "black"},
+        "Info": {"background": "grey", "font": "white"}
     }
 
-    function renderVulnerabilityId(vulnerabilityIds) {
-      if (Array.isArray(vulnerabilityIds) && vulnerabilityIds.length > 0) {
-        return vulnerabilityIds.map(item => item.vulnerability_id || "N/A").join(", ");
-      }
-      return "N/A";
-    }
+    for finding in sorted_findings:
+        severity = finding["severity"]
+        if severity not in severity_findings:
+            severity_findings[severity] = []
+        severity_findings[severity].append(finding)
 
-    function removeMarkdownImages(text) {
-      if (typeof text !== "string") return "";
-      const markdownImagePattern = /!\[\]\(([^)]+)\)/g;
-      return text.replace(markdownImagePattern, (match, url) => {
-        let imgUrl = url;
-        if (imgUrl.startsWith("/access_file/")) {
-          imgUrl = `${BASE_URL}${imgUrl}`;
-        }
-        return `<img src="${imgUrl}" alt="Proof of concept" class="proof-image" onerror="this.style.display='none'; this.nextSibling.style.display='block';"><span class="image-error">Failed to load image: ${imgUrl}</span>`;
-      });
-    }
+    # Index page with a list of all findings
+    html_report += "<h2 id='top'>Findings Index</h2>"
+    severity_order = ["Critical", "High", "Medium", "Low", "Info"]
+    for severity in severity_order:
+        findings = severity_findings.get(severity, [])
+        if findings:
+            color = severity_colors.get(severity, {})
+            background_color = color.get("background", "white")
+            font_color = color.get("font", "black")
+            html_report += f"<h1 style='background-color: {background_color}; color: {font_color}'>{severity} Findings:</h1>"
+            html_report += "<ul>"
+            for i, finding in enumerate(findings, start=1):
+                finding_title = finding["title"]
+                html_report += f'<li><a href="#finding{i}">Finding {i}: {finding_title}</a></li>'
+            html_report += "</ul>"
 
-    function getProofOfConceptImages(steps) {
-      if (!steps || typeof steps !== "string") {
-        console.warn("Invalid steps value:", steps);
-        return "N/A";
-      }
-      const cleanedSteps = removeMarkdownImages(steps.replace(/\r\n/g, "<br>"));
-      const proofLinkPattern = /https?:\/\/[^\s)]+/g;
-      const proofLinks = cleanedSteps.match(proofLinkPattern) || [];
+    html_report += "<br><br><br>"
+    html_report += "<p><h2 id='top'>Findings Details</h2></p>"
 
-      const parts = cleanedSteps.split(proofLinkPattern);
-      let result = "";
+    for i, finding in enumerate(sorted_findings, start=1):
+        finding_title = finding["title"]
+        vulnerability_id = finding["vulnerability_ids"][0] if finding["vulnerability_ids"] else "N/A"
+        vulnerability_id = strip_vulnerability_id(vulnerability_id)
+        description = finding["description"].replace("\r\n", "<br>")
+        cvssv3 = finding["cvssv3"] if finding["cvssv3"] else "N/A"
+        cvssv3_score = finding["cvssv3_score"] if finding["cvssv3_score"] else "N/A"
+        severity = finding["severity"]
+        steps_to_reproduce = finding["steps_to_reproduce"].replace("\r\n", "<br>")
+        mitigation = finding["mitigation"].replace("\r\n", "<br>")
+        impact = finding["impact"].replace("\r\n", "<br>")
 
-      parts.forEach((text, index) => {
-        if (text.trim()) {
-          result += `<p>${text.trim()}</p>`;
-        }
-        if (proofLinks[index]) {
-          let imgUrl = proofLinks[index];
-          if (imgUrl.startsWith("/access_file/")) {
-            imgUrl = `${BASE_URL}${imgUrl}`;
-          }
-          result += `<a href="${imgUrl}" target="_blank"><img src="${imgUrl}" alt="Proof of concept" class="proof-image" onerror="this.style.display='none'; this.nextSibling.style.display='block';"><span class="image-error">Failed to load image: ${imgUrl}</span></a>`;
-        }
-      });
-
-      return result || "N/A";
-    }
-
-    function renderField(field) {
-      if (!field) return "N/A";
-      if (typeof field === "string") {
-        return getProofOfConceptImages(field);
-      }
-      console.warn("Non-string field value:", field);
-      return String(field) || "N/A";
-    }
-
-    function renderPieChart(severityCounts) {
-      const ctx = document.getElementById("severityPieChart").getContext("2d");
-      const filteredCounts = Object.entries(severityCounts).filter(([_, count]) => count > 0);
-      const chartData = {
-        labels: filteredCounts.map(([severity]) => {
-          const count = severityCounts[severity];
-          const total = Object.values(severityCounts).reduce((a, b) => a + b, 0);
-          const percentage = total > 0 ? ((count * 100) / total).toFixed(2) : 0;
-          return `${severity} (${count}, ${percentage}%)`;
-        }),
-        datasets: [{
-          data: filteredCounts.map(([_, count]) => count),
-          backgroundColor: filteredCounts.map(([severity]) => getSeverityColor(severity)),
-          borderColor: "#fff",
-          borderWidth: 2
-        }]
-      };
-
-      new Chart(ctx, {
-        type: "pie",
-        data: chartData,
-        options: {
-          plugins: {
-            title: { display: true, text: "Findings by Severity", font: { size: 16 } },
-            legend: { display: true, position: "bottom" }
-          },
-          responsive: false,
-          maintainAspectRatio: false
-        }
-      });
-    }
-
-    function renderSeverityTable(severityCounts) {
-      const tableHtml = `
-        <h3>Severity Counts</h3>
-        <table class='table table-bordered'>
-          <thead><tr><th>Severity</th><th>Count</th></tr></thead>
-          <tbody>
-            ${Object.entries(severityCounts).map(([severity, count]) => `
-              <tr><td>${severity}</td><td>${count}</td></tr>
-            `).join("")}
-          </tbody>
-        </table>
-      `;
-      document.getElementById("severityTable").innerHTML = tableHtml;
-    }
-
-    function generateReport(findings) {
-      const severityOrder = ["Critical", "High", "Medium", "Low", "Info"];
-      const severityCounts = { Critical: 0, High: 0, Medium: 0, Low: 0, Info: 0 };
-      const sortedFindings = findings.sort((a, b) => severityOrder.indexOf(a.severity) - severityOrder.indexOf(b.severity));
-      const findingsContainer = document.getElementById("findingsContainer");
-      const indexTableBody = document.getElementById("indexTableBody");
-      const reportTitle = document.getElementById("reportTitle").value || "DefectDojo Report";
-      const startDate = document.getElementById("startDate").value;
-      const endDate = document.getElementById("endDate").value;
- const endDate = document.getElementById("endDate").value;
-      const preparedBy = document.getElementById("preparedBy").value;
-      const prepareddate = document.getElementById("prepareddate").value;
-      const reviewedBy = document.getElementById("reviewedBy").value;
-      const revieweddate = document.getElementById("revieweddate").value;
-
-      findingsContainer.innerHTML = '';
-      if (indexTableBody) indexTableBody.innerHTML = '';
-
-      sortedFindings.forEach((finding, index) => {
-        if (finding.severity in severityCounts) severityCounts[finding.severity]++;
-        const findingHtml = `
-          <div class='report-container ${index > 0 ? "page-break" : ""}>
-            <br><br>
-            <h2 id="finding-${index + 1}">${index + 1}. ${finding.title}</h2>
-            <table class='table table-bordered'>
-              <tr><th>Jira ID</th><td>${renderVulnerabilityId(finding.vulnerability_ids)}</td></tr>
-              <tr><th>CVSS Vector</th><td>${renderField(finding.cvssv3)}</td></tr>
-              <tr><th>CVSS Score</th><td>${renderField(finding.cvssv3_score)}</td></tr>
-              <tr><th>Severity</th><td>${finding.severity || "N/A"}</td></tr>
-              <tr><th>Description</th><td>${getProofOfConceptImages(finding.description)}</td></tr>
-              <tr><th>Mitigation</th><td>${getProofOfConceptImages(finding.mitigation)}</td></tr>
-              <tr><th>Impact</th><td>${getProofOfConceptImages(finding.impact)}</td></tr>
-              <tr><th>Steps to Reproduce</th><td>${getProofOfConceptImages(finding.steps_to_reproduce)}</td></tr>
-            </table>
-          </div>`;
-        findingsContainer.innerHTML += findingHtml;
-
-        const indexRow = `<tr><td><a href="#finding-${index + 1}">${index + 1}</a></td><td>${finding.title}</td><td>${finding.severity || "N/A"}</td><td>${renderVulnerabilityId(finding.vulnerability_ids)}</td></tr>`;
-        if (indexTableBody) indexTableBody.innerHTML += indexRow;
-      });
-
-      renderPieChart(severityCounts);
-      renderSeverityTable(severityCounts);
-
-      // Generate downloadable HTML report
-      const reportHtml = `
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>${reportTitle}</title>
-          <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-          <style>
-            .report-container { margin-bottom: 20px; }
-            .page-break { page-break-before: always; }
-            .proof-image { max-width: 1000px; max-height: 800px; width: auto; height: auto; display: block; margin: 10px 0; }
-            .image-error { color: red; font-style: italic; }
-            .document-history-table { margin-bottom: 20px; }
-            .pie-chart-container { width: 400px; height: 200px; margin: 20px 0; }
-            .severity-table { margin-bottom: 20px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="document-history-table">
-              <img src="./e2137a85-d9bb-4d7d-9a5f-18fdb6018bcd_files/main-logo.png.webp" alt="Logo" style="max-width: 200px; margin-bottom: 10px;" onerror="this.style.display='none';">
-              <table class="table table-bordered">
-                <tbody>
-                  <tr><th colspan="3"><center><h4>Application Security</h4></center></th></tr>
-                  <tr><th>Report Name</th><td colspan="2">${reportTitle}</td></tr>
-                  <tr><th>Start Date</th><td colspan="2">${startDate || "N/A"}</td></tr>
-                  <tr><th>End Date</th><td colspan="2">${endDate || "N/A"}</td></tr>
-                  <tr><th>Prepared By</th><td>${preparedBy || "N/A"}</td><td>${prepareddate || "N/A"}</td></tr>
-                  <tr><th>Reviewed By</th><td>${reviewedBy || "N/A"}</td><td>${revieweddate || "N/A"}</td></tr>
-                </tbody>
-              </table>
-              <br><br><br><br><br><br><br><br><br><br>
-            </div>
-            ${document.getElementById("indexSection").outerHTML}
-            ${document.querySelector(".pie-chart-container").outerHTML}
-            ${document.getElementById("severityTable").outerHTML}
-            ${findingsContainer.outerHTML}
+        html_report += f"""
+        <br><br><br>
+        <div id="finding{i}" class="finding-border">
+          <div class="finding-title">
+            <h1 id="finding{i}">Finding {i}: {finding_title}</h1>
           </div>
-        </body>
-        </html>`;
+        </div>
+        <p><strong>Jira ID:</strong> {vulnerability_id}</p>
+        <hr class="hardcoded-line">
+        <p><strong>Description:</strong> {description}</p>
+        <hr class="hardcoded-line">
+        <p><strong>CVSSv3:</strong> {cvssv3}</p>
+        <hr class="hardcoded-line">
+        <p><strong>CVSSv3 Score:</strong> {cvssv3_score}</p>
+        <hr class="hardcoded-line">
+        <div class="severity-box severity-{severity.lower()}" style="background-color: {get_severity_color(severity)};">
+          <strong>Severity:</strong> {severity}
+        </div>
+        <hr class="hardcoded-line">
+        <p><strong>Impact:</strong> {impact}</p>
+        <hr class="hardcoded-line">
+        <p><strong>Mitigation:</strong> {mitigation}</p>
+        <hr class="hardcoded-line">
+        <p><strong>Steps to Reproduce:</strong></p>
+        <ul class="steps_to_reproduce">
+        """
 
-      // Option 1: Download report
-      const blob = new Blob([reportHtml], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "report.html";
-      a.click();
-      URL.revokeObjectURL(url);
+        # Parse steps_to_reproduce and include images
+        steps = steps_to_reproduce.split("<br>")
+        for step in steps:
+            if step.strip():
+                # Modified regex to match both absolute and relative URLs
+                img_regex = r"!\[\]\(([^)]+)\)"
+                img_urls = re.findall(img_regex, step)
+                if img_urls:
+                    for img_url in img_urls:
+                        # Convert relative URL to absolute
+                        absolute_url = make_absolute_url(base_url, img_url)
+                        # Fetch image as base64 to avoid authentication issues
+                        base64_image = fetch_image_as_base64(absolute_url, api_headers)
+                        if base64_image:
+                            step = step.replace(f"![]({img_url})", f'<img class="step-image" src="{base64_image}" style="max-width: 1000px; max-height: 800px;"><br>')
+                        else:
+                            step = step.replace(f"![]({img_url})", f'[Image failed to load: {absolute_url}]<br>')
+                html_report += f"<li>{step}</li>"
 
-      // Option 2: Display in new tab (uncomment to use)
-      // const newWindow = window.open("");
-      // newWindow.document.write(reportHtml);
-      // newWindow.document.close();
-      // document.getElementById("status").innerHTML = `<p>HTML report opened in a new tab. Images should load within the authenticated session.</p>`;
+        html_report += "</ul><hr></div>"
 
-      document.getElementById("status").innerHTML = `<p>HTML report generated and downloaded as report.html. View within an authenticated session (e.g., host on your server or open in a new tab) to ensure images load correctly.</p>`;
-    }
+    html_report += """
+    <div class="cover-page-bottom"></div>
+    </body>
+    </html>
+    """
 
-    document.getElementById("fetchDataBtn").addEventListener("click", async () => {
-      const testIdsInput = document.getElementById("testIds").value;
-      const testIds = testIdsInput.split(",").map(id => id.trim());
-      const statusDiv = document.getElementById("status");
-      statusDiv.innerHTML = "Generating report...";
+    return html_report
 
-      if (!indexGenerated) {
-        document.getElementById("indexSection").innerHTML = "<h2>Table of Contents</h2><table class='table table-bordered'><thead><tr><th>#</th><th>Finding Title</th><th>Severity</th><th>Jira ID</th></tr></thead><tbody id='indexTableBody'></tbody></table>";
-        indexGenerated = true;
-      }
+# Prompt the user for input
+test_ids = input("Enter the Test IDs (comma-separated): ").split(",")
+report_name = input("Enter Report Name: ")
+start_date = input("Enter Start Date: ")
+end_date = input("Enter End Date: ")
+prepared_by = input("Enter name of prepared by person: ")
+reviewed_by = input("Enter name of reviewed by person: ")
+approved_by = input("Enter name of approved by person: ")
 
-      const findings = [];
+# DefectDojo API endpoint
+api_url = "https://demo.defectdojo.org/api/v2/tests/{}/generate_report/"
 
-      for (const testId of testIds) {
-        try {
-          const response = await fetch(API_URL + testId + ActiveVerified, {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include" // Include session cookies
-          });
+# Dynamically determine the base URL from api_url
+base_url = "/".join(api_url.split("/")[:3])  # Extracts scheme and domain (e.g., https://demo.defectdojo.org)
 
-          if (response.ok) {
-            const data = await response.json();
-            const results = data.results || [];
-            if (results.length > 0) {
-              findings.push(...results);
-              statusDiv.innerHTML += `<p>Findings fetched for Test ID: ${testId}</p>`;
-            } else {
-              statusDiv.innerHTML += `<p>No findings found for Test ID: ${testId}</p>`;
-            }
-          } else {
-            statusDiv.innerHTML += `<p>Error fetching findings for Test ID: ${testId}. Status code: ${response.status}</p>`;
-          }
-        } catch (error) {
-          statusDiv.innerHTML += `<p>Error fetching findings for Test ID: ${testId}. Error: ${error.message}</p>`;
-        }
-      }
+# Set your authentication API key
+api_key = "abc"
 
-      if (findings.length > 0) {
-        generateReport(findings);
-      } else {
-        statusDiv.innerHTML += `<p>No findings to generate report.</p>`;
-      }
-    });
-  </script>
-</body>
-</html>
+# Set the headers
+headers = {
+    "Authorization": f"Token {api_key}",
+    "Content-Type": "application/json"
+}
+
+finding_data = []
+
+for test_id in test_ids:
+    # Make a POST request to generate the report for each test ID
+    response = requests.post(api_url.format(test_id.strip()), headers=headers)
+
+    # Check if the request was successful
+    if response.status_code == 200:
+        report_data = response.json()
+        findings = report_data.get("findings", [])
+        if findings:
+            for finding in findings:
+                finding_data.append(finding)
+        else:
+            print(f"No findings found for Test ID: {test_id.strip()}")
+        print("\n---\n")
+    else:
+        print(f"Error fetching findings for Test ID: {test_id.strip()}. Status code: {response.status_code}")
+
+# Generate the HTML report
+html_report = generate_html_report(finding_data, report_name, start_date, end_date, prepared_by, reviewed_by, approved_by, headers, base_url)
+
+# Save the HTML report
+filename = "report.html"
+save_html_report(html_report, filename)
+
+print(f"HTML report saved as: {filename}")
