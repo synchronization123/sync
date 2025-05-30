@@ -37,8 +37,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/pygal@3.0.0/dist/pygal.min.js"></script>
   <script>
-    const API_URL = "https://demo.defectdojo.org/api/v2/tests/{}/generate_report/";
-    const API_KEY = "abc"; // Replace with your actual API key
+    const API_URL = "https://demo.defectdojo.org/api/v2/findings/?test=";
 
     function getSeverityColor(severity) {
       if (severity === "Critical") return "maroon";
@@ -75,7 +74,7 @@
         style: { value_font_size: 4 }
       });
       pieChart.title = "Findings by Severity";
-      Object.entries(severityCounts).forEach(([severity, count]) => {
+      Object.entries(severityCounts).forEach([severity, count]) => {
         pieChart.add(`${severity}, (${count})`, count);
       });
       const chartSvg = pieChart.render().replace(/\n/g, " ");
@@ -208,8 +207,8 @@
         const steps = stepsToReproduce.split("<br>");
         steps.forEach(step => {
           const imgRegex = /!\[\]\((https?:\/\/[^\s]+)\)/g;
-          let match;
           let modifiedStep = step;
+          let match;
           while ((match = imgRegex.exec(step)) !== null) {
             const imgUrl = match[1];
             modifiedStep = modifiedStep.replace(`![](${imgUrl})`, `<img class="step-image" src="${imgUrl}" style="max-width: 1000px; max-height: 800px;"><br>`);
@@ -242,17 +241,16 @@
 
       for (const testId of testIds) {
         try {
-          const response = await fetch(API_URL.replace("{}", testId), {
-            method: "POST",
+          const response = await fetch(`${API_URL}${testId}`, {
+            method: "GET",
             headers: {
-              "Authorization": `Token ${API_KEY}`,
               "Content-Type": "application/json"
             }
           });
 
           if (response.ok) {
             const reportData = await response.json();
-            const findings = reportData.findings || [];
+            const findings = reportData.results || []; // Assuming findings are in 'results' key
             if (findings.length > 0) {
               findingData.push(...findings);
               statusDiv.innerHTML += `<p>Findings fetched for Test ID: ${testId}</p>`;
