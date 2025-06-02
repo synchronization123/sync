@@ -200,7 +200,12 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
           page-break-inside: avoid;
         }}
         .finding-border:first-of-type {{
-          margin-top: 10px; /* Reduced to minimize white space after Findings Details */
+          margin-top: 0; /* No space after Findings Details */
+          page-break-before: avoid; /* Keep with Findings Details title */
+        }}
+        .finding-details h2 {{
+          margin-bottom: 0; /* No space below Findings Details title */
+          page-break-after: avoid; /* Prevent page break after title */
         }}
         .finding-details {{
           page-break-inside: avoid;
@@ -308,6 +313,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
                 html_report += f'<li><a href="#finding{i}" style="color: #20a6d8; text-decoration: none;">Finding {i}: {finding_title}</a></li>'
             html_report += "</ul>"
     
+    # Findings Details section without <br> tags
     html_report += "<div class='finding-details'><h2>Findings Details</h2>"
     
     # Check if there are no findings
