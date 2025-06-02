@@ -102,7 +102,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
           color: #ffffff;
           padding: 12px;
           border-radius: 5px;
-          margin-top: 30px;
+          margin: 0;
         }}
         .severity-box {{
           display: inline-block;
@@ -199,11 +199,16 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
           box-shadow: 0 1px 5px #00000033;
           page-break-inside: avoid;
         }}
+        .finding-border:first-of-type {{
+          margin-top: 10px; /* Reduced to minimize white space after Findings Details */
+        }}
         .finding-details {{
           page-break-inside: avoid;
+          margin-top: 0;
         }}
         p {{
           page-break-inside: avoid;
+          margin: 10px 0;
         }}
         a {{
           color: #20a6d8;
@@ -326,9 +331,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
             
             html_report += f"""
             <div id="finding{i}" class="finding-border">
-              <div class="finding-title">
-                <h1 id="finding{i}">Finding {i}: {finding_title}</h1>
-              </div>
+              <h1 class="finding-title" id="finding{i}">Finding {i}: {finding_title}</h1>
               <p><strong>Jira ID:</strong> {vulnerability_id}</p>
               <hr class="hardcoded-line">
               <p><strong>Description:</strong> {description}</p>
