@@ -272,21 +272,31 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
 
         # Parse steps_to_reproduce and process images
         for step in steps_to_reproduce.split("<br>"):
-            # Regex to match DefectDojo image URLs like https://demo.defectdojo.org/access_file/<file_id>/<test_id>/Finding
+            # Regex to match Markdown image syntax like ![](https://demo.defectdojo.org/access_file/<file_id>/<test_id>/Finding)
             img_regex = r"!\[\]\(https://demo\.defectdojo\.org/access_file/(\d+)/(\d+)/Finding\)"
             img_matches = re.findall(img_regex, step)
             
-            for file_id, test_id in img_matches:
-                # Fetch the actual image URL
-                actual_img_url = fetch_actual_image_url(file_id, test_id, api_key)
-                if actual_img_url:
-                    # Replace the original URL with the actual media URL
+            if img_matches:
+                # If image syntax is found, replace it with the actual image
+                for file_id, test_id in img_matches:
+                    # Fetch the actual image URL
+                    actual_img_url = fetch_actual_image_url(file_id, test_id, api_key)
                     original_url = f"https://demo.defectdojo.org/access_file/{file_id}/{test_id}/Finding"
-                    step = step.replace(f"![]({original_url})", f'<img class="step-image" src="{actual_img_url}" style="max-width: 1000px; max-height: 800px;"><br>')
-                else:
-                    # If the URL couldn't be resolved, replace with a placeholder or error message
-                    step = step.replace(f"![]({original_url})", f'[Image not available: file_id={file_id}, test_id={test_id}]<br>')
-            
+                    if actual_img_url:
+                        # Replace the entire Markdown syntax with the HTML image tag
+                        step = re.sub(
+                            r"!\[\]\(" + re.escape(original_url) + r"\)",
+                            f'<img class="step-image" src="{actual_img_url}" style="max-width: 1000px; max-height: 800px;"><br>',
+                            step
+                        )
+                    else:
+                        # Replace with an error message if the image URL cannot be resolved
+                        step = re.sub(
+                            r"!\[\]\(" + re.escape(original_url) + r"\)",
+                            f'[Image not available: file_id={file_id}, test_id={test_id}]<br>',
+                            step
+                        )
+            # If no image syntax, use the step as-is
             html_report += f"<li>{step}</li>"
 
         html_report += "</ul><hr></div>"
