@@ -30,48 +30,59 @@ def strip_vulnerability_id(vulnerability_id):
     vulnerability_id = vulnerability_id.get("vulnerability_id", "").strip("{'vulnerability_id': '").rstrip("'}")
     return vulnerability_id
 
-def download_image(img_url, api_key, local_base_path="images"):
-    """Download an image from the given URL and save it locally with the appropriate folder structure."""
+def download_image(img_url, api_key, local_base_path="media"):
+    """Download an image from the given URL, resolving the actual URL from Content-Disposition if needed."""
     try:
         headers = {
             "Authorization": f"Token {api_key}",
             "Content-Type": "application/json"
         }
         
-        # Make a GET request to fetch the image
-        response = requests.get(img_url, headers=headers, stream=True)
+        # Make a HEAD request to get the Content-Disposition header
+        response = requests.head(img_url, headers=headers, allow_redirects=True)
+        
+        # Check for Content-Disposition header
+        actual_url = img_url
+        filename = None
+        if 'Content-Disposition' in response.headers:
+            content_disposition = response.headers['Content-Disposition']
+            # Extract filename from Content-Disposition (e.g., attachment: file_name=uploaded_files/ala7d-jsjjjs-ujnnn.png)
+            match = re.search(r'file_name=([^\s]+)', content_disposition)
+            if match:
+                file_path = match.group(1)  # e.g., uploaded_files/ala7d-jsjjjs-ujnnn.png
+                filename = os.path.basename(file_path)  # e.g., ala7d-jsjjjs-ujnnn.png
+                # Construct the actual download URL
+                actual_url = f"https://demo.defectdojo.org/media/{file_path}"
+        
+        # Download the image from the actual URL
+        response = requests.get(actual_url, headers=headers, stream=True)
         
         if response.status_code == 200:
-            # Parse the URL to extract the path components
-            parsed_url = urlparse(img_url)
-            path_parts = parsed_url.path.split('/')
+            # Use the filename from Content-Disposition or generate a default
+            if not filename:
+                parsed_url = urlparse(actual_url)
+                filename = os.path.basename(parsed_url.path) or f"image_{hash(actual_url)}.png"
             
-            # Construct the local path based on the URL structure
-            if len(path_parts) >= 4:
-                folder_structure = os.path.join(local_base_path, *path_parts[1:-1])  # e.g., images/access_file/4901/31280/Finding
-                os.makedirs(folder_structure, exist_ok=True)
-                
-                # Extract the filename or set a default
-                filename = path_parts[-1] if path_parts[-1] else f"image_{hash(img_url)}.png"
-                if not filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-                    filename = f"image_{hash(img_url)}.png"  # Unique default filename
-                
-                local_path = os.path.join(folder_structure, filename)
-                
-                # Save the image
-                with open(local_path, 'wb') as f:
-                    for chunk in response.iter_content(1024):
-                        f.write(chunk)
-                
-                return local_path
-            else:
-                print(f"Invalid URL structure for image: {img_url}")
-                return img_url
+            # Ensure the filename has a valid image extension
+            if not filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+                filename = f"{filename}.png"
+            
+            # Construct the local path (e.g., media/uploaded_files/ala7d-jsjjjs-ujnnn.png)
+            folder_structure = os.path.join(local_base_path, "uploaded_files")
+            os.makedirs(folder_structure, exist_ok=True)
+            local_path = os.path.join(folder_structure, filename)
+            
+            # Save the image
+            with open(local_path, 'wb') as f:
+                for chunk in response.iter_content(1024):
+                    f.write(chunk)
+            
+            return local_path
         else:
-            print(f"Failed to download image from {img_url}. Status code: {response.status_code}")
+            print(f"Failed to download image from {actual_url}. Status code: {response.status_code}")
             return img_url
     except Exception as e:
-        print(f"Error downloading image from {img_url}: {str(e)}")
+        print(f"Error downloading image from {img_url} (resolved to {actual_url}): {str(e)}")
         return img_url
 
 def generate_html_report(finding_data, report_name, start_date, end_date, prepared_by, reviewed_by, approved_by, api_key):
@@ -239,7 +250,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
             html_report += "</ul>"
     
     html_report += "<br><br><br>"
-    html_report += "<p><h2 id='top'>Findings Details</h2></p>"
+    html_report += "<p><h2>Findings Details</h2></p>"
     
     for i, finding in enumerate(sorted_findings, start=1):
         finding_title = finding["title"]
