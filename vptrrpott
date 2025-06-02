@@ -46,13 +46,14 @@ def download_image(img_url, api_key, local_base_path="media"):
         filename = None
         if 'Content-Disposition' in response.headers:
             content_disposition = response.headers['Content-Disposition']
-            # Extract filename from Content-Disposition (e.g., attachment: file_name=uploaded_files/ala7d-jsjjjs-ujnnn.png)
+            # Extract filename from Content-Disposition (e.g., file_name=uploaded_files/ala7d-jsjjjs-ujnnn.png)
             match = re.search(r'file_name=([^\s]+)', content_disposition)
             if match:
                 file_path = match.group(1)  # e.g., uploaded_files/ala7d-jsjjjs-ujnnn.png
+                # Extract only the filename, excluding 'uploaded_files/'
                 filename = os.path.basename(file_path)  # e.g., ala7d-jsjjjs-ujnnn.png
                 # Construct the actual download URL
-                actual_url = f"https://demo.defectdojo.org/media/{file_path}"
+                actual_url = f"https://demo.defectdojo.org/media/uploaded_files/{filename}"
         
         # Download the image from the actual URL
         response = requests.get(actual_url, headers=headers, stream=True)
@@ -65,7 +66,7 @@ def download_image(img_url, api_key, local_base_path="media"):
             
             # Ensure the filename has a valid image extension
             if not filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-                filename = f"{filename}.png"
+                filename = f"{os.path.splitext(filename)[0]}.png"
             
             # Construct the local path (e.g., media/uploaded_files/ala7d-jsjjjs-ujnnn.png)
             folder_structure = os.path.join(local_base_path, "uploaded_files")
@@ -77,6 +78,7 @@ def download_image(img_url, api_key, local_base_path="media"):
                 for chunk in response.iter_content(1024):
                     f.write(chunk)
             
+            print(f"Successfully downloaded image to {local_path}")
             return local_path
         else:
             print(f"Failed to download image from {actual_url}. Status code: {response.status_code}")
