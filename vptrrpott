@@ -21,7 +21,7 @@ def get_severity_color(severity):
     elif severity == "Info":
         return "#808080"  # Grey
     else:
-        return "transparent"
+        return "#ffffff"  # White (replacing transparent)
 
 def strip_vulnerability_id(vulnerability_id):
     if vulnerability_id is None or not isinstance(vulnerability_id, dict):
@@ -51,15 +51,17 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
           margin: 0;
           padding: 0;
           background-color: #f9f9f9;
-          color: #333;
+          color: #333333;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
         }}
         .container {{
           max-width: 1000px;
           margin: 0 auto;
-          background-color: #fff;
+          background-color: #ffffff;
           padding: 30px;
           border-radius: 8px;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 2px 10px #0000001a;
           page-break-inside: avoid;
         }}
         .cover-page {{
@@ -72,10 +74,10 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
         }}
         .logo-card {{
           display: inline-block;
-          background-color: #fff;
+          background-color: #ffffff;
           padding: 10px;
           border-radius: 4px;
-          box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 1px 5px #0000001a;
           margin-bottom: 20px;
         }}
         .logo {{
@@ -96,7 +98,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
         }}
         .finding-title {{
           background-color: #20a6d8;
-          color: white;
+          color: #ffffff;
           padding: 12px;
           border-radius: 5px;
           margin-top: 30px;
@@ -105,36 +107,36 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
           display: inline-block;
           padding: 8px 12px;
           margin-bottom: 15px;
-          color: white;
+          color: #ffffff;
           border-radius: 4px;
           font-weight: bold;
         }}
         .severity-critical {{
           background-color: #800000;
-          color: white;
+          color: #ffffff;
         }}
         .severity-high {{
           background-color: #ff0000;
-          color: white;
+          color: #ffffff;
         }}
         .severity-medium {{
           background-color: #ffa500;
-          color: white;
+          color: #ffffff;
         }}
         .severity-low {{
           background-color: #ffff00;
-          color: #333;
+          color: #333333;
         }}
         .severity-info {{
           background-color: #808080;
-          color: white;
+          color: #ffffff;
         }}
         .hardcoded-line {{
-          border-top: 1px solid #ddd;
+          border-top: 1px solid #dddddd;
           margin: 15px 0;
         }}
         .step-image {{
-          border: 1px solid #ccc;
+          border: 1px solid #cccccc;
           padding: 5px;
           margin-bottom: 15px;
           max-width: 100%;
@@ -152,15 +154,15 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
           border-collapse: collapse;
           width: 100%;
           margin: 20px 0;
-          background-color: #fff;
-          border: 1px solid #ddd;
+          background-color: #ffffff;
+          border: 1px solid #dddddd;
           border-radius: 4px;
           page-break-inside: avoid;
         }}
         th, td {{
           padding: 12px;
           text-align: left;
-          border-bottom: 1px solid #ddd;
+          border-bottom: 1px solid #dddddd;
         }}
         th {{
           background-color: #f4f4f4;
@@ -176,15 +178,15 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
           text-align: center;
           margin: 30px 0;
           padding: 20px;
-          background-color: #fff;
+          background-color: #ffffff;
           border-radius: 8px;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 2px 10px #0000001a;
           page-break-before: always;
           page-break-inside: avoid;
         }}
         .no-findings {{
           text-align: center;
-          color: #666;
+          color: #666666;
           font-style: italic;
           page-break-inside: avoid;
         }}
@@ -193,7 +195,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
           margin-bottom: 20px;
           border-radius: 8px;
           background-color: #fafafa;
-          box-shadow: 0 1px 5px rgba(0, 0, 0, 0.05);
+          box-shadow: 0 1px 5px #0000001a;
           page-break-inside: avoid;
         }}
         .finding-details {{
@@ -201,6 +203,10 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
         }}
         p {{
           page-break-inside: avoid;
+        }}
+        a {{
+          color: #20a6d8;
+          text-decoration: none;
         }}
       </style>
     </head>
@@ -242,8 +248,8 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
     custom_style = Style(
         value_font_size=4,
         colors=('#800000', '#ff0000', '#ffa500', '#ffff00', '#808080'),  # Match severity colors
-        background='transparent',
-        plot_background='#fff'
+        background='#ffffff',  # Solid white background
+        plot_background='#ffffff'
     )
     # Generate the pie chart
     pie_chart = pygal.Pie(
@@ -267,11 +273,11 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
         
     severity_findings = {}
     severity_colors = {
-        "Critical": {"background": "#800000", "font": "white"},
-        "High": {"background": "#ff0000", "font": "white"},
-        "Medium": {"background": "#ffa500", "font": "white"},
-        "Low": {"background": "#ffff00", "font": "#333"},
-        "Info": {"background": "#808080", "font": "white"}
+        "Critical": {"background": "#800000", "font": "#ffffff"},
+        "High": {"background": "#ff0000", "font": "#ffffff"},
+        "Medium": {"background": "#ffa500", "font": "#ffffff"},
+        "Low": {"background": "#ffff00", "font": "#333333"},
+        "Info": {"background": "#808080", "font": "#ffffff"}
     }
     
     for finding in sorted_findings:
@@ -287,8 +293,8 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
         findings = severity_findings.get(severity, [])
         if findings:
             color = severity_colors.get(severity, {})
-            background_color = color.get("background", "#fff")
-            font_color = color.get("font", "#333")
+            background_color = color.get("background", "#ffffff")
+            font_color = color.get("font", "#333333")
             html_report += f"<h1 style='background-color: {background_color}; color: {font_color}; padding: 10px; border-radius: 4px; page-break-inside: avoid;'>{severity} Findings:</h1>"
             html_report += "<ul style='page-break-inside: avoid;'>"
             for i, finding in enumerate(findings, start=1):
@@ -413,5 +419,15 @@ html_report = generate_html_report(finding_data, report_name, start_date, end_da
 # Save the HTML report
 filename = "report.html"
 save_html_report(html_report, filename)
+
+# Optionally, convert HTML to PDF using WeasyPrint
+try:
+    from weasyprint import HTML
+    HTML(filename).write_pdf("report.pdf")
+    print(f"PDF report saved as: report.pdf")
+except ImportError:
+    print("WeasyPrint not installed. Install it using 'pip install weasyprint' to generate PDF.")
+except Exception as e:
+    print(f"Error generating PDF: {e}")
 
 print(f"HTML report saved as: {filename}")
