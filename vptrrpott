@@ -5,7 +5,7 @@ import pygal
 from pygal.style import Style
 import io
 import os
-from urllib.parse import urlparse, unquote
+import urllib.parse
 
 def save_html_report(report, filename):
     with io.open(filename, "w", encoding="utf-8") as file:
@@ -14,7 +14,7 @@ def save_html_report(report, filename):
 def get_severity_color(severity):
     if severity == "Critical":
         return "maroon"
-    if severity == "High":
+    elif severity == "High":
         return "red"
     elif severity == "Medium":
         return "orange"
@@ -27,57 +27,51 @@ def get_severity_color(severity):
 
 def strip_vulnerability_id(vulnerability_id):
     if vulnerability_id is None or not isinstance(vulnerability_id, dict):
-        return "N/A"    
+        return "N/A"
     vulnerability_id = vulnerability_id.get("vulnerability_id", "").strip("{'vulnerability_id': '").rstrip("'}")
     return vulnerability_id
 
-def download_image(api_key, test_id, file_id, output_dir="images"):
-    """Download an image from DefectDojo API and save it locally."""
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    
-    api_url = f"https://demo.defectdojo.org/api/v2/findings/{test_id}/files/download/{file_id}/"
-    headers = {
-        "Authorization": f"Token {api_key}",
-    }
-    
+def download_image(img_url, local_dir="images"):
+    """Download an image from a URL and save it to a local directory."""
     try:
-        response = requests.get(api_url, headers=headers, stream=True)
+        # Ensure the local directory exists
+        if not os.path.exists(local_dir):
+            os.makedirs(local_dir)
+
+        # Extract the filename from the URL
+        parsed_url = urllib.parse.urlparse(img_url)
+        filename = os.path.basename(parsed_url.path)
+        if not filename:
+            filename = f"image_{hash(img_url)}.png"  # Fallback filename
+        local_path = os.path.join(local_dir, filename)
+
+        # Download the image
+        headers = {
+            "Authorization": f"Token {api_key}",  # Use the same API key for authentication
+        }
+        response = requests.get(img_url, headers=headers, stream=True)
         if response.status_code == 200:
-            # Extract filename from Content-Disposition header
-            content_disposition = response.headers.get('content-disposition', '')
-            filename_match = re.findall('filename="(.+?)"', content_disposition)
-            if filename_match:
-                # Extract just the filename, removing any directory path
-                filename = os.path.basename(unquote(filename_match[0]))
-            else:
-                # Fallback to a default filename
-                filename = f"image_{file_id}.png"
-            
-            # Save the file in the images directory
-            file_path = os.path.join(output_dir, filename)
-            with open(file_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-            returnaccessibility: return file_path
+            with open(local_path, "wb") as f:
+                for chunk in response.iter_content(1024):
+                    f.write(chunk)
+            return local_path
         else:
-            print(f"Failed to download image for test_id: {test_id}, file_id: {file_id}. Status code: {response.status_code}")
+            print(f"Failed to download image {img_url}. Status code: {response.status_code}")
             return None
     except Exception as e:
-        print(f"Error downloading image for test_id: {test_id}, file_id: {file_id}: {str(e)}")
+        print(f"Error downloading image {img_url}: {str(e)}")
         return None
 
-def generate_html_report(finding_data, report_name, start_date, end_date, prepared_by, reviewed_by, approved_by, api_key):    
+def generate_html_report(finding_data, report_name, start_date, end_date, prepared_by, reviewed_by, approved_by):
     # Sorted findings
     sorted_findings = sorted(finding_data, key=lambda x: ["Critical", "High", "Medium", "Low", "Info"].index(x["severity"]))
-    
+
     # Count the occurrences of each severity
-    severity_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Info": 0}
+    severity_counts = {}
     for finding in sorted_findings:
         severity = finding["severity"]
-        severity_counts[severity] += 1
-    
+        severity_counts[severity] = severity_counts.get(severity, 0) + 1
+
     # Generate the HTML report
     html_report = f"""
     <!DOCTYPE html>
@@ -170,8 +164,8 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
           <th>Start Date: </th><td>{start_date}</td>
         </tr>
         <tr>
-          <th>End Date: </th><td>{end_date}</td> 
-        </tr>      
+          <th>End Date: </th><td>{end_date}</td>
+        </tr>
         <tr>
           <th>Report Prepared by: </th><td>{prepared_by}</td>
         </tr>
@@ -186,10 +180,17 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
     <br><br><br><br><br><br>
     """
 
-    # Generate the pie chart
+    # Count the findings by severity
+    severity_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Info": 0}
+    for finding in sorted_findings:
+        severity = finding["severity"]
+        severity_counts[severity] += 1
+
     custom_style = Style(value_font_size=4)
+    # Generate the pie chart
     pie_chart = pygal.Pie(width=400, height=200, print_values=True, style=custom_style, value_formatter=lambda x: f"({(x * 100 / sum(severity_counts.values())):.2f}%)")
     pie_chart.title = "Findings by Severity"
+
     for severity, count in severity_counts.items():
         pie_chart.add(f"{severity}, ({count})", count)
 
@@ -197,9 +198,10 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
     chart_svg = chart_svg.replace(b'\n', b' ')
     chart_svg_str = chart_svg.decode("utf-8")
     chart_svg_str = chart_svg_str.replace("b' '", "")
-    
+
+    # Append the chart SVG to the HTML report
     html_report += f'<div>{chart_svg_str}</div>'
-        
+
     severity_findings = {}
     severity_colors = {
         "Critical": {"background": "maroon", "font": "white"},
@@ -208,7 +210,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
         "Low": {"background": "yellow", "font": "black"},
         "Info": {"background": "grey", "font": "white"}
     }
-    
+
     for finding in sorted_findings:
         severity = finding["severity"]
         if severity not in severity_findings:
@@ -217,7 +219,10 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
 
     # Index page with a list of all findings
     html_report += "<h2 id='top'>Findings Index</h2>"
+
+    # Sort the severity levels based on severity order
     severity_order = ["Critical", "High", "Medium", "Low", "Info"]
+
     for severity in severity_order:
         findings = severity_findings.get(severity, [])
         if findings:
@@ -230,10 +235,10 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
                 finding_title = finding["title"]
                 html_report += f'<li><a href="#finding{i}">Finding {i}: {finding_title}</a></li>'
             html_report += "</ul>"
-    
+
     html_report += "<br><br><br>"
     html_report += "<p><h2 id='top'>Findings Details</h2><p>"
-        
+
     for i, finding in enumerate(sorted_findings, start=1):
         finding_title = finding["title"]
         vulnerability_id = finding["vulnerability_ids"][0] if finding["vulnerability_ids"] else "N/A"
@@ -245,7 +250,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
         steps_to_reproduce = finding["steps_to_reproduce"].replace("\r\n", "<br>")
         mitigation = finding["mitigation"].replace("\r\n", "<br>")
         impact = finding["impact"].replace("\r\n", "<br>")
-        
+
         html_report += f"""
         <br><br><br>
         <div id="finding{i}" class="finding-border">
@@ -272,35 +277,24 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
         <ul class="steps_to_reproduce">
         """
 
-        # Parse steps_to_reproduce and handle images
-        for step in steps_to_reproduce.split("\n"):
+        # Parse steps_to_reproduce and replace image URLs with local paths
+        for step in steps_to_reproduce.split("<br>"):
             img_regex = r"!\[\]\((https?://[^\s]+)\)"
             img_urls = re.findall(img_regex, step)
             for img_url in img_urls:
-                # Extract file_id and test_id from URL
-                parsed_url = urlparse(img_url)
-                path_parts = parsed_url.path.split('/')
-                if len(path_parts) >= 4 and path_parts[1] == 'access_file':
-                    try:
-                        file_id = path_parts[2]
-                        test_id = path_parts[3]
-                        # Download the image
-                        local_path = download_image(api_key, test_id, file_id)
-                        if local_path:
-                            step = step.replace(f"![]({img_url})", f'<img class="step-image" src="{local_path}" style="max-width: 1000px; max-height: 800px;"><br>')
-                        else:
-                            step = step.replace(f"![]({img_url})", "[Image could not be downloaded]")
-                    except IndexError:
-                        print(f"Invalid image URL format: {img_url}")
-                        step = step.replace(f"![]({img_url})", "[Invalid image URL]")
+                # Download the image and get the local path
+                local_img_path = download_image(img_url)
+                if local_img_path:
+                    # Replace the absolute URL with the local path in the HTML
+                    step = step.replace(f"![]({img_url})", f'<img class="step-image" src="{local_img_path}" style="max-width: 1000px; max-height: 800px;"><br>')
                 else:
-                    print(f"Invalid image URL format: {img_url}")
-                    step = step.replace(f"![]({img_url})", "[Invalid image URL]")
+                    # If download fails, leave the original URL or mark it as failed
+                    step = step.replace(f"![]({img_url})", f'[Failed to load image: {img_url}]<br>')
 
             html_report += f"<li>{step}</li>"
 
         html_report += "</ul><hr></div>"
-    
+
     html_report += """
     <div class="cover-page-bottom"></div>
     </body>
@@ -309,7 +303,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
 
     return html_report
 
-# Prompt the user for input
+# Prompt the user for multiple test IDs separated by commas
 test_ids = input("Enter the Test IDs (comma-separated): ").split(",")
 report_name = input("Enter Report Name: ")
 start_date = input("Enter Start Date: ")
@@ -352,7 +346,7 @@ for test_id in test_ids:
         print(f"Error fetching findings for Test ID: {test_id.strip()}. Status code: {response.status_code}")
 
 # Generate the HTML report
-html_report = generate_html_report(finding_data, report_name, start_date, end_date, prepared_by, reviewed_by, approved_by, api_key)
+html_report = generate_html_report(finding_data, report_name, start_date, end_date, prepared_by, reviewed_by, approved_by)
 
 # Save the HTML report
 filename = "report.html"
