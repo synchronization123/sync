@@ -4,131 +4,34 @@ import json
 import pygal
 from pygal.style import Style
 import io
-import os
-from urllib.parse import urlparse
 
 def save_html_report(report, filename):
-    """Save the HTML report to a file."""
     with io.open(filename, "w", encoding="utf-8") as file:
         file.write(report)
-
+        
 def get_severity_color(severity):
-    """Return the color for a given severity level."""
-    severity_colors = {
-        "Critical": "maroon",
-        "High": "red",
-        "Medium": "orange",
-        "Low": "yellow",
-        "Info": "grey"
-    }
-    return severity_colors.get(severity, "transparent")
+    if severity == "Critical":
+        return "maroon"
+    if severity == "High":
+        return "red"
+    elif severity == "Medium":
+        return "orange"
+    elif severity == "Low":
+        return "yellow"
+    elif severity == "Info":
+        return "grey"
+    else:
+        return "transparent"
 
 def strip_vulnerability_id(vulnerability_id):
-    """Extract and clean the vulnerability ID."""
     if vulnerability_id is None or not isinstance(vulnerability_id, dict):
-        return "N/A"
+        return "N/A"    
     vulnerability_id = vulnerability_id.get("vulnerability_id", "").strip("{'vulnerability_id': '").rstrip("'}")
     return vulnerability_id
 
-def get_actual_image_url(finding_id, file_id, api_key):
-    """Get the actual image URL from the Content-Disposition header of the file download endpoint."""
-    try:
-        headers = {
-            "Authorization": f"Token {api_key}",
-            "Content-Type": "application/json"
-        }
-        download_url = f"https://demo.defectdojo.org/api/v2/findings/{finding_id}/files/download/{file_id}/"
-        
-        # Make a HEAD request to get the Content-Disposition header
-        response = requests.head(download_url, headers=headers, allow_redirects=True)
-        
-        if response.status_code == 200 and 'Content-Disposition' in response.headers:
-            content_disposition = response.headers['Content-Disposition']
-            # Extract filename from Content-Disposition (e.g., file_name=uploaded_files/ala7d-jsjjjs-ujnnn.png)
-            match = re.search(r'file_name=([^\s]+)', content_disposition)
-            if match:
-                file_path = match.group(1)  # e.g., uploaded_files/ala7d-jsjjjs-ujnnn.png
-                filename = os.path.basename(file_path)  # e.g., ala7d-jsjjjs-ujnnn.png
-                # Construct the actual image URL
-                actual_url = f"https://demo.defectdojo.org/media/uploaded_files/{filename}"
-                return actual_url, filename
-        print(f"Failed to get Content-Disposition for file_id {file_id} in finding {finding_id}. Status code: {response.status_code}")
-        return None, None
-    except Exception as e:
-        print(f"Error getting actual image URL for file_id {file_id} in finding {finding_id}: {str(e)}")
-        return None, None
-
-def download_image(img_url, finding_id, api_key, local_base_path="media"):
-    """Download an image, resolving blob URLs via the findings files API."""
-    try:
-        headers = {
-            "Authorization": f"Token {api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        # Check if the URL is a blob URL
-        if img_url.startswith("blob:"):
-            # Extract file_id from the blob URL or finding data (assuming file_id is part of the URL or finding)
-            # For simplicity, assume we need to query the findings files API
-            files_url = f"https://demo.defectdojo.org/api/v2/findings/{finding_id}/files/"
-            response = requests.get(files_url, headers=headers)
-            
-            if response.status_code == 200:
-                files_data = response.json()
-                files = files_data.get("results", [])
-                if files:
-                    # Assume the first file is the one referenced (adjust if multiple files)
-                    file_id = files[0].get("id")
-                    actual_url, filename = get_actual_image_url(finding_id, file_id, api_key)
-                    if not actual_url:
-                        print(f"No actual URL found for blob URL {img_url}")
-                        return img_url
-                else:
-                    print(f"No files found for finding {finding_id}")
-                    return img_url
-            else:
-                print(f"Failed to fetch files for finding {finding_id}. Status code: {response.status_code}")
-                return img_url
-        else:
-            actual_url, filename = img_url, os.path.basename(urlparse(img_url).path)
-        
-        # Download the image from the actual URL
-        response = requests.get(actual_url, headers=headers, stream=True)
-        
-        if response.status_code == 200:
-            # Ensure the filename has a valid image extension
-            if not filename or not filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-                filename = f"image_{hash(actual_url)}.png"
-            
-            # Construct the local path (e.g., media/uploaded_files/ala7d-jsjjjs-ujnnn.png)
-            folder_structure = os.path.join(local_base_path, "uploaded_files")
-            os.makedirs(folder_structure, exist_ok=True)
-            local_path = os.path.join(folder_structure, filename)
-            
-            # Save the image
-            with open(local_path, 'wb') as f:
-                for chunk in response.iter_content(1024):
-                    f.write(chunk)
-            
-            print(f"Successfully downloaded image to {local_path}")
-            return local_path
-        else:
-            print(f"Failed to download image from {actual_url}. Status code: {response.status_code}")
-            return img_url
-    except Exception as e:
-        print(f"Error downloading image from {img_url} (resolved to {actual_url}): {str(e)}")
-        return img_url
-
-def generate_html_report(finding_data, report_name, start_date, end_date, prepared_by, reviewed_by, approved_by, api_key):
-    """Generate an HTML report with findings and embedded images."""
-    # Sort findings by severity
-    sorted_findings = sorted(finding_data, key=lambda x: ["Critical", "High", "Medium", "Low", "Info"].index(x["severity"]))
-    
-    # Count the occurrences of each severity
-    severity_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Info": 0}
-    for finding in sorted_findings:
-        severity = finding["severity"]
-        severity_counts[severity] += 1
+def generate_html_report(finding_data, report_name, start_date, end_date, prepared_by, reviewed_by, approved_by):    
+    # Sorted findings
+    sorted_findings = sorted(finding_data, key=lambda x: ["Critical", "High", "Medium", "Low", "Info"].index(x["severity"])) if finding_data else []
     
     # Generate the HTML report
     html_report = f"""
@@ -151,7 +54,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
           font-weight: bold;
         }}
         .finding-title {{
-          background-color: rgba(32, 166, 216, 0.75);
+          background-color: rgba(32, 166, 216, 0.75) !important;
           color: white;
           padding: 10px;
           margin-top: 20px;
@@ -235,13 +138,19 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
     <br><br><br><br><br><br>
     """
 
-    # Generate the pie chart
+    # Count the findings by severity
+    severity_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Info": 0}
+    for finding in sorted_findings:
+        severity = finding["severity"]
+        severity_counts[severity] += 1
+    
     custom_style = Style(value_font_size=4)
-    pie_chart = pygal.Pie(width=400, height=200, print_values=True, style=custom_style, value_formatter=lambda x: f"({(x * 100 / sum(severity_counts.values())):.2f}%)")
+    # Generate the pie chart
+    pie_chart = pygal.Pie(width=400, height=200, print_values=True, style=custom_style, value_formatter=lambda x: f"({(x * 100 / sum(severity_counts.values())):.2f}%)" if sum(severity_counts.values()) > 0 else "(0%)")
     pie_chart.title = "Findings by Severity"
     for severity, count in severity_counts.items():
         pie_chart.add(f"{severity}, ({count})", count)
-    
+
     chart_svg = pie_chart.render()
     chart_svg = chart_svg.replace(b'\n', b' ')
     chart_svg_str = chart_svg.decode("utf-8")
@@ -249,8 +158,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
     
     # Append the chart SVG to the HTML report
     html_report += f'<div>{chart_svg_str}</div>'
-    
-    # Initialize severity_findings dictionary
+        
     severity_findings = {}
     severity_colors = {
         "Critical": {"background": "maroon", "font": "black"},
@@ -260,7 +168,6 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
         "Info": {"background": "grey", "font": "black"}
     }
     
-    # Group findings by severity
     for finding in sorted_findings:
         severity = finding["severity"]
         if severity not in severity_findings:
@@ -284,74 +191,80 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
             html_report += "</ul>"
     
     html_report += "<br><br><br>"
-    html_report += "<p><h2>Findings Details</h2></p>"
+    html_report += "<p><h2 id='top'>Findings Details</h2></p>"
     
-    for i, finding in enumerate(sorted_findings, start=1):
-        finding_title = finding["title"]
-        finding_id = finding.get("id", "unknown")
-        vulnerability_id = finding["vulnerability_ids"][0] if finding["vulnerability_ids"] else "N/A"
-        vulnerability_id = strip_vulnerability_id(vulnerability_id)
-        description = finding["description"].replace("\r\n", "<br>") if finding["description"] else "N/A"
-        cvssv3 = finding.get("cvssv3", "N/A")
-        cvssv3_score = finding.get("cvssv3_score", "N/A")
-        severity = finding["severity"]
-        steps_to_reproduce = finding["steps_to_reproduce"].replace("\r\n", "<br>") if finding["steps_to_reproduce"] else "N/A"
-        mitigation = finding["mitigation"].replace("\r\n", "<br>") if finding["mitigation"] else "N/A"
-        impact = finding["impact"].replace("\r\n", "<br>") if finding["impact"] else "N/A"
-        
-        html_report += f"""
-        <br><br><br>
-        <div id="finding{i}" class="finding-border">
-          <div class="finding-title">
-            <h1 id="finding{i}">Finding {i}: {finding_title}</h1></div>
-        </div>
-        <p><strong>Jira ID:</strong> {vulnerability_id}</p>
-        <hr class="hardcoded-line">
-        <p><strong>Description:</strong> {description}</p>
-        <hr class="hardcoded-line">
-        <p><strong>CVSSv3:</strong> {cvssv3}</p>
-        <hr class="hardcoded-line">
-        <p><strong>CVSSv3 Score:</strong> {cvssv3_score}</p>
-        <hr class="hardcoded-line">
-        <div class="severity-box severity-{severity.lower()}" style="background-color: {get_severity_color(severity)};">
-          <strong>Severity:</strong> {severity}
-        </div>
-        <hr class="hardcoded-line">
-        <p><strong>Impact:</strong> {impact}</p>
-        <hr class="hardcoded-line">
-        <p><strong>Mitigation:</strong> {mitigation}</p>
-        <hr class="hardcoded-line">
-        <p><strong>Steps to Reproduce:</strong></p>
-        <ul class="steps_to_reproduce">
-        """
-        
-        # Parse steps_to_reproduce and handle images
-        for step in steps_to_reproduce.split("<br>"):
-            img_regex = r"!\[\]\((https?://[^\s]+)\)"
-            img_urls = re.findall(img_regex, step)
-            for img_url in img_urls:
-                # Download the image and get the local path
-                local_img_path = download_image(img_url, finding_id, api_key)
-                # Replace the blob or original URL with the local path
-                step = step.replace(f"![]({img_url})", f'<img class="step-image" src="{local_img_path}" style="max-width: 1000px; max-height: 800px;"><br>')
+    # Check if there are no findings
+    if not sorted_findings:
+        html_report += "<p>No observation found</p>"
+    else:
+        for i, finding in enumerate(sorted_findings, start=1):
+            finding_title = finding["title"]
+            vulnerability_id = finding["vulnerability_ids"][0] if finding["vulnerability_ids"] else "N/A"
+            vulnerability_id = strip_vulnerability_id(vulnerability_id)
+            description = finding["description"].replace("\r\n", "<br>") if finding["description"] else "N/A"
+            cvssv3 = finding["cvssv3"] if finding["cvssv3"] else "N/A"
+            cvssv3_score = finding["cvssv3_score"] if finding["cvssv3_score"] else "N/A"
+            severity = finding["severity"]
+            # Handle steps_to_reproduce safely
+            steps_to_reproduce = finding["steps_to_reproduce"] if finding["steps_to_reproduce"] else "N/A"
+            if isinstance(steps_to_reproduce, str):
+                steps_to_reproduce = steps_to_reproduce.replace("\r\n", "<br>")
+            mitigation = finding["mitigation"].replace("\r\n", "<br>") if finding["mitigation"] else "N/A"
+            impact = finding["impact"].replace("\r\n", "<br>") if finding["impact"] else "N/A"
             
-            html_report += f"<li>{step}</li>"
-        
-        html_report += "</ul><hr></div>"
+            html_report += f"""
+            <br><br><br>
+            <div id="finding{i}" class="finding-border">
+              <div class="finding-title">
+                <h1 id="finding{i}">Finding {i}: {finding_title}</h1></div>
+            </div>
+            <p><strong>Jira ID:</strong> {vulnerability_id}</p>
+            <hr class="hardcoded-line">
+            <p><strong>Description:</strong> {description}</p>
+            <hr class="hardcoded-line">
+            <p><strong>CVSSv3:</strong> {cvssv3}</p>
+            <hr class="hardcoded-line">
+            <p><strong>CVSSv3 Score:</strong> {cvssv3_score}</p>
+            <hr class="hardcoded-line">
+            <div class="severity-box severity-{severity.lower()}" style="background-color: {get_severity_color(severity)};">
+              <strong>Severity:</strong> {severity}
+            </div>
+            <hr class="hardcoded-line">
+            <p><strong>Impact:</strong></p> {impact}</p>
+            <hr class="hardcoded-line">
+            <p><strong>Mitigation:</strong></p> {mitigation}</p>
+            <hr class="hardcoded-line">
+            <p><strong>Steps to Reproduce:</strong></p>
+            <ul class="steps_to_reproduce">
+            """
+
+            # Parse steps_to_reproduce and include images if available
+            if isinstance(steps_to_reproduce, str):
+                for step in steps_to_reproduce.split("<br>"):
+                    if step.strip():
+                        img_regex = r"!\[\]\((https?://[^\s]+)\)"
+                        img_urls = re.findall(img_regex, step)
+                        for img_url in img_urls:
+                            step = step.replace(f"![]({img_url})", f'<img class="step-image" src="{img_url}" style="max-width: 1000px; max-height: 800px;"><br>')
+                        html_report += f"<li>{step}</li>"
+            else:
+                html_report += f"<li>{steps_to_reproduce}</li>"
+
+            html_report += "</ul><hr></div>"
     
     html_report += """
     <div class="cover-page-bottom"></div>
     </body>
     </html>
     """
-    
+
     return html_report
 
-# Prompt the user for inputs
+# Prompt the user for multiple test IDs separated by commas
 test_ids = input("Enter the Test IDs (comma-separated): ").split(",")
 report_name = input("Enter Report Name: ")
 start_date = input("Enter Start Date: ")
-end_date = input("End Date: ")
+end_date = input("Enter End Date: ")
 prepared_by = input("Enter name of prepared by person: ")
 reviewed_by = input("Enter name of reviewed by person: ")
 approved_by = input("Enter name of approved by person: ")
@@ -360,7 +273,7 @@ approved_by = input("Enter name of approved by person: ")
 api_url = "https://demo.defectdojo.org/api/v2/tests/{}/generate_report/"
 
 # Set your authentication API key
-api_key = "abc"  # Replace with your actual API key
+api_key = "abc"
 
 # Set the headers
 headers = {
@@ -373,27 +286,24 @@ finding_data = []
 for test_id in test_ids:
     # Make a POST request to generate the report for each test ID
     response = requests.post(api_url.format(test_id.strip()), headers=headers)
-    
+
     # Check if the request was successful
     if response.status_code == 200:
-        try:
-            report_data = response.json()
-            findings = report_data.get("findings", [])
-            
-            if findings:
-                for finding in findings:
-                    finding_data.append(finding)
-            else:
-                print(f"No findings found for Test ID: {test_id.strip()}")
-        except json.JSONDecodeError:
-            print(f"Error decoding JSON response for Test ID: {test_id.strip()}")
+        report_data = response.json()
+        findings = report_data.get("findings")
+
+        if findings:
+            for finding in findings:
+                finding_data.append(finding)
+        else:
+            print(f"No findings found for Test ID: {test_id.strip()}")
+
+        print("\n---\n")
     else:
         print(f"Error fetching findings for Test ID: {test_id.strip()}. Status code: {response.status_code}")
-    
-    print("\n---\n")
 
 # Generate the HTML report
-html_report = generate_html_report(finding_data, report_name, start_date, end_date, prepared_by, reviewed_by, approved_by, api_key)
+html_report = generate_html_report(finding_data, report_name, start_date, end_date, prepared_by, reviewed_by, approved_by)
 
 # Save the HTML report
 filename = "report.html"
