@@ -41,29 +41,57 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
       <title>DefectDojo Findings Report</title>
       <style>
         body {{
-          border: 1px solid #ccc;
-          padding: 10px;
-          font-size: 16px;
+          font-family: 'Aptos', Arial, sans-serif;
+          font-size: 14.67px; /* 11pt */
+          line-height: 1.6;
+          margin: 20px;
+          padding: 20px;
+          background-color: #f9f9f9;
+          color: #333;
         }}
-        h1 {{
-          font-size: 18px;
-          font-weight: bold;
+        .container {{
+          max-width: 1000px;
+          margin: 0 auto;
+          background-color: #fff;
+          padding: 30px;
+          border-radius: 8px;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }}
+        .logo {{
+          position: absolute;
+          top: 20px;
+          left: 20px;
+          width: 100px;
+          height: auto;
+        }}
+        h1, h2, h3 {{
+          font-family: 'Aptos Display', Arial, sans-serif;
+          font-size: 18.67px; /* 14pt */
+          color: #1a3c5e;
         }}
         .report-heading {{
-          font-size: 34px;
+          font-size: 28px;
           font-weight: bold;
+          text-align: center;
+          margin-bottom: 20px;
         }}
         .finding-title {{
-          background-color: rgba(32, 166, 216, 0.75) !important;
+          background-color: #20a6d8;
           color: white;
-          padding: 10px;
-          margin-top: 20px;
+          padding: 12px;
+          border-radius: 5px;
+          margin-top: 30px;
         }}
         .severity-box {{
           display: inline-block;
-          padding: 5px;
-          margin-bottom: 10px;
+          padding: 8px 12px;
+          margin-bottom: 15px;
           color: white;
+          border-radius: 4px;
+          font-weight: bold;
+        }}
+        .severity-critical {{
+          background-color: maroon;
         }}
         .severity-high {{
           background-color: red;
@@ -73,69 +101,89 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
         }}
         .severity-low {{
           background-color: yellow;
+          color: #333;
         }}
         .severity-info {{
           background-color: grey;
         }}
         .hardcoded-line {{
-          border-top: 1px solid #000;
-          margin-top: 1px;
-          padding-top: 1px;
-          border-width: 1px;
+          border-top: 1px solid #ddd;
+          margin: 15px 0;
         }}
         .step-image {{
           border: 1px solid #ccc;
           padding: 5px;
-          margin-bottom: 10px;
+          margin-bottom: 15px;
+          max-width: 100%;
+          border-radius: 4px;
         }}
         .steps_to_reproduce {{
           list-style-type: none;
           padding-left: 0;
         }}
+        .steps_to_reproduce li {{
+          margin-bottom: 10px;
+        }}
         table {{
           border-collapse: collapse;
           width: 100%;
+          margin: 20px 0;
+          background-color: #fff;
+          border: 1px solid #ddd;
+          border-radius: 4px;
         }}
         th, td {{
-          padding: 8px;
+          padding: 12px;
           text-align: left;
           border-bottom: 1px solid #ddd;
         }}
+        th {{
+          background-color: #f4f4f4;
+          font-weight: bold;
+        }}
         .Sub-Title {{
-          font-size: 24px;
+          font-size: 22px;
+          margin-bottom: 15px;
+        }}
+        .chart-container {{
+          text-align: center;
+          margin: 30px 0;
+        }}
+        .no-findings {{
+          text-align: center;
+          color: #666;
+          font-style: italic;
         }}
       </style>
     </head>
     <body>
-    <div class="cover-page">
-      <img src="logo">
-      <h2 class="report-heading">{report_name}</h2>
-      <h1>Application Security</h1>
-      <br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>
-      <br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>
-      <div class="Sub-Title">
-        <p><strong>Report Properties:</strong></p>
-        <p><strong>VAPT Dates:</strong></p>
+    <div class="container">
+      <img src="logo" class="logo" alt="Company Logo">
+      <div class="cover-page">
+        <h2 class="report-heading">{report_name}</h2>
+        <h1 style="text-align: center;">Application Security</h1>
+        <div class="Sub-Title">
+          <p><strong>Report Properties:</strong></p>
+          <p><strong>VAPT Dates:</strong></p>
+        </div>
+        <table>
+          <tr>
+            <th>Start Date:</th><td>{start_date}</td>
+          </tr>
+          <tr>
+            <th>End Date:</th><td>{end_date}</td> 
+          </tr>      
+          <tr>
+            <th>Report Prepared by:</th><td>{prepared_by}</td>
+          </tr>
+          <tr>
+            <th>Reviewed by:</th><td>{reviewed_by}</td>
+          </tr>
+          <tr>
+            <th>Approved by:</th><td>{approved_by}</td>
+          </tr>
+        </table>
       </div>
-      <table>
-        <tr>
-          <th>Start Date: </th><td>{start_date}</td>
-        </tr>
-        <tr>
-          <th>End Date: </th><td>{end_date}</td> 
-        </tr>      
-        <tr>
-          <th>Report Prepared by: </th><td>{prepared_by}</td>
-        </tr>
-        <tr>
-          <th>Reviewed by: </th><td>{reviewed_by}</td>
-        </tr>
-        <tr>
-          <th>Approved by: </th><td>{approved_by}</td>
-        </tr>
-      </table>
-    </div>
-    <br><br><br><br><br><br>
     """
 
     # Count the findings by severity
@@ -157,15 +205,15 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
     chart_svg_str = chart_svg_str.replace("b' '", "")
     
     # Append the chart SVG to the HTML report
-    html_report += f'<div>{chart_svg_str}</div>'
+    html_report += f'<div class="chart-container">{chart_svg_str}</div>'
         
     severity_findings = {}
     severity_colors = {
-        "Critical": {"background": "maroon", "font": "black"},
-        "High": {"background": "red", "font": "black"},
-        "Medium": {"background": "orange", "font": "black"},
-        "Low": {"background": "yellow", "font": "black"},
-        "Info": {"background": "grey", "font": "black"}
+        "Critical": {"background": "maroon", "font": "white"},
+        "High": {"background": "red", "font": "white"},
+        "Medium": {"background": "orange", "font": "white"},
+        "Low": {"background": "yellow", "font": "#333"},
+        "Info": {"background": "grey", "font": "white"}
     }
     
     for finding in sorted_findings:
@@ -183,19 +231,19 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
             color = severity_colors.get(severity, {})
             background_color = color.get("background", "white")
             font_color = color.get("font", "black")
-            html_report += f"<h1 style='background-color: {background_color}; color: {font_color}'>{severity} Findings:</h1>"
+            html_report += f"<h1 style='background-color: {background_color}; color: {font_color}; padding: 10px; border-radius: 4px;'>{severity} Findings:</h1>"
             html_report += "<ul>"
             for i, finding in enumerate(findings, start=1):
                 finding_title = finding["title"]
-                html_report += f'<li><a href="#finding{i}">Finding {i}: {finding_title}</a></li>'
+                html_report += f'<li><a href="#finding{i}" style="color: #20a6d8; text-decoration: none;">Finding {i}: {finding_title}</a></li>'
             html_report += "</ul>"
     
-    html_report += "<br><br><br>"
-    html_report += "<p><h2 id='top'>Findings Details</h2></p>"
+    html_report += "<br><br>"
+    html_report += "<h2 id='top'>Findings Details</h2>"
     
     # Check if there are no findings
     if not sorted_findings:
-        html_report += "<p>No observation found</p>"
+        html_report += "<p class='no-findings'>No observation found</p>"
     else:
         for i, finding in enumerate(sorted_findings, start=1):
             finding_title = finding["title"]
@@ -213,29 +261,28 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
             impact = finding["impact"].replace("\r\n", "<br>") if finding["impact"] else "N/A"
             
             html_report += f"""
-            <br><br><br>
             <div id="finding{i}" class="finding-border">
               <div class="finding-title">
-                <h1 id="finding{i}">Finding {i}: {finding_title}</h1></div>
-            </div>
-            <p><strong>Jira ID:</strong> {vulnerability_id}</p>
-            <hr class="hardcoded-line">
-            <p><strong>Description:</strong> {description}</p>
-            <hr class="hardcoded-line">
-            <p><strong>CVSSv3:</strong> {cvssv3}</p>
-            <hr class="hardcoded-line">
-            <p><strong>CVSSv3 Score:</strong> {cvssv3_score}</p>
-            <hr class="hardcoded-line">
-            <div class="severity-box severity-{severity.lower()}" style="background-color: {get_severity_color(severity)};">
-              <strong>Severity:</strong> {severity}
-            </div>
-            <hr class="hardcoded-line">
-            <p><strong>Impact:</strong></p> {impact}</p>
-            <hr class="hardcoded-line">
-            <p><strong>Mitigation:</strong></p> {mitigation}</p>
-            <hr class="hardcoded-line">
-            <p><strong>Steps to Reproduce:</strong></p>
-            <ul class="steps_to_reproduce">
+                <h1 id="finding{i}">Finding {i}: {finding_title}</h1>
+              </div>
+              <p><strong>Jira ID:</strong> {vulnerability_id}</p>
+              <hr class="hardcoded-line">
+              <p><strong>Description:</strong> {description}</p>
+              <hr class="hardcoded-line">
+              <p><strong>CVSSv3:</strong> {cvssv3}</p>
+              <hr class="hardcoded-line">
+              <p><strong>CVSSv3 Score:</strong> {cvssv3_score}</p>
+              <hr class="hardcoded-line">
+              <div class="severity-box severity-{severity.lower()}" style="background-color: {get_severity_color(severity)};">
+                <strong>Severity:</strong> {severity}
+              </div>
+              <hr class="hardcoded-line">
+              <p><strong>Impact:</strong> {impact}</p>
+              <hr class="hardcoded-line">
+              <p><strong>Mitigation:</strong> {mitigation}</p>
+              <hr class="hardcoded-line">
+              <p><strong>Steps to Reproduce:</strong></p>
+              <ul class="steps_to_reproduce">
             """
 
             # Parse steps_to_reproduce and include images if available
@@ -253,7 +300,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
             html_report += "</ul><hr></div>"
     
     html_report += """
-    <div class="cover-page-bottom"></div>
+    </div>
     </body>
     </html>
     """
