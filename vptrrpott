@@ -30,43 +30,75 @@ def strip_vulnerability_id(vulnerability_id):
     vulnerability_id = vulnerability_id.get("vulnerability_id", "").strip("{'vulnerability_id': '").rstrip("'}")
     return vulnerability_id
 
-def download_image(img_url, api_key, local_base_path="media"):
-    """Download an image from the given URL, resolving the actual URL from Content-Disposition if needed."""
+def get_actual_image_url(finding_id, file_id, api_key):
+    """Get the actual image URL from the Content-Disposition header of the file download endpoint."""
+    try:
+        headers = {
+            "Authorization": f"Token {api_key}",
+            "Content-Type": "application/json"
+        }
+        download_url = f"https://demo.defectdojo.org/api/v2/findings/{finding_id}/files/download/{file_id}/"
+        
+        # Make a HEAD request to get the Content-Disposition header
+        response = requests.head(download_url, headers=headers, allow_redirects=True)
+        
+        if response.status_code == 200 and 'Content-Disposition' in response.headers:
+            content_disposition = response.headers['Content-Disposition']
+            # Extract filename from Content-Disposition (e.g., file_name=uploaded_files/ala7d-jsjjjs-ujnnn.png)
+            match = re.search(r'file_name=([^\s]+)', content_disposition)
+            if match:
+                file_path = match.group(1)  # e.g., uploaded_files/ala7d-jsjjjs-ujnnn.png
+                filename = os.path.basename(file_path)  # e.g., ala7d-jsjjjs-ujnnn.png
+                # Construct the actual image URL
+                actual_url = f"https://demo.defectdojo.org/media/uploaded_files/{filename}"
+                return actual_url, filename
+        print(f"Failed to get Content-Disposition for file_id {file_id} in finding {finding_id}. Status code: {response.status_code}")
+        return None, None
+    except Exception as e:
+        print(f"Error getting actual image URL for file_id {file_id} in finding {finding_id}: {str(e)}")
+        return None, None
+
+def download_image(img_url, finding_id, api_key, local_base_path="media"):
+    """Download an image, resolving blob URLs via the findings files API."""
     try:
         headers = {
             "Authorization": f"Token {api_key}",
             "Content-Type": "application/json"
         }
         
-        # Make a HEAD request to get the Content-Disposition header
-        response = requests.head(img_url, headers=headers, allow_redirects=True)
-        
-        # Check for Content-Disposition header
-        actual_url = img_url
-        filename = None
-        if 'Content-Disposition' in response.headers:
-            content_disposition = response.headers['Content-Disposition']
-            # Extract filename from Content-Disposition (e.g., file_name=uploaded_files/ala7d-jsjjjs-ujnnn.png)
-            match = re.search(r'file_name=([^\s]+)', content_disposition)
-            if match:
-                file_path = match.group(1)  # e.g., uploaded_files/ala7d-jsjjjs-ujnnn.png
-                # Extract only the filename, excluding 'uploaded_files/'
-                filename = os.path.basename(file_path)  # e.g., ala7d-jsjjjs-ujnnn.png
-                # Construct the actual download URL
-                actual_url = f"https://demo.defectdojo.org/media/uploaded_files/{filename}"
+        # Check if the URL is a blob URL
+        if img_url.startswith("blob:"):
+            # Extract file_id from the blob URL or finding data (assuming file_id is part of the URL or finding)
+            # For simplicity, assume we need to query the findings files API
+            files_url = f"https://demo.defectdojo.org/api/v2/findings/{finding_id}/files/"
+            response = requests.get(files_url, headers=headers)
+            
+            if response.status_code == 200:
+                files_data = response.json()
+                files = files_data.get("results", [])
+                if files:
+                    # Assume the first file is the one referenced (adjust if multiple files)
+                    file_id = files[0].get("id")
+                    actual_url, filename = get_actual_image_url(finding_id, file_id, api_key)
+                    if not actual_url:
+                        print(f"No actual URL found for blob URL {img_url}")
+                        return img_url
+                else:
+                    print(f"No files found for finding {finding_id}")
+                    return img_url
+            else:
+                print(f"Failed to fetch files for finding {finding_id}. Status code: {response.status_code}")
+                return img_url
+        else:
+            actual_url, filename = img_url, os.path.basename(urlparse(img_url).path)
         
         # Download the image from the actual URL
         response = requests.get(actual_url, headers=headers, stream=True)
         
         if response.status_code == 200:
-            # Use the filename from Content-Disposition or generate a default
-            if not filename:
-                parsed_url = urlparse(actual_url)
-                filename = os.path.basename(parsed_url.path) or f"image_{hash(actual_url)}.png"
-            
             # Ensure the filename has a valid image extension
-            if not filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-                filename = f"{os.path.splitext(filename)[0]}.png"
+            if not filename or not filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+                filename = f"image_{hash(actual_url)}.png"
             
             # Construct the local path (e.g., media/uploaded_files/ala7d-jsjjjs-ujnnn.png)
             folder_structure = os.path.join(local_base_path, "uploaded_files")
@@ -256,6 +288,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
     
     for i, finding in enumerate(sorted_findings, start=1):
         finding_title = finding["title"]
+        finding_id = finding.get("id", "unknown")
         vulnerability_id = finding["vulnerability_ids"][0] if finding["vulnerability_ids"] else "N/A"
         vulnerability_id = strip_vulnerability_id(vulnerability_id)
         description = finding["description"].replace("\r\n", "<br>") if finding["description"] else "N/A"
@@ -298,8 +331,8 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
             img_urls = re.findall(img_regex, step)
             for img_url in img_urls:
                 # Download the image and get the local path
-                local_img_path = download_image(img_url, api_key)
-                # Replace the remote URL with the local path
+                local_img_path = download_image(img_url, finding_id, api_key)
+                # Replace the blob or original URL with the local path
                 step = step.replace(f"![]({img_url})", f'<img class="step-image" src="{local_img_path}" style="max-width: 1000px; max-height: 800px;"><br>')
             
             html_report += f"<li>{step}</li>"
@@ -318,7 +351,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
 test_ids = input("Enter the Test IDs (comma-separated): ").split(",")
 report_name = input("Enter Report Name: ")
 start_date = input("Enter Start Date: ")
-end_date = input("Enter End Date: ")
+end_date = input("End Date: ")
 prepared_by = input("Enter name of prepared by person: ")
 reviewed_by = input("Enter name of reviewed by person: ")
 approved_by = input("Enter name of approved by person: ")
