@@ -1,5 +1,3 @@
-# report_generator.pyw
-import sys
 import requests
 import re
 import json
@@ -7,11 +5,6 @@ import pygal
 from pygal.style import Style
 import io
 import pdfkit
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                             QLabel, QLineEdit, QComboBox, QCheckBox, QPushButton, QScrollArea,
-                             QProgressBar, QMessageBox, QGridLayout)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtGui import QFont, QPalette, QColor
 
 def save_html_report(report, filename):
     with io.open(filename, "w", encoding="utf-8") as file:
@@ -29,7 +22,7 @@ def get_severity_color(severity):
     elif severity == "Info":
         return "#808080"  # Grey
     else:
-        return "#ffffff"  # White
+        return "#ffffff"  # White (replacing transparent)
 
 def strip_vulnerability_id(vulnerability_id):
     if vulnerability_id is None or not isinstance(vulnerability_id, dict):
@@ -38,8 +31,10 @@ def strip_vulnerability_id(vulnerability_id):
     return vulnerability_id
 
 def generate_html_report(finding_data, report_name, start_date, end_date, prepared_by, reviewed_by, approved_by):    
+    # Sorted findings
     sorted_findings = sorted(finding_data, key=lambda x: ["Critical", "High", "Medium", "Low", "Info"].index(x["severity"])) if finding_data else []
     
+    # Generate the HTML report
     html_report = f"""
     <!DOCTYPE html>
     <html>
@@ -52,7 +47,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
         }}
         body {{
           font-family: 'Aptos', Arial, sans-serif;
-          font-size: 14.67px;
+          font-size: 14.67px; /* 11pt */
           line-height: 1.6;
           margin: 0;
           padding: 0;
@@ -92,7 +87,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
         }}
         h1, h2, h3 {{
           font-family: 'Aptos Display', Arial, sans-serif;
-          font-size: 18.67px;
+          font-size: 18.67px; /* 14pt */
           color: #1a3c5e;
         }}
         .report-heading {{
@@ -141,11 +136,21 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
           border-top: 1px solid #dddddd;
           margin: 15px 0;
         }}
-        .step-image {{
-          border: 1px solid #cccccc;
-          padding: 5px;
+        .image-card {{
+          background-color: #ffffff;
+          padding: 10px;
+          border-radius: 4px;
+          box-shadow: 0 1px 5px #00000033;
           margin-bottom: 15px;
           max-width: 100%;
+          overflow: hidden;
+          box-sizing: border-box;
+          page-break-inside: avoid;
+        }}
+        .step-image {{
+          max-width: 100%;
+          height: auto;
+          border: 1px solid #cccccc;
           border-radius: 4px;
         }}
         .steps_to_reproduce {{
@@ -205,12 +210,12 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
           page-break-inside: avoid;
         }}
         .finding-border:first-of-type {{
-          margin-top: 0;
-          page-break-before: avoid;
+          margin-top: 0; /* No space after Findings Details */
+          page-break-before: avoid; /* Keep with Findings Details title */
         }}
         .finding-details h2 {{
-          margin-bottom: 0;
-          page-break-after: avoid;
+          margin-bottom: 0; /* No space below Findings Details title */
+          page-break-after: avoid; /* Prevent page break after title */
         }}
         .finding-details {{
           page-break-inside: avoid;
@@ -255,6 +260,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
       </div>
     """
 
+    # Count the findings by severity
     severity_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Info": 0}
     for finding in sorted_findings:
         severity = finding["severity"]
@@ -262,10 +268,11 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
     
     custom_style = Style(
         value_font_size=4,
-        colors=('#800000', '#ff0000', '#ffa500', '#ffff00', '#808080'),
+        colors=('#800000', '#ff0000', '#ffa500', '#ffff00', '#808080'),  # Match severity colors
         background='#ffffff',
         plot_background='#ffffff'
     )
+    # Generate the pie chart
     pie_chart = pygal.Pie(
         width=400,
         height=200,
@@ -282,6 +289,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
     chart_svg_str = chart_svg.decode("utf-8")
     chart_svg_str = chart_svg_str.replace("b' '", "")
     
+    # Append the chart SVG to the HTML report
     html_report += f'<div class="chart-container">{chart_svg_str}</div>'
         
     severity_findings = {}
@@ -299,6 +307,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
             severity_findings[severity] = []
         severity_findings[severity].append(finding)
 
+    # Index page with a list of all findings
     html_report += "<h2 id='top'>Findings Index</h2>"
     severity_order = ["Critical", "High", "Medium", "Low", "Info"]
     for severity in severity_order:
@@ -314,8 +323,10 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
                 html_report += f'<li><a href="#finding{i}" style="color: #20a6d8; text-decoration: none;">Finding {i}: {finding_title}</a></li>'
             html_report += "</ul>"
     
+    # Findings Details section without <br> tags
     html_report += "<div class='finding-details'><h2>Findings Details</h2>"
     
+    # Check if there are no findings
     if not sorted_findings:
         html_report += "<p class='no-findings'>No observation found</p>"
     else:
@@ -327,6 +338,7 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
             cvssv3 = finding["cvssv3"] if finding["cvssv3"] else "N/A"
             cvssv3_score = finding["cvssv3_score"] if finding["cvssv3_score"] else "N/A"
             severity = finding["severity"]
+            # Handle steps_to_reproduce safely
             steps_to_reproduce = finding["steps_to_reproduce"] if finding["steps_to_reproduce"] else "N/A"
             if isinstance(steps_to_reproduce, str):
                 steps_to_reproduce = steps_to_reproduce.replace("\r\n", "<br>")
@@ -356,343 +368,95 @@ def generate_html_report(finding_data, report_name, start_date, end_date, prepar
               <ul class="steps_to_reproduce">
             """
 
+            # Parse steps_to_reproduce and include images in cards
             if isinstance(steps_to_reproduce, str):
                 for step in steps_to_reproduce.split("<br>"):
                     if step.strip():
                         img_regex = r"!\[\]\((https?://[^\s]+)\)"
                         img_urls = re.findall(img_regex, step)
-                        for img_url in img_urls:
-                            step = step.replace(f"![]({img_url})", f'<img class="step-image" src="{img_url}" style="max-width: 1000px; max-height: 800px;"><br>')
-                        html_report += f"<li>{step}</li>"
+                        step_text = re.sub(img_regex, "", step).strip()
+                        if img_urls:
+                            for img_url in img_urls:
+                                html_report += f'<div class="image-card"><img src="{img_url}" class="step-image" alt="Step Image"></div>'
+                        if step_text:
+                            html_report += f"<li>{step_text}</li>"
             else:
                 html_report += f"<li>{steps_to_reproduce}</li>"
 
             html_report += "</ul><hr></div>"
     
-    html_report += """
-    </div>
-    </div>
-    </body>
-    </html>
-    """
+    html_report += "</div></div></div></body></html>"
 
     return html_report
 
-class FetchEngagementsThread(QThread):
-    engagements_fetched = pyqtSignal(list)
-    error_occurred = pyqtSignal(str)
+# Prompt the user for multiple test IDs separated by commas
+test_ids = input("Enter the Test IDs (comma-separated): ").split(",")
+report_name = input("Enter Report Name: ")
+start_date = input("Enter Start Date: ").strip()
+end_date = input("Enter End Date: ").strip()
+prepared_by = input("Name of prepared by person: ").strip()
+reviewed_by = input("Name of reviewed by person: ").strip()
+approved_by = input("Name of approved by person: ").strip()
 
-    def __init__(self, api_url, headers):
-        super().__init__()
-        self.api_url = api_url
-        self.headers = headers
+# DefectDojo API endpoint
+api_url = "https://demo.defectdojo.org/api/v2/tests/{}/"
 
-    def run(self):
-        try:
-            response = requests.get(self.api_url, headers=self.headers)
-            if response.status_code == 200:
-                engagements = response.json().get("results", [])
-                self.engagements_fetched.emit(engagements)
-            else:
-                self.error_occurred.emit(f"Error fetching engagements: Status code {response.status_code}")
-        except Exception as e:
-            self.error_occurred.emit(f"Error fetching engagements: {str(e)}")
+# Set your authentication API key
+api_key = "abc"
 
-class FetchTestsThread(QThread):
-    tests_fetched = pyqtSignal(list)
-    error_occurred = pyqtSignal(str)
+# Set the headers
+headers = {
+    "Authorization": f"Token {api_key}",
+    "content-type": "application/json"
+}
 
-    def __init__(self, api_url, headers, engagement_id):
-        super().__init__()
-        self.api_url = api_url
-        self.headers = headers
-        self.engagement_id = engagement_id
+finding_data = []
 
-    def run(self):
-        try:
-            response = requests.get(self.api_url.format(self.engagement_id), headers=self.headers)
-            if response.status_code == 200:
-                tests = response.json().get("results", [])
-                self.tests_fetched.emit(tests)
-            else:
-                self.error_occurred.emit(f"Error fetching tests: Status code {response.status_code}")
-        except Exception as e:
-            self.error_occurred.emit(f"Error fetching tests: {str(e)}")
+for test_id in test_ids:
+    # Make a POST request to generate the report for each test ID
+    response = requests.get(api_url.format(test_id.strip()), headers=headers)
 
-class GenerateReportThread(QThread):
-    report_generated = pyqtSignal()
-    error_occurred = pyqtSignal(str)
+    # Check if the request was successful
+    if response.status_code == 200:
+        report_data = response.json()
+        findings = report_data.get("findings")
 
-    def __init__(self, test_ids, report_name, start_date, end_date, prepared_by, reviewed_by, approved_by, api_url, headers):
-        super().__init__()
-        self.test_ids = test_ids
-        self.report_name = report_name
-        self.start_date = start_date
-        self.end_date = end_date
-        self.prepared_by = prepared_by
-        self.reviewed_by = reviewed_by
-        self.approved_by = approved_by
-        self.api_url = api_url
-        self.headers = headers
+        if findings:
+            for finding in findings:
+                finding_data.append(finding)
+        else:
+            print(f"No findings found for Test ID: {test_id.strip()}")
 
-    def run(self):
-        try:
-            finding_data = []
-            for test_id in self.test_ids:
-                response = requests.post(self.api_url.format(test_id), headers=self.headers)
-                if response.status_code == 200:
-                    report_data = response.json()
-                    findings = report_data.get("findings", [])
-                    if findings:
-                        finding_data.extend(findings)
-                else:
-                    self.error_occurred.emit(f"Error fetching findings for Test ID {test_id}: Status code {response.status_code}")
-                    return
+        print("\n---\n")
+    else:
+        print(f"Error fetching findings for ID: {test_id.strip()}. Status code: {response.status_code}")
 
-            html_report = generate_html_report(finding_data, self.report_name, self.start_date, self.end_date,
-                                              self.prepared_by, self.reviewed_by, self.approved_by)
-            filename = "report.html"
-            save_html_report(html_report, filename)
+# Generate the HTML report
+html_report = generate_html_report(finding_data, report_name, start_date, end_date, prepared_by, reviewed_by, approved_by)
 
-            try:
-                import pdfkit
-                options = {
-                    'page-size': 'A4',
-                    'margin-top': '20mm',
-                    'margin-right': '20mm',
-                    'margin-bottom': '20mm',
-                    'margin-left': '20mm',
-                    'encoding': "UTF-8",
-                    'enable-local-file-access': None,
-                    'print-media-type': None,
-                    'no-outline': None
-                }
-                pdfkit.from_file(filename, "report.pdf", options=options)
-            except ImportError:
-                self.error_occurred.emit("pdfkit not installed. Install it using 'pip install pdfkit' and ensure wkhtmltopdf is installed.")
-                return
-            except Exception as e:
-                self.error_occurred.emit(f"Error generating PDF: {str(e)}")
-                return
+# Save the HTML report
+filename = "report.html"
+save_html_report(html_report, filename)
 
-            self.report_generated.emit()
-        except Exception as e:
-            self.error_occurred.emit(f"Error generating report: {str(e)}")
+# Convert HTML to PDF using pdfkit/wkhtmltopdf
+try:
+    import pdfkit
+    options = {
+        'page-size': 'A4',
+        'margin-top': '20mm',
+        'margin-right': '20mm',
+        'margin-bottom': '20mm',
+        'margin-left': '20mm',
+        'encoding': "UTF-8",
+        'enable-local-file-access': None,  # Allow local file access for images
+        'print-media-type': None,  # Use print media CSS
+        'no-outline': None  # Disable outline for cleaner PDF
+    }
+    pdfkit.from_file(filename, "report.pdf", options=options)
+    print(f"PDF report saved as: report.pdf")
+except ImportError:
+    print("pdfkit not installed. Install it using 'pip install pdfkit' and ensure wkhtmltopdf is installed.")
+except Exception as e:
+    print(f"Error generating PDF: {e}")
 
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("DefectDojo Report Generator")
-        self.setFixedSize(800, 600)
-
-        # API settings
-        self.api_key = "abc"
-        self.headers = {
-            "Authorization": f"Token {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        self.engagements_url = "https://demo.defectdojo.org/api/v2/engagements/"
-        self.tests_url = "https://demo.defectdojo.org/api/v2/tests/?engagement_id={}"
-        self.report_url = "https://demo.defectdojo.org/api/v2/tests/{}/generate_report/"
-
-        # GUI setup
-        self.init_ui()
-        self.fetch_engagements()
-
-    def init_ui(self):
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setSpacing(10)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-
-        # Modern styling
-        self.setStyleSheet("""
-            QWidget {
-                font-family: 'Segoe UI', Arial, sans-serif;
-                font-size: 14px;
-            }
-            QLineEdit, QComboBox {
-                padding: 8px;
-                border: 1px solid #cccccc;
-                border-radius: 4px;
-                background-color: #ffffff;
-            }
-            QPushButton {
-                padding: 10px;
-                border: none;
-                border-radius: 4px;
-                background-color: #20a6d8;
-                color: white;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #1a8cc0;
-            }
-            QLabel {
-                color: #333333;
-            }
-            QCheckBox {
-                margin: 5px 0;
-            }
-            QScrollArea {
-                border: 1px solid #cccccc;
-                border-radius: 4px;
-                background-color: #ffffff;
-            }
-        """)
-
-        # Engagement selection
-        engagement_layout = QHBoxLayout()
-        engagement_label = QLabel("Select Engagement:")
-        self.engagement_combo = QComboBox()
-        self.engagement_combo.setEditable(True)
-        self.engagement_combo.setMinimumWidth(300)
-        self.engagement_combo.setCompleter(self.engagement_combo.completer())
-        self.engagement_combo.currentIndexChanged.connect(self.on_engagement_selected)
-        engagement_layout.addWidget(engagement_label)
-        engagement_layout.addWidget(self.engagement_combo)
-        main_layout.addLayout(engagement_layout)
-
-        # Test selection
-        test_label = QLabel("Select Tests:")
-        main_layout.addWidget(test_label)
-        self.test_scroll = QScrollArea()
-        self.test_scroll.setWidgetResizable(True)
-        self.test_container = QWidget()
-        self.test_layout = QVBoxLayout(self.test_container)
-        self.test_scroll.setWidget(self.test_container)
-        self.test_scroll.setMinimumHeight(150)
-        main_layout.addWidget(self.test_scroll)
-
-        # Report properties
-        properties_widget = QWidget()
-        properties_layout = QGridLayout(properties_widget)
-        properties_layout.setSpacing(10)
-
-        self.report_name_input = QLineEdit()
-        self.start_date_input = QLineEdit()
-        self.end_date_input = QLineEdit()
-        self.prepared_by_input = QLineEdit()
-        self.reviewed_by_input = QLineEdit()
-        self.approved_by_input = QLineEdit()
-
-        properties_layout.addWidget(QLabel("Report Name:"), 0, 0)
-        properties_layout.addWidget(self.report_name_input, 0, 1)
-        properties_layout.addWidget(QLabel("Start Date:"), 1, 0)
-        properties_layout.addWidget(self.start_date_input, 1, 1)
-        properties_layout.addWidget(QLabel("End Date:"), 2, 0)
-        properties_layout.addWidget(self.end_date_input, 2, 1)
-        properties_layout.addWidget(QLabel("Prepared By:"), 3, 0)
-        properties_layout.addWidget(self.prepared_by_input, 3, 1)
-        properties_layout.addWidget(QLabel("Reviewed By:"), 4, 0)
-        properties_layout.addWidget(self.reviewed_by_input, 4, 1)
-        properties_layout.addWidget(QLabel("Approved By:"), 5, 0)
-        properties_layout.addWidget(self.approved_by_input, 5, 1)
-
-        main_layout.addWidget(properties_widget)
-
-        # Generate report button
-        self.generate_button = QPushButton("Generate Report")
-        self.generate_button.clicked.connect(self.generate_report)
-        main_layout.addWidget(self.generate_button)
-
-        # Progress bar
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        main_layout.addWidget(self.progress_bar)
-
-        # Status label
-        self.status_label = QLabel("")
-        self.status_label.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(self.status_label)
-
-        main_layout.addStretch()
-
-    def fetch_engagements(self):
-        self.status_label.setText("Fetching engagements...")
-        self.progress_bar.setVisible(True)
-        self.engagement_thread = FetchEngagementsThread(self.engagements_url, self.headers)
-        self.engagement_thread.engagements_fetched.connect(self.populate_engagements)
-        self.engagement_thread.error_occurred.connect(self.show_error)
-        self.engagement_thread.start()
-
-    def populate_engagements(self, engagements):
-        self.engagement_combo.clear()
-        self.engagements = engagements
-        for engagement in engagements:
-            self.engagement_combo.addItem(engagement["name"], engagement["id"])
-        self.progress_bar.setVisible(False)
-        self.status_label.setText("Engagements loaded")
-
-    def on_engagement_selected(self, index):
-        if index == -1:
-            return
-        engagement_id = self.engagement_combo.itemData(index)
-        self.status_label.setText("Fetching tests...")
-        self.progress_bar.setVisible(True)
-        self.clear_test_checkboxes()
-        self.test_thread = FetchTestsThread(self.tests_url, self.headers, engagement_id)
-        self.test_thread.tests_fetched.connect(self.populate_tests)
-        self.test_thread.error_occurred.connect(self.show_error)
-        self.test_thread.start()
-
-    def clear_test_checkboxes(self):
-        while self.test_layout.count():
-            item = self.test_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
-    def populate_tests(self, tests):
-        self.tests = tests
-        for test in tests:
-            checkbox = QCheckBox(test["title"])
-            checkbox.setProperty("test_id", test["id"])
-            self.test_layout.addWidget(checkbox)
-        self.progress_bar.setVisible(False)
-        self.status_label.setText("Tests loaded")
-
-    def generate_report(self):
-        selected_tests = [checkbox.property("test_id") for checkbox in self.test_container.findChildren(QCheckBox) if checkbox.isChecked()]
-        if not selected_tests:
-            QMessageBox.warning(self, "Warning", "Please select at least one test.")
-            return
-
-        report_name = self.report_name_input.text().strip()
-        start_date = self.start_date_input.text().strip()
-        end_date = self.end_date_input.text().strip()
-        prepared_by = self.prepared_by_input.text().strip()
-        reviewed_by = self.reviewed_by_input.text().strip()
-        approved_by = self.approved_by_input.text().strip()
-
-        if not all([report_name, start_date, end_date, prepared_by, reviewed_by, approved_by]):
-            QMessageBox.warning(self, "Warning", "Please fill in all report properties.")
-            return
-
-        self.status_label.setText("Generating report...")
-        self.progress_bar.setVisible(True)
-        self.generate_button.setEnabled(False)
-
-        self.report_thread = GenerateReportThread(selected_tests, report_name, start_date, end_date,
-                                                 prepared_by, reviewed_by, approved_by, self.report_url, self.headers)
-        self.report_thread.report_generated.connect(self.on_report_generated)
-        self.report_thread.error_occurred.connect(self.show_error)
-        self.report_thread.start()
-
-    def on_report_generated(self):
-        self.progress_bar.setVisible(False)
-        self.generate_button.setEnabled(True)
-        self.status_label.setText("Report generated successfully as report.html and report.pdf")
-        QMessageBox.information(self, "Success", "Report generated successfully!")
-
-    def show_error(self, error_message):
-        self.progress_bar.setVisible(False)
-        self.generate_button.setEnabled(True)
-        self.status_label.setText("Error occurred")
-        QMessageBox.critical(self, "Error", error_message)
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec_())
+print(f"HTML report saved as: {filename}")
