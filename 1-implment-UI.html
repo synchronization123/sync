@@ -3,25 +3,84 @@ import requests
 import os
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Alignment, Border, Side
-from datetime import datetime
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 import matplotlib.pyplot as plt
 
-def fetch_jira_data():
+def get_last_day_of_month(date):
+    """Return the last day of the month for a given date."""
+    next_month = date.replace(day=28) + timedelta(days=4)  # Move to next month
+    return (next_month - timedelta(days=next_month.day)).strftime('%Y-%m-%d')
+
+def construct_jql(end_date_str):
+    """Construct JQL with dynamic created date conditions based on end_date."""
     try:
-        # Clear old :\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\dailycount.csv
-        with open('C:\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\dailycount.csv', 'w') as f:
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+    except ValueError:
+        raise ValueError("Invalid end date format. Use YYYY-MM-DD.")
+
+    # Calculate date thresholds relative to end_date
+    critical_date = (end_date - timedelta(days=15)).strftime('%Y-%m-%d')
+    high_date = (end_date - timedelta(days=30)).strftime('%Y-%m-%d')
+    medium_date = (end_date - timedelta(days=90)).strftime('%Y-%m-%d')
+    low_date = (end_date - timedelta(days=365)).strftime('%Y-%m-%d')
+
+    # For the second part of the JQL with endOfYear logic
+    # Assuming endOfYear(-Xd) means X days before the end of the year containing end_date
+    year_end = datetime(end_date.year, 12, 31)
+    critical_year_date = (year_end - timedelta(days=184)).strftime('%Y-%m-%d')
+    high_year_date = (year_end - timedelta(days=214)).strftime('%Y-%m-%d')
+    medium_year_date = (year_end - timedelta(days=274)).strftime('%Y-%m-%d')
+    low_year_date = (year_end - timedelta(days=549)).strftime('%Y-%m-%d')
+
+    # Construct the JQL with dynamic dates
+    jql = (
+        f'(component in (Security, appsecurity) AND component not in ("drmc") AND issuetype not in (Epic, Sub-task) '
+        f'AND project in (crm, ghi, hjf) AND issuetype not in ("Spike/Task", Epic, Story, Sub-task) '
+        f'AND component not in (dfd, uukj) AND labels not in (yuit) AND '
+        f'((Severity = Critical AND created <= "{critical_date}" AND status not in (Done, Retrospected, "Reporter Review", "Ready for Testing")) OR '
+        f'(Severity = High AND created <= "{high_date}" AND status not in (Done, Retrospected, "Reporter Review", "Ready for Testing")) OR '
+        f'(Severity = Medium AND created <= "{medium_date}" AND status not in (Done, Retrospected, "Reporter Review", "Ready for Testing")) OR '
+        f'(Severity = Low AND created <= "{low_date}" AND status not in (Done, Retrospected, "Reporter Review", "Ready for Testing")))) '
+        f'OR '
+        f'(labels in (fgfg) AND project in (fgf) AND issuetype not in ("Spike/Task", Epic, Story, Task) '
+        f'AND component not in (sdsdd) AND '
+        f'((Severity = Critical AND created <= "{critical_year_date}" AND status not in (Done, Retrospected)) OR '
+        f'(Severity = High AND created <= "{high_year_date}" AND status not in (Done, Retrospected)) OR '
+        f'(Severity = Medium AND created <= "{medium_year_date}" AND status not in (Done, Retrospected)) OR '
+        f'(Severity in (Low, Informational) AND created <= "{low_year_date}" AND status not in (Done, Retrospected))) '
+        f'AND '
+        f'((Severity = Critical AND created <= "{critical_date}" AND status not in (Done, Retrospected, "Reporter Review", "Ready for Testing")) OR '
+        f'(Severity = High AND created <= "{high_date}" AND status not in (Done, Retrospected, "Reporter Review", "Ready for Testing")) OR '
+        f'(Severity = Medium AND created <= "{medium_date}" AND status not in (Done, Retrospected, "Reporter Review", "Ready for Testing")) OR '
+        f'(Severity = Low AND created <= "{low_date}" AND status not in (Done, Retrospected, "Reporter Review", "Ready for Testing"))))'
+    )
+    return jql
+
+def fetch_jira_data(end_date_str):
+    try:
+        # Clear old CSV
+        csv_path = 'C:\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\dailycount.csv'
+        with open(csv_path, 'w') as f:
             f.write('')
 
+        # Construct JQL
+        jql = construct_jql(end_date_str)
+
         # Jira API Setup
-        url = 'https://jira.demo.com/rest/api/2/search?jql=filter=76116&maxResults=1000'
+        url = 'https://jira.demo.com/rest/api/2/search'
         headers = {
             "Authorization": "Bearer hjghjjghjgjhgjh",
             "Content-Type": "application/json"
         }
+        params = {
+            'jql': jql,
+            'maxResults': 1000
+        }
 
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, params=params)
         response.raise_for_status()
         data = response.json()
 
@@ -31,8 +90,8 @@ def fetch_jira_data():
         df_count = df['Project'].value_counts().reset_index()
         df_count.columns = ['Project', 'Count']
 
-        # Save as :\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\dailycount.csv
-        df_count.to_csv('C:\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\dailycount.csv', index=False)
+        # Save to CSV
+        df_count.to_csv(csv_path, index=False)
 
     except Exception as e:
         messagebox.showerror("Jira Fetch Error", str(e))
@@ -40,10 +99,10 @@ def fetch_jira_data():
 
     return True
 
-def process_files():
+def process_files(end_date_str):
     try:
-        # Step 1: Fetch Jira data first
-        if not fetch_jira_data():
+        # Step 1: Fetch Jira data
+        if not fetch_jira_data(end_date_str):
             return
 
         # Step 2: Load dailycount
@@ -113,7 +172,7 @@ def process_files():
         plt.savefig(image_file, bbox_inches='tight', dpi=300)
         plt.close()
 
-        messagebox.showinfo("Success", f"Completed...'!")
+        messagebox.showinfo("Success", f"Completed for SLA calculation with end date {end_date_str}!")
 
     except Exception as e:
         messagebox.showerror("Error", str(e))
@@ -128,7 +187,21 @@ frame.pack()
 label = tk.Label(frame, text="Fetch Out of SLA Jira Count", font=('Arial', 12))
 label.pack(pady=10)
 
-button = tk.Button(frame, text="Start", command=process_files, font=('Arial', 12), bg="lightblue")
+# End date entry
+end_date_label = tk.Label(frame, text="End Date (YYYY-MM-DD, default: end of month):", font=('Arial', 10))
+end_date_label.pack(pady=5)
+default_end_date = get_last_day_of_month(datetime.today())  # Default to end of current month
+end_date_entry = tk.Entry(frame, font=('Arial', 10))
+end_date_entry.insert(0, default_end_date)
+end_date_entry.pack(pady=5)
+
+def start_process():
+    end_date = end_date_entry.get().strip()
+    if not end_date:
+        end_date = default_end_date
+    process_files(end_date)
+
+button = tk.Button(frame, text="Start", command=start_process, font=('Arial', 12), bg="lightblue")
 button.pack(pady=10)
 
 root.mainloop()
