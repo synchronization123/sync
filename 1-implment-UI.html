@@ -28,7 +28,6 @@ def construct_jql(end_date_str):
     low_date = (end_date - timedelta(days=365)).strftime('%Y-%m-%d')
 
     # For the second part of the JQL with endOfYear logic
-    # Assuming endOfYear(-Xd) means X days before the end of the year containing end_date
     year_end = datetime(end_date.year, 12, 31)
     critical_year_date = (year_end - timedelta(days=184)).strftime('%Y-%m-%d')
     high_year_date = (year_end - timedelta(days=214)).strftime('%Y-%m-%d')
@@ -61,13 +60,20 @@ def construct_jql(end_date_str):
 
 def fetch_jira_data(end_date_str):
     try:
-        # Clear old CSV
+        # Define file paths
         csv_path = 'C:\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\dailycount.csv'
+        jql_path = 'C:\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\jql_output.txt'
+
+        # Clear old CSV
         with open(csv_path, 'w') as f:
             f.write('')
 
         # Construct JQL
         jql = construct_jql(end_date_str)
+
+        # Save JQL to text file
+        with open(jql_path, 'w') as f:
+            f.write(jql)
 
         # Jira API Setup
         url = 'https://jira.demo.com/rest/api/2/search'
@@ -172,7 +178,7 @@ def process_files(end_date_str):
         plt.savefig(image_file, bbox_inches='tight', dpi=300)
         plt.close()
 
-        messagebox.showinfo("Success", f"Completed for SLA calculation with end date {end_date_str}!")
+        messagebox.showinfo("Success", f"Completed for SLA calculation with end date {end_date_str}! JQL saved to jql_output.txt.")
 
     except Exception as e:
         messagebox.showerror("Error", str(e))
@@ -182,6 +188,7 @@ root = tk.Tk()
 root.title("Out of SLA Jira Count Utility")
 
 frame = tk.Frame(root, padx=20, pady=20)
+infra = tk.Frame(root, padx=20, pady=20)
 frame.pack()
 
 label = tk.Label(frame, text="Fetch Out of SLA Jira Count", font=('Arial', 12))
