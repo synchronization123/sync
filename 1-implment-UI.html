@@ -1,3 +1,134 @@
-(component in (Security, appsecurity) and component not in (drmc") and issuetype not in (epic, Sub-task) and project in (crm, ghi, hjf) and issuetype not in ("Spike/Task", Epic, Story, Sub-task) and component not in (dfd, uukj) and labels not in (yuit) and (Severity in (Critical) and created <= -15d and status not in (Done, Retrospected, "Reporter Review", "Ready for Testing") or Severity in (High) and created <= -30d and status not in (Done, Retrospected, "Reporter Review", "Ready for Testing") or Severity in (Medium) and created <= -90d and status not in (Done, Retrospected, "Reporter Review", "Ready for Testing") or Severity in (Low) and created <= -365d and status not in (Done, Retrospected, "Reporter Review", "Ready for Testing")))
-OR 
-(labels in (fgfg) and project in (fgf) and issuetype not in ("Spike/Task", Epic, Story, task) and component not in (sdsdd) and (Severity in (Critical) and created <= endOfYear(-184d) and status not in (Done, Retrospected) or Severity in (High) and created <= endOfYear(-214d) and status not in (Done, Retrospected) or Severity in (Medium) and created <= endOfYear(-274d) and status not in (Done, Retrospected) or Severity in (Low, Informational) and created <= endOfYear(-549d) and status not in (Done, Retrospected)) and (Severity in (Critical) and created <= -15d and status not in (Done, Retrospected, "Reporter Review", "Ready for Testing") or Severity in (High) and created <= -30d and status not in (Done, Retrospected, "Reporter Review", "Ready for Testing") or Severity in (Medium) and created <= -90d and status not in (Done, Retrospected, "Reporter Review", "Ready for Testing") or Severity in (Low) and created <= -365d and status not in (Done, Retrospected, "Reporter Review", "Ready for Testing")))
+import pandas as pd
+import requests
+import os
+from openpyxl import load_workbook
+from openpyxl.styles import PatternFill, Alignment, Border, Side
+from datetime import datetime
+import tkinter as tk
+from tkinter import messagebox
+import matplotlib.pyplot as plt
+
+def fetch_jira_data():
+    try:
+        # Clear old :\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\dailycount.csv
+        with open('C:\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\dailycount.csv', 'w') as f:
+            f.write('')
+
+        # Jira API Setup
+        url = 'https://jira.demo.com/rest/api/2/search?jql=filter=76116&maxResults=1000'
+        headers = {
+            "Authorization": "Bearer hjghjjghjgjhgjh",
+            "Content-Type": "application/json"
+        }
+
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+
+        # Extract project names from issues
+        projects = [issue['fields']['project']['name'] for issue in data['issues']]
+        df = pd.DataFrame(projects, columns=['Project'])
+        df_count = df['Project'].value_counts().reset_index()
+        df_count.columns = ['Project', 'Count']
+
+        # Save as :\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\dailycount.csv
+        df_count.to_csv('C:\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\dailycount.csv', index=False)
+
+    except Exception as e:
+        messagebox.showerror("Jira Fetch Error", str(e))
+        return False
+
+    return True
+
+def process_files():
+    try:
+        # Step 1: Fetch Jira data first
+        if not fetch_jira_data():
+            return
+
+        # Step 2: Load dailycount
+        csv_file = 'C:\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\dailycount.csv'
+        excel_file = 'C:\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\project.xlsx'
+        image_file = 'C:\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\count.png'
+
+        df_csv = pd.read_csv(csv_file)
+
+        # Step 3: Load Excel
+        df_excel = pd.read_excel(excel_file)
+
+        # Step 4: Add today's date column with counts
+        today_str = datetime.today().strftime('%d-%B-%Y')
+        df_excel[today_str] = df_excel['Project'].map(df_csv.set_index('Project')['Count']).fillna(0).astype(int)
+
+        # Step 5: Save Excel without formatting
+        df_excel.to_excel(excel_file, index=False)
+
+        # Step 6: Open Excel for formatting
+        wb = load_workbook(excel_file)
+        ws = wb.active
+
+        green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+        yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+        center_align = Alignment(horizontal="center", vertical="center")
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+
+        # Highlight 0s and apply borders
+        for row in range(1, ws.max_row + 1):
+            for col in range(1, ws.max_column + 1):
+                cell = ws.cell(row=row, column=col)
+                if isinstance(cell.value, int) and cell.value == 0 and col >= 3:
+                    cell.fill = green_fill
+                cell.border = thin_border
+
+        def merge_and_label(start_row, end_row, name):
+            ws.merge_cells(start_row=start_row, start_column=1, end_row=end_row, end_column=1)
+            cell = ws.cell(row=start_row, column=1)
+            cell.value = name
+            cell.fill = yellow_fill
+            cell.alignment = center_align
+            cell.border = thin_border
+            for row in range(start_row, end_row + 1):
+                ws.cell(row=row, column=1).border = thin_border
+
+        merge_and_label(2, 12, "A")
+        merge_and_label(13, 21, "B")
+        merge_and_label(22, 32, "C")
+
+        wb.save(excel_file)
+
+        # Step 7: Export cleaned Excel data to PNG
+        df_clean = pd.read_excel(excel_file).dropna(how='all', axis=1).dropna(how='all', axis=0)
+        fig, ax = plt.subplots(figsize=(min(20, 0.5 * len(df_clean.columns)), 0.4 * len(df_clean)))
+        ax.axis('off')
+        table = ax.table(cellText=df_clean.values, colLabels=df_clean.columns, cellLoc='center', loc='center')
+        table.auto_set_font_size(False)
+        table.set_fontsize(10)
+        table.scale(1, 1.5)
+        plt.tight_layout()
+        plt.savefig(image_file, bbox_inches='tight', dpi=300)
+        plt.close()
+
+        messagebox.showinfo("Success", f"Completed...'!")
+
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
+
+# GUI
+root = tk.Tk()
+root.title("Out of SLA Jira Count Utility")
+
+frame = tk.Frame(root, padx=20, pady=20)
+frame.pack()
+
+label = tk.Label(frame, text="Fetch Out of SLA Jira Count", font=('Arial', 12))
+label.pack(pady=10)
+
+button = tk.Button(frame, text="Start", command=process_files, font=('Arial', 12), bg="lightblue")
+button.pack(pady=10)
+
+root.mainloop()
