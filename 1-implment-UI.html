@@ -1,214 +1,136 @@
-import pandas as pd
-import requests
-import os
-from openpyxl import load_workbook
-from openpyxl.styles import PatternFill, Alignment, Border, Side
-from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
-import tkinter as tk
-from tkinter import messagebox, ttk
-import matplotlib.pyplot as plt
+Here's a well-articulated version of the vulnerability:
 
-def get_last_day_of_month(date):
-    """Return the last day of the month for a given date."""
-    next_month = date.replace(day=28) + timedelta(days=4)  # Move to next month
-    return (next_month - timedelta(days=next_month.day)).strftime('%Y-%m-%d')
 
-def construct_jql(end_date_str):
-    """Construct JQL with dynamic created date conditions based on end_date."""
-    try:
-        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-    except ValueError:
-        raise ValueError("Invalid end date format. Use YYYY-MM-DD.")
+---
 
-    # Calculate date thresholds relative to end_date
-    critical_date = (end_date - timedelta(days=15)).strftime('%Y-%m-%d')
-    high_date = (end_date - timedelta(days=30)).strftime('%Y-%m-%d')
-    medium_date = (end_date - timedelta(days=90)).strftime('%Y-%m-%d')
-    low_date = (end_date - timedelta(days=365)).strftime('%Y-%m-%d')
+Vulnerability Title:
+Improper Authentication During Email Update Allows Unauthorized Changes
 
-    # For the second part of the JQL with endOfYear logic
-    year_end = datetime(end_date.year, 12, 31)
-    critical_year_date = (year_end - timedelta(days=184)).strftime('%Y-%m-%d')
-    high_year_date = (year_end - timedelta(days=214)).strftime('%Y-%m-%d')
-    medium_year_date = (year_end - timedelta(days=274)).strftime('%Y-%m-%d')
-    low_year_date = (year_end - timedelta(days=549)).strftime('%Y-%m-%d')
+Description:
+The application allows users to update their registered email address by entering any random password in the "current password" field. It does not properly validate whether the entered password matches the user’s actual current password. As a result, a user can successfully update their email address without proper authentication.
 
-    # Construct the JQL with dynamic dates
-    jql = (
-        f'(component in (Security, appsecurity) AND component not in ("drmc") AND issuetype not in (Epic, Sub-task) '
-        f'AND project in (crm, ghi, hjf) AND issuetype not in ("Spike/Task", Epic, Story, Sub-task) '
-        f'AND component not in (dfd, uukj) AND labels not in (yuit) AND '
-        f'((Severity = Critical AND created <= "{critical_date}" AND status not in (Done, Retrospected, "Reporter Review", "Ready for Testing")) OR '
-        f'(Severity = High AND created <= "{high_date}" AND status not in (Done, Retrospected, "Reporter Review", "Ready for Testing")) OR '
-        f'(Severity = Medium AND created <= "{medium_date}" AND status not in (Done, Retrospected, "Reporter Review", "Ready for Testing")) OR '
-        f'(Severity = Low AND created <= "{low_date}" AND status not in (Done, Retrospected, "Reporter Review", "Ready for Testing")))) '
-        f'OR '
-        f'(labels in (fgfg) AND project in (fgf) AND issuetype not in ("Spike/Task", Epic, Story, Task) '
-        f'AND component not in (sdsdd) AND '
-        f'((Severity = Critical AND created <= "{critical_year_date}" AND status not in (Done, Retrospected)) OR '
-        f'(Severity = High AND created <= "{high_year_date}" AND status not in (Done, Retrospected)) OR '
-        f'(Severity = Medium AND created <= "{medium_year_date}" AND status not in (Done, Retrospected)) OR '
-        f'(Severity in (Low, Informational) AND created <= "{low_year_date}" AND status not in (Done, Retrospected))) '
-        f'AND '
-        f'((Severity = Critical AND created <= "{critical_date}" AND status not in (Done, Retrospected, "Reporter Review", "Ready for Testing")) OR '
-        f'(Severity = High AND created <= "{high_date}" AND status not in (Done, Retrospected, "Reporter Review", "Ready for Testing")) OR '
-        f'(Severity = Medium AND created <= "{medium_date}" AND status not in (Done, Retrospected, "Reporter Review", "Ready for Testing")) OR '
-        f'(Severity = Low AND created <= "{low_date}" AND status not in (Done, Retrospected, "Reporter Review", "Ready for Testing"))))'
-    )
-    return jql
+Impact:
+This flaw bypasses the intended security control of verifying user identity before sensitive account changes. It opens up the risk of unauthorized email updates, which can further lead to account takeover, especially in cases where email is used for password resets or multi-factor authentication.
 
-def fetch_jira_data(end_date_str):
-    try:
-        # Define file paths
-        csv_path = 'C:\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\dailycount.csv'
-        jql_path = 'C:\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\jql_output.txt'
+Steps to Reproduce:
 
-        # Clear old CSV
-        with open(csv_path, 'w') as f:
-            f.write('')
+1. Log in to a legitimate user account.
 
-        # Construct JQL
-        jql = construct_jql(end_date_str)
 
-        # Save JQL to text file
-        with open(jql_path, 'w') as f:
-            f.write(jql)
+2. Navigate to the "Profile" or "Account Settings" section.
 
-        # Jira API Setup
-        url = 'https://jira.demo.com/rest/api/2/search'
-        headers = {
-            "Authorization": "Bearer hjghjjghjgjhgjh",
-            "Content-Type": "application/json"
-        }
-        params = {
-            'jql': jql,
-            'maxResults': 1000
-        }
 
-        response = requests.get(url, headers=headers, params=params)
-        response.raise_for_status()
-        data = response.json()
+3. Choose to update the email address.
 
-        # Extract project names from issues
-        projects = [issue['fields']['project']['name'] for issue in data['issues']]
-        df = pd.DataFrame(projects, columns=['Project'])
-        df_count = df['Project'].value_counts().reset_index()
-        df_count.columns = ['Project', 'Count']
 
-        # Save to CSV
-        df_count.to_csv(csv_path, index=False)
+4. Enter a new email address.
 
-    except Exception as e:
-        messagebox.showerror("Jira Fetch Error", str(e))
-        return False
 
-    return True
+5. In the “current password” field, input any random string (not the actual password).
 
-def process_files(end_date_str):
-    try:
-        # Step 1: Fetch Jira data
-        if not fetch_jira_data(end_date_str):
-            return
 
-        # Step 2: Load dailycount
-        csv_file = 'C:\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\dailycount.csv'
-        excel_file = 'C:\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\project.xlsx'
-        image_file = 'C:\\Users\\firstname.lastname\\OneDrive - demo\\Desktop\\Daily-Jira-Count\\count.png'
+6. Submit the form.
 
-        df_csv = pd.read_csv(csv_file)
 
-        # Step 3: Load Excel
-        df_excel = pd.read_excel(excel_file)
+7. Observe that the email address is successfully updated.
 
-        # Step 4: Add today's date column with counts
-        today_str = datetime.today().strftime('%d-%B-%Y')
-        df_excel[today_str] = df_excel['Project'].map(df_csv.set_index('Project')['Count']).fillna(0).astype(int)
 
-        # Step 5: Save Excel without formatting
-        df_excel.to_excel(excel_file, index=False)
 
-        # Step 6: Open Excel for formatting
-        wb = load_workbook(excel_file)
-        ws = wb.active
+Expected Behavior:
+The application should verify that the current password entered matches the logged-in user’s actual password before allowing the email to be updated.
 
-        green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
-        yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-        center_align = Alignment(horizontal="center", vertical="center")
-        thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
-        )
+Severity: High
 
-        # Highlight 0s and apply borders
-        for row in range(1, ws.max_row + 1):
-            for col in range(1, ws.max_column + 1):
-                cell = ws.cell(row=row, column=col)
-                if isinstance(cell.value, int) and cell.value == 0 and col >= 3:
-                    cell.fill = green_fill
-                cell.border = thin_border
+Recommendation:
+Implement proper password validation before allowing email address changes. The system should compare the entered password against the user’s actual stored (hashed) password and only proceed if it matches.
 
-        def merge_and_label(start_row, end_row, name):
-            ws.merge_cells(start_row=start_row, start_column=1, end_row=end_row, end_column=1)
-            cell = ws.cell(row=start_row, column=1)
-            cell.value = name
-            cell.fill = yellow_fill
-            cell.alignment = center_align
-            cell.border = thin_border
-            for row in range(start_row, end_row + 1):
-                ws.cell(row=row, column=1).border = thin_border
 
-        merge_and_label(2, 12, "A")
-        merge_and_label(13, 21, "B")
-        merge_and_label(22, 32, "C")
+---
 
-        wb.save(excel_file)
+Let me know if you’d like it tailored for a bug bounty report, internal audit, or compliance purposes.
 
-        # Step 7: Export cleaned Excel data to PNG
-        df_clean = pd.read_excel(excel_file).dropna(how='all', axis=1).dropna(how='all', axis=0)
-        fig, ax = plt.subplots(figsize=(min(20, 0.5 * len(df_clean.columns)), 0.4 * len(df_clean)))
-        ax.axis('off')
-        table = ax.table(cellText=df_clean.values, colLabels=df_clean.columns, cellLoc='center', loc='center')
-        table.auto_set_font_size(False)
-        table.set_fontsize(10)
-        table.scale(1, 1.5)
-        plt.tight_layout()
-        plt.savefig(image_file, bbox_inches='tight', dpi=300)
-        plt.close()
 
-        messagebox.showinfo("Success", f"Completed for SLA calculation with end date {end_date_str}! JQL saved to jql_output.txt.")
 
-    except Exception as e:
-        messagebox.showerror("Error", str(e))
 
-# GUI
-root = tk.Tk()
-root.title("Out of SLA Jira Count Utility")
 
-frame = tk.Frame(root, padx=20, pady=20)
-infra = tk.Frame(root, padx=20, pady=20)
-frame.pack()
 
-label = tk.Label(frame, text="Fetch Out of SLA Jira Count", font=('Arial', 12))
-label.pack(pady=10)
 
-# End date entry
-end_date_label = tk.Label(frame, text="End Date (YYYY-MM-DD, default: end of month):", font=('Arial', 10))
-end_date_label.pack(pady=5)
-default_end_date = get_last_day_of_month(datetime.today())  # Default to end of current month
-end_date_entry = tk.Entry(frame, font=('Arial', 10))
-end_date_entry.insert(0, default_end_date)
-end_date_entry.pack(pady=5)
+Here’s a clear and professional articulation of the vulnerability and a recommendation to fix it:
 
-def start_process():
-    end_date = end_date_entry.get().strip()
-    if not end_date:
-        end_date = default_end_date
-    process_files(end_date)
 
-button = tk.Button(frame, text="Start", command=start_process, font=('Arial', 12), bg="lightblue")
-button.pack(pady=10)
+---
 
-root.mainloop()
+Vulnerability Title:
+
+Client-Side Enforcement of Authentication Method Selection Allows Unauthorized SMS Option Activation
+
+
+---
+
+Description:
+
+In the MFA (Multi-Factor Authentication) settings screen, users are allowed to choose the second factor from a dropdown menu with options such as Authentication App (Google/MS Authenticator), Email, and Phone SMS. However, Phone SMS is visibly disabled in the dropdown under normal usage.
+
+Despite this restriction, a user can use browser developer tools to remove the disabled attribute from the <option> tag corresponding to Phone SMS. Once modified, the user can select the SMS option and successfully save it, even though this method is not intended to be active or available.
+
+If the SMS value is stored incorrectly or as blank, it may disrupt OTP delivery—potentially preventing users from logging in or compromising MFA flow integrity.
+
+
+---
+
+Impact:
+
+Security controls enforced only on the client side are easily bypassed by users.
+
+Improper configuration of authentication method may result in:
+
+Broken login flow (no OTP received).
+
+User lockouts.
+
+Bypass of intended authentication policy (e.g., SMS disabled for security reasons).
+
+
+Could lead to a weakened MFA configuration or denial of access.
+
+
+
+---
+
+CVSS v3.1 Vector (Estimated):
+
+CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:U/C:H/I:H/A:L
+Score: 7.4 (High)
+
+Privileged users (PR:L) can abuse developer tools to enable forbidden auth types.
+
+Could impact confidentiality (OTP manipulation), integrity (auth method tampered), and availability (login OTP fails).
+
+
+
+---
+
+Recommendation:
+
+1. Enforce server-side validation for all authentication method updates:
+
+Reject any unsupported or disabled options, regardless of client-side input.
+
+
+
+2. Use a whitelist on the backend to allow only permitted MFA methods.
+
+
+3. Sanitize and validate input from the client to ensure it hasn’t been tampered with.
+
+
+4. Log and monitor such tampering attempts as potential abuse or misuse indicators.
+
+
+
+
+---
+
+Let me know if you’d like this formatted for a bug bounty report, audit findings, or secure coding checklist.
+
+
