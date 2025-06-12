@@ -1,26 +1,7 @@
-import pandas as pd
-import re
+Hi Ram,
 
-# Load the Excel file
-# Replace 'your_file.xlsx' with your actual Excel file path
-input_file = 'your_file.xlsx'
-df = pd.read_excel(input_file)
+From the list provided, the entries highlighted in red correspond to test projects.
 
-# Function to extract Jira ID from text
-def extract_jira_id(text):
-    if pd.isna(text):  # Check for NaN/empty cells
-        return ''
-    # Jira ID pattern (e.g., ABC-123)
-    pattern = r'[A-Z]+-\d+'
-    match = re.search(pattern, str(text))
-    return match.group(0) if match else ''
+The AppSec team conducts daily monitoring of SonarQube, and any newly detected traces are taken up for review. As of now, there are only 10 traces in Open status that are relevant for action — this excludes 20 traces identified from test applications.
 
-# Apply the function to column D and store results in column E
-df['E'] = df['D'].apply(extract_jira_id)
-
-# Save the modified dataframe back to Excel
-# Replace 'output_file.xlsx' with your desired output file path
-output_file = 'output_file.xlsx'
-df.to_excel(output_file, index=False)
-
-print(f"Jira IDs extracted and saved to {output_file}")
+Additionally, we will be reviewing the Confirmed traces associated with JIRAs that have been marked as Done, and we will update their corresponding statuses in SonarQube accordingly.
