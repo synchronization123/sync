@@ -1,11 +1,31 @@
 import pandas as pd
 
-# Read the input Excel file
-# Replace 'Input.xlsx' with your actual input file name
-df = pd.read_excel('Input.xlsx')
+# Read both Excel files
+excel_a = pd.read_excel('ExcelA.xlsx')
+excel_b = pd.read_excel('ExcelB.xlsx')
 
-# Group by URL and aggregate Owner Name into comma-separated string
-result = df.groupby('URL')['Owner Name'].agg(lambda x: ', '.join(x)).reset_index()
+# Create a new URL column in ExcelA if it doesn't exist
+if 'URL' not in excel_a.columns:
+    excel_a['URL'] = ''
 
-# Save to Output.xlsx
-result.to_excel('Output.xlsx', index=False)
+# Function to check if user exists in comma-separated string
+def find_user_url(user, df_b):
+    for index, row in df_b.iterrows():
+        # Split comma-separated users and strip whitespace
+        users_list = [u.strip() for u in row['Users'].split(',')]
+        if user in users_list:
+            return row['URL']
+    return ''
+
+# Iterate through each user in ExcelA
+for index, row in excel_a.iterrows():
+    user = row['Users']
+    # Find matching URL from ExcelB
+    url = find_user_url(user, excel_b)
+    # Update URL column in ExcelA
+    excel_a.at[index, 'URL'] = url
+
+# Save the modified ExcelA
+excel_a.to_excel('ExcelA_modified.xlsx', index=False)
+
+print("Processing complete. Output saved to ExcelA_modified.xlsx")
