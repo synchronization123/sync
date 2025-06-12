@@ -1,1 +1,26 @@
-Absence of Email Notifications for Email Address ChangesVulnerability Type: Security MisconfigurationDescription: The system does not send email notifications to the original email address when a user's email address is changed. This lack of notification creates a security gap, as users are not informed of unauthorized or unintended changes to their account's email address, which is often a critical component of account recovery and authentication processes.
+import pandas as pd
+import re
+
+# Load the Excel file
+# Replace 'your_file.xlsx' with your actual Excel file path
+input_file = 'your_file.xlsx'
+df = pd.read_excel(input_file)
+
+# Function to extract Jira ID from text
+def extract_jira_id(text):
+    if pd.isna(text):  # Check for NaN/empty cells
+        return ''
+    # Jira ID pattern (e.g., ABC-123)
+    pattern = r'[A-Z]+-\d+'
+    match = re.search(pattern, str(text))
+    return match.group(0) if match else ''
+
+# Apply the function to column D and store results in column E
+df['E'] = df['D'].apply(extract_jira_id)
+
+# Save the modified dataframe back to Excel
+# Replace 'output_file.xlsx' with your desired output file path
+output_file = 'output_file.xlsx'
+df.to_excel(output_file, index=False)
+
+print(f"Jira IDs extracted and saved to {output_file}")
