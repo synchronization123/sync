@@ -1,19 +1,34 @@
 import requests
 import pandas as pd
 import os
-from datetime import datetime
 
-# Input data (assuming you have an Excel file with API URLs and tokens)
-input_excel = 'input.xlsx'  # Your input Excel with 300 rows
+# Hardcoded values
+BASE_URL = 'https://bitbucket.crm.com'
+TOKEN = 'sksjdnndnns'
+
+# Input data
+input_excel = 'input.xlsx'  # Your input Excel with repo URLs
 output_dir = 'output_excels'
 os.makedirs(output_dir, exist_ok=True)
 
 # Read input Excel
 df_input = pd.read_excel(input_excel)
 
+# Function to construct API URL from repo URL
+def construct_api_url(repo_url):
+    # Remove trailing slash if present
+    repo_url = repo_url.rstrip('/')
+    # Split URL and extract PROJECTNAME and REPONAME
+    parts = repo_url.split('/')
+    project_name = parts[parts.index('projects') + 1]
+    repo_name = parts[parts.index('repos') + 1]
+    # Construct API URL
+    api_url = f"{BASE_URL}/rest/api/latest/projects/{project_name}/repos/{repo_name}/commits"
+    return api_url, project_name, repo_name
+
 # Function to fetch commit data
-def fetch_commits(api_url, token):
-    headers = {'Authorization': f'Bearer {token}'}
+def fetch_commits(api_url):
+    headers = {'Authorization': f'Bearer {TOKEN}'}
     commits_data = []
     
     try:
@@ -36,16 +51,13 @@ def fetch_commits(api_url, token):
 # Process each row
 all_dfs = []
 for index, row in df_input.iterrows():
-    api_url = row['Api']  # Column name in your input Excel
-    token = row['Token']  # Column name in your input Excel
+    repo_url = row['URL']  # Column name in your input Excel for repo URLs
     
-    # Extract PROJECTNAME and REPONAME from URL
-    parts = api_url.split('/')
-    project_name = parts[parts.index('projects') + 1]
-    repo_name = parts[parts.index('repos') + 1]
+    # Construct API URL and extract project/repo names
+    api_url, project_name, repo_name = construct_api_url(repo_url)
     
     # Fetch commit data
-    commits = fetch_commits(api_url, token)
+    commits = fetch_commits(api_url)
     
     if commits:
         # Create DataFrame
