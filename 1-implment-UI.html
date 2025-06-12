@@ -1,18 +1,11 @@
 import pandas as pd
 
-# Load input Excel file
-df = pd.read_excel("input.xlsx")
+# Read the input Excel file
+# Replace 'Input.xlsx' with your actual input file name
+df = pd.read_excel('Input.xlsx')
 
-# Ensure correct column names — update if necessary
-# Assuming 'URL' is in column B and 'Owner Name' in another column
-url_col = 'URL'
-owner_col = 'Owner Name'
-
-# Group by URL and merge unique Owner Names
-merged_df = df.groupby(url_col)[owner_col] \
-    .apply(lambda x: ', '.join(sorted(set(', '.join(x).split(', '))))) \
-    .reset_index()
+# Group by URL and aggregate Owner Name into comma-separated string
+result = df.groupby('URL')['Owner Name'].agg(lambda x: ', '.join(x)).reset_index()
 
 # Save to Output.xlsx
-merged_df.to_excel("Output.xlsx", index=False)
-print("Merged file saved as Output.xlsx")
+result.to_excel('Output.xlsx', index=False)
