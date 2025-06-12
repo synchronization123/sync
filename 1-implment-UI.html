@@ -1,0 +1,100 @@
+import pandas as pd
+import requests
+import re
+from urllib.parse import urlparse
+
+# Configuration
+BITBUCKET_API_BASE = "https://api.bitbucket.org/2.0"
+TOKEN = "jdjdjdjd"  # Replace with your actual Bitbucket App Password or OAuth token
+EXCEL_FILE = "repos.xlsx"  # Path to your Excel file
+OUTPUT_FILE = "repo_owners.xlsx"  # Output file for results
+
+# Headers for API authentication
+headers = {
+    "Authorization": f"Bearer {TOKEN}",
+    "Accept": "application/json"
+}
+
+def parse_repo_url(url):
+    """Extract workspace and repo slug from Bitbucket URL."""
+    try:
+        # Normalize URL by removing trailing slashes or extra path components
+        parsed_url = urlparse(url)
+        path = parsed_url.path.strip("/")
+        parts = path.split("/")
+        if len(parts) >= 2:
+            workspace = parts[0]
+            repo_slug = parts[1]
+            return workspace, repo_slug
+        else:
+            print(f"Invalid URL format: {url}")
+            return None, None
+    except Exception as e:
+        print(f"Error parsing URL {url}: {e}")
+        return None, None
+
+def get_repo_owner(workspace, repo_slug):
+    """Fetch the owner of a Bitbucket repository using the API."""
+    if not workspace or not repo_slug:
+        return None
+    try:
+        url = f"{BITBUCKET_API_BASE}/repositories/{workspace}/{repo_slug}"
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            repo_data = response.json()
+            owner = repo_data.get("owner", {}).get("display_name", "Unknown")
+            return owner
+        elif response.status_code == 401:
+            print(f"Unauthorized access for {workspace}/{repo_slug}. Check token permissions.")
+            return None
+        elif response.status_code == 404:
+            print(f"Repository not found: {workspace}/{repo_slug}")
+            return None
+        else:
+            print(f"Error fetching {workspace}/{repo_slug}: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        print(f"Exception fetching {workspace}/{repo_slug}: {e}")
+        return None
+
+def main():
+    # Read Excel file
+    try:
+        df = pd.read_excel(EXCEL_FILE)
+    except Exception as e:
+        print(f"Error reading Excel file: {e}")
+        return
+
+    # Assume the URLs are in a column named 'URL' (adjust as needed)
+    if 'URL' not in df.columns:
+        print("Excel file must contain a 'URL' column with repository URLs.")
+        return
+
+    # Lists to store results
+    results = []
+
+    # Process each URL
+    for url in df['URL']:
+        workspace, repo_slug = parse_repo_url(url)
+        if workspace and repo_slug:
+            owner = get_repo_owner(workspace, repo_slug)
+            results.append({"URL": url, "Workspace": workspace, "Repo": repo_slug, "Owner": owner})
+        else:
+            results.append({"URL": url, "Workspace": None, "Repo": None, "Owner": None})
+
+    # Create a DataFrame with results
+    result_df = pd.DataFrame(results)
+    
+    # Save results to a new Excel file
+    try:
+        result_df.to_excel(OUTPUT_FILE, index=False)
+        print(f"Results saved to {OUTPUT_FILE}")
+    except Exception as e:
+        print(f"Error saving results to Excel: {e}")
+
+    # Print results
+    print("\nRepository Owners:")
+    print(result_df)
+
+if __name__ == "__main__":
+    main()
