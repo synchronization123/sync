@@ -1,20 +1,105 @@
-import os
+import requests
 import pandas as pd
+import os
 
-# Folder containing xlsx files
-folder_path = 'your/folder/path'
-output_file = 'merged.xlsx'
+# Hardcoded values
+BASE_URL = 'https://bitbucket.crm.com'
+TOKEN = 'sksjdnndnns'
 
-all_data = []
+# Input data
+input_excel = 'input.xlsx'  # Your input Excel with repo URLs
+output_dir = 'output_excels'
+os.makedirs(output_dir, exist_ok=True)
 
-for file in os.listdir(folder_path):
-    if file.endswith('.xlsx'):
-        file_path = os.path.join(folder_path, file)
-        df = pd.read_excel(file_path)
-        df['SourceFile'] = file  # Optional: add source filename for tracking
-        all_data.append(df)
+# Read input Excel
+df_input = pd.read_excel(input_excel)
 
-merged_df = pd.concat(all_data, ignore_index=True)
-merged_df.to_excel(output_file, index=False)
+# Function to construct API URL from repo URL
+def construct_api_url(repo_url):
+    try:
+        # Remove trailing slash if present
+        repo_url = repo_url.rstrip('/')
+        # Split URL by '/' and filter out empty parts
+        parts = [part for part in repo_url.split('/') if part]
+        
+        # Find indices of 'projects' and 'repos'
+        if 'projects' not in parts or 'repos' not in parts:
+            raise ValueError("URL does not contain 'projects' or 'repos'")
+            
+        project_index = parts.index('projects')
+        repo_index = parts.index('repos')
+        
+        # Validate positions
+        if repo_index < project_index + 1 or repo_index + 1 >= len(parts):
+            raise ValueError("Invalid URL structure")
+            
+        project_name = parts[project_index + 1]
+        repo_name = parts[repo_index + 1]
+        
+        # Construct API URL
+        api_url = f"{BASE_URL}/rest/api/latest/projects/{project_name}/repos/{repo_name}/commits"
+        return api_url, project_name, repo_name
+    
+    except Exception as e:
+        print(f"Error constructing API URL for {repo_url}: {str(e)}")
+        return None, None, None
 
-print(f"All rows merged into one sheet in {output_file}")
+# Function to fetch commit data
+def fetch_commits(api_url):
+    headers = {'Authorization': f'Bearer {TOKEN}'}
+    commits_data = []
+    
+    try:
+        response = requests.get(api_url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        
+        for commit in data.get('values', []):
+            commits_data.append({
+                'Owner Name': commit.get('author', {}).get('displayName', ''),
+                'Report URL': f"{api_url.rsplit('/', 1)[0]}/{commit.get('id', '')}"
+            })
+            
+        return commits_data
+    
+    except Exception as e:
+        print(f"Error fetching data for {api_url}: {str(e)}")
+        return []
+
+# Process each row
+all_dfs = []
+for index, row in df_input.iterrows():
+    repo_url = row['URL']  # Column name in your input Excel for repo URLs
+    
+    # Construct API URL and extract project/repo names
+    api_url, project_name, repo_name = construct_api_url(repo_url)
+    
+    # Skip if URL construction failed
+    if api_url is None:
+        continue
+    
+    # Fetch commit data
+    commits = fetch_commits(api_url)
+    
+    if commits:
+        # Create DataFrame
+        df_commits = pd.DataFrame(commits)
+        
+        # Save to individual Excel
+        output_file = os.path.join(output_dir, f"{project_name}-{repo_name}.xlsx")
+        df_commits.to_excel(output_file, index=False)
+        print(f"Saved: {output_file}")
+        
+        # Add project and repo info for merged file
+        df_commits['Project Name'] = project_name
+        df_commits['Repository Name'] = repo_name
+        all_dfs.append(df_commits)
+
+# Merge all DataFrames and save to merged.xlsx
+if all_dfs:
+    merged_df = pd.concat(all_dfs, ignore_index=True)
+    merged_file = 'merged.xlsx'
+    merged_df.to_excel(merged_file, index=False)
+    print(f"Merged file saved: {merged_file}")
+else:
+    print("No data to merge")
