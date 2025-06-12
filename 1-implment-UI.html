@@ -2,30 +2,38 @@ import pandas as pd
 import requests
 import re
 from urllib.parse import urlparse
+import base64
+import os
 
 # Configuration
-BITBUCKET_API_BASE = "https://api.bitbucket.org/2.0"
-TOKEN = "jdjdjdjd"  # Replace with your actual Bitbucket App Password or OAuth token
+BITBUCKET_API_BASE = "https://bitbucket.crm.com/rest/api/1.0"  # Bitbucket Server API
+TOKEN = "jdjdjdjd"  # Replace with your actual Personal Access Token
+USERNAME = "your-username"  # Replace with your Bitbucket Server username
 EXCEL_FILE = "repos.xlsx"  # Path to your Excel file
 OUTPUT_FILE = "repo_owners.xlsx"  # Output file for results
 
-# Headers for API authentication
+# Encode credentials for Basic Authentication
+credentials = f"{USERNAME}:{TOKEN}"
+auth_header = f"Basic {base64.b64encode(credentials.encode()).decode()}"
+
+# Headers for API requests
 headers = {
-    "Authorization": f"Bearer {TOKEN}",
+    "Authorization": auth_header,
     "Accept": "application/json"
 }
 
 def parse_repo_url(url):
-    """Extract workspace and repo slug from Bitbucket URL."""
+    """Extract project key and repo slug from Bitbucket Server URL."""
     try:
-        # Normalize URL by removing trailing slashes or extra path components
+        # Normalize URL
         parsed_url = urlparse(url)
         path = parsed_url.path.strip("/")
-        parts = path.split("/")
-        if len(parts) >= 2:
-            workspace = parts[0]
-            repo_slug = parts[1]
-            return workspace, repo_slug
+        # Expected format: projects/ProjectName/repos/RepoName
+        match = re.match(r"projects/([^/]+)/repos/([^/]+)", path)
+        if match:
+            project_key = match.group(1)
+            repo_slug = match.group(2)
+            return project_key, repo_slug
         else:
             print(f"Invalid URL format: {url}")
             return None, None
@@ -33,28 +41,37 @@ def parse_repo_url(url):
         print(f"Error parsing URL {url}: {e}")
         return None, None
 
-def get_repo_owner(workspace, repo_slug):
-    """Fetch the owner of a Bitbucket repository using the API."""
-    if not workspace or not repo_slug:
+def get_repo_owner(project_key, repo_slug):
+    """Fetch the owner of a Bitbucket Server repository using the API."""
+    if not project_key or not repo_slug:
         return None
     try:
-        url = f"{BITBUCKET_API_BASE}/repositories/{workspace}/{repo_slug}"
+        # Get repository details
+        url = f"{BITBUCKET_API_BASE}/projects/{project_key}/repos/{repo_slug}"
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             repo_data = response.json()
-            owner = repo_data.get("owner", {}).get("display_name", "Unknown")
+            # Bitbucket Server doesn't directly provide an "owner" field
+            # Check for creator or project owner
+            project_url = f"{BITBUCKET_API_BASE}/projects/{project_key}"
+            project_response = requests.get(project_url, headers=headers)
+            owner = "Unknown"
+            if project_response.status_code == 200:
+                project_data = project_response.json()
+                # Try to get project creator or owner (if available)
+                owner = project_data.get("owner", {}).get("displayName", "Unknown")
             return owner
         elif response.status_code == 401:
-            print(f"Unauthorized access for {workspace}/{repo_slug}. Check token permissions.")
+            print(f"Unauthorized access for {project_key}/{repo_slug}. Check token permissions.")
             return None
         elif response.status_code == 404:
-            print(f"Repository not found: {workspace}/{repo_slug}")
+            print(f"Repository not found: {project_key}/{repo_slug}")
             return None
         else:
-            print(f"Error fetching {workspace}/{repo_slug}: {response.status_code} - {response.text}")
+            print(f"Error fetching {project_key}/{repo_slug}: {response.status_code} - {response.text}")
             return None
     except Exception as e:
-        print(f"Exception fetching {workspace}/{repo_slug}: {e}")
+        print(f"Exception fetching {project_key}/{repo_slug}: {e}")
         return None
 
 def main():
@@ -65,7 +82,7 @@ def main():
         print(f"Error reading Excel file: {e}")
         return
 
-    # Assume the URLs are in a column named 'URL' (adjust as needed)
+    # Assume URLs are in a column named 'URL' (adjust as needed)
     if 'URL' not in df.columns:
         print("Excel file must contain a 'URL' column with repository URLs.")
         return
@@ -75,12 +92,12 @@ def main():
 
     # Process each URL
     for url in df['URL']:
-        workspace, repo_slug = parse_repo_url(url)
-        if workspace and repo_slug:
-            owner = get_repo_owner(workspace, repo_slug)
-            results.append({"URL": url, "Workspace": workspace, "Repo": repo_slug, "Owner": owner})
+        project_key, repo_slug = parse_repo_url(url)
+        if project_key and repo_slug:
+            owner = get_repo_owner(project_key, repo_slug)
+            results.append({"URL": url, "Project": project_key, "Repo": repo_slug, "Owner": owner})
         else:
-            results.append({"URL": url, "Workspace": None, "Repo": None, "Owner": None})
+            results.append({"URL": url, "Project": None, "Repo": None, "Owner": None})
 
     # Create a DataFrame with results
     result_df = pd.DataFrame(results)
