@@ -1,31 +1,227 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+from tkcalendar import DateEntry
+import datetime
+import os
+import requests
 import pandas as pd
+from jira import JIRA
+import xlsxwriter
+from pathlib import Path
 
-# Read both Excel files
-excel_a = pd.read_excel('ExcelA.xlsx')
-excel_b = pd.read_excel('ExcelB.xlsx')
+class JiraDataUtility:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Jira Data Utility")
+        self.root.geometry("400x300")
 
-# Create a new URL column in ExcelA if it doesn't exist
-if 'URL' not in excel_a.columns:
-    excel_a['URL'] = ''
+        # Default dates
+        today = datetime.date.today()
+        yesterday = today - datetime.timedelta(days=1)
+        if today.weekday() == 0:  # If Monday, set end date to previous Friday
+            default_end = today - datetime.timedelta(days=3)
+        else:
+            default_end = yesterday
 
-# Function to check if user exists in comma-separated string
-def find_user_url(user, df_b):
-    for index, row in df_b.iterrows():
-        # Split comma-separated users and strip whitespace
-        users_list = [u.strip() for u in row['Users'].split(',')]
-        if user in users_list:
-            return row['URL']
-    return ''
+        # GUI Elements
+        tk.Label(root, text="Start Date:").grid(row=0, column=0, padx=10, pady=10)
+        self.start_date = DateEntry(root, width=12, date_pattern='yyyy-mm-dd', year=yesterday.year, month=yesterday.month, day=yesterday.day)
+        self.start_date.grid(row=0, column=1, padx=10, pady=10)
 
-# Iterate through each user in ExcelA
-for index, row in excel_a.iterrows():
-    user = row['Users']
-    # Find matching URL from ExcelB
-    url = find_user_url(user, excel_b)
-    # Update URL column in ExcelA
-    excel_a.at[index, 'URL'] = url
+        tk.Label(root, text="End Date:").grid(row=1, column=0, padx=10, pady=10)
+        self.end_date = DateEntry(root, width=12, date_pattern='yyyy-mm-dd', year=default_end.year, month=default_end.month, day=default_end.day)
+        self.end_date.grid(row=1, column=1, padx=10, pady=10)
 
-# Save the modified ExcelA
-excel_a.to_excel('ExcelA_modified.xlsx', index=False)
+        self.start_button = tk.Button(root, text="Start", command=self.start_process)
+        self.start_button.grid(row=2, column=0, columnspan=2, pady=20)
 
-print("Processing complete. Output saved to ExcelA_modified.xlsx")
+        # API Tokens
+        self.crm_token = "sjsjdnnd"
+        self.jira_token = "sjsjsndn"
+        self.crm_url = "https://dojo.crm.com/api/v2/users/?is_active=true&limit=100"
+        self.jira_server = "https://crm.jirs.com"
+
+    def log(self, message):
+        """Print progress to console."""
+        print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {message}")
+
+    def start_process(self):
+        """Main process triggered by Start button."""
+        self.start_button.config(state='disabled')
+        try:
+            start_date = self.start_date.get_date().strftime('%Y-%m-%d')
+            end_date = self.end_date.get_date().strftime('%Y-%m-%d')
+            self.log("Process started.")
+
+            # Step 1: Download usernames
+            usernames = self.download_usernames()
+            if not usernames:
+                raise Exception("No usernames retrieved.")
+
+            # Step 2: Fetch JQL data
+            jql_files = self.fetch_jql_data(start_date, end_date, usernames)
+
+            # Step 3: Merge excels
+            self.merge_excels(jql_files, start_date, end_date)
+
+            # Step 4: Update daily final.xlsx
+            self.update_daily_final(start_date, end_date)
+
+            self.log("Process completed successfully.")
+            messagebox.showinfo("Success", "Process completed successfully!")
+        except Exception as e:
+            self.log(f"Error: {str(e)}")
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+        finally:
+            self.start_button.config(state='normal')
+
+    def download_usernames(self):
+        """Step 1: Download usernames and save to usernames.xlsx."""
+        self.log("Downloading usernames...")
+        headers = {"Authorization": f"Bearer {self.crm_token}"}
+        try:
+            response = requests.get(self.crm_url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            usernames = [user['email'].split('@')[0] for user in data.get('results', [])]
+
+            # Delete existing file
+            if os.path.exists("usernames.xlsx"):
+                os.remove("usernames.xlsx")
+                self.log("Deleted existing usernames.xlsx")
+
+            # Save to Excel
+            df = pd.DataFrame(usernames, columns=["Username"])
+            df.to_excel("usernames.xlsx", index=False)
+            self.log(f"Saved {len(usernames)} usernames to usernames.xlsx")
+            return usernames
+        except Exception as e:
+            self.log(f"Error downloading usernames: {str(e)}")
+            raise
+
+    def fetch_jql_data(self, start_date, end_date, usernames):
+        """Step 2: Fetch JQL data and save to jqlX.xlsx."""
+        self.log("Fetching JQL data...")
+        jql_files = []
+        jira = JIRA(server=self.jira_server, basic_auth=("user@example.com", self.jira_token))  # Replace with actual email
+
+        # Define JQL queries (example for jql1 to jql6, adjust as needed)
+        jql_templates = {
+            "jql1": 'status changed FROM "FS-SECURITY REVIEW PENDING" TO "FS-QA REVIEW PENDING" DURING ("{start_date}", "{end_date}") BY {username}',
+            "jql2": 'status changed FROM "FS-QA REVIEW PENDING" TO "DONE" DURING ("{start_date}", "{end_date}") BY {username}',  # Example
+            # Add jql3 to jql6 similarly
+        }
+
+        for jql_name, jql_template in jql_templates.items():
+            issues_list = []
+            for username in usernames[:3]:  # Limit to 3 usernames as per example
+                jql = jql_template.format(start_date=start_date, end_date=end_date, username=username)
+                self.log(f"Executing {jql_name} for {username}: {jql}")
+                try:
+                    issues = jira.search_issues(jql, maxResults=0)
+                    for issue in issues:
+                        issues_list.append({
+                            "Source": jql_name,
+                            "Issue Key": issue.key,
+                            "Status": issue.fields.status.name,
+                            "Project Name": issue.fields.project.name,
+                            "Priority": issue.fields.priority.name
+                        })
+                except Exception as e:
+                    self.log(f"Error fetching {jql_name} for {username}: {str(e)}")
+
+            if issues_list:
+                # Delete existing file
+                file_path = f"{jql_name}.xlsx"
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    self.log(f"Deleted existing {file_path}")
+
+                # Save to Excel
+                df = pd.DataFrame(issues_list)
+                df.to_excel(file_path, index=False)
+                jql_files.append(file_path)
+                self.log(f"Saved {len(issues_list)} issues to {file_path}")
+
+        return jql_files
+
+    def merge_excels(self, jql_files, start_date, end_date):
+        """Step 3: Merge excels into Date_{startdate_enddate}.xlsx."""
+        self.log("Merging Excel files...")
+        merged_data = pd.DataFrame()
+        for file in jql_files:
+            df = pd.read_excel(file)
+            merged_data = pd.concat([merged_data, df], ignore_index=True)
+
+        output_file = f"Date_{start_date}_{end_date}.xlsx"
+        if os.path.exists(output_file):
+            os.remove(output_file)
+            self.log(f"Deleted existing {output_file}")
+
+        # Save with formatting
+        workbook = xlsxwriter.Workbook(output_file)
+        worksheet = workbook.add_worksheet()
+        center_format = workbook.add_format({'align': 'center'})
+
+        # Write headers
+        headers = ["Source", "Issue Key", "Status", "Project Name", "Priority"]
+        for col, header in enumerate(headers):
+            worksheet.write(0, col, header, center_format)
+
+        # Write data
+        for row, data in enumerate(merged_data.itertuples(index=False), 1):
+            for col, value in enumerate(data):
+                worksheet.write(row, col, value, center_format)
+
+        workbook.close()
+        self.log(f"Merged data saved to {output_file}")
+
+    def update_daily_final(self, start_date, end_date):
+        """Step 4: Update daily final.xlsx with new data."""
+        self.log("Updating daily final.xlsx...")
+        date_str = datetime.datetime.strptime(start_date, '%Y-%m-%d').strftime('%d-%b-%Y')
+        jqls = [f"jql{i}" for i in range(1, 7)]  # Adjust based on actual JQLs
+
+        # Initialize or load existing final.xlsx
+        final_file = "final.xlsx"
+        if os.path.exists(final_file):
+            df_final = pd.read_excel(final_file)
+        else:
+            df_final = pd.DataFrame({"JQL": jqls + ["Total"]})
+
+        # Count issues for each JQL
+        counts = {}
+        for jql in jqls:
+            file_path = f"{jql}.xlsx"
+            if os.path.exists(file_path):
+                df = pd.read_excel(file_path)
+                counts[jql] = len(df)
+            else:
+                counts[jql] = 0
+
+        # Add new date column if not exists
+        if date_str not in df_final.columns:
+            df_final[date_str] = [counts.get(jql, 0) for jql in jqls] + [sum(counts.values())]
+
+        # Save with formatting
+        workbook = xlsxwriter.Workbook(final_file)
+        worksheet = workbook.add_worksheet()
+        center_format = workbook.add_format({'align': 'center'})
+
+        # Write headers
+        for col, header in enumerate(df_final.columns):
+            worksheet.write(0, col, header, center_format)
+
+        # Write data
+        for row, data in enumerate(df_final.itertuples(index=False), 1):
+            for col, value in enumerate(data):
+                format_to_use = None if col == 0 else center_format  # Left-align JQL column
+                worksheet.write(row, col, value, format_to_use)
+
+        workbook.close()
+        self.log(f"Updated {final_file} with data for {date_str}")
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = JiraDataUtility(root)
+    root.mainloop()
