@@ -76,14 +76,26 @@ class JiraDataUtility:
             self.start_button.config(state='normal')
 
     def download_usernames(self):
-        """Step 1: Download usernames and save to usernames.xlsx."""
-        self.log("Downloading usernames...")
+        """Step 1: Download usernames from JSON and save to usernames.xlsx."""
+        self.log("Downloading usernames from Dojo CRM API...")
         headers = {"Authorization": f"Bearer {self.crm_token}"}
         try:
             response = requests.get(self.crm_url, headers=headers)
             response.raise_for_status()
             data = response.json()
-            usernames = [user['email'].split('@')[0] for user in data.get('results', [])]
+
+            # Extract usernames from JSON
+            if 'results' not in data:
+                raise ValueError("JSON response does not contain 'results' key")
+            usernames = []
+            for user in data.get('results', []):
+                email = user.get('email', '')
+                if email and '@' in email:
+                    username = email.split('@')[0]
+                    usernames.append(username)
+
+            if not usernames:
+                raise ValueError("No valid usernames found in JSON response")
 
             # Delete existing file
             if os.path.exists("usernames.xlsx"):
@@ -92,7 +104,7 @@ class JiraDataUtility:
 
             # Save to Excel
             df = pd.DataFrame(usernames, columns=["Username"])
-            df.to_excel("usernames.xlsx", index=False)
+            df.to_excel("usernames.xlsx", index=False, engine='openpyxl')
             self.log(f"Saved {len(usernames)} usernames to usernames.xlsx")
             return usernames
         except Exception as e:
@@ -108,7 +120,7 @@ class JiraDataUtility:
         # Define JQL queries (example for jql1 to jql6, adjust as needed)
         jql_templates = {
             "jql1": 'status changed FROM "FS-SECURITY REVIEW PENDING" TO "FS-QA REVIEW PENDING" DURING ("{start_date}", "{end_date}") BY {username}',
-            "jql2": 'status changed FROM "FS-QA REVIEW PENDING" TO "DONE" DURING ("{start_date}", "{end_date}") BY {username}',  # Example
+            "jql2": 'status changed FROM "FS-QA REVIEW PENDING" TO "DONE" DURING ("{start_date}", "{end_date}") BY {username}',
             # Add jql3 to jql6 similarly
         }
 
@@ -139,7 +151,7 @@ class JiraDataUtility:
 
                 # Save to Excel
                 df = pd.DataFrame(issues_list)
-                df.to_excel(file_path, index=False)
+                df.to_excel(file_path, index=False, engine='openpyxl')
                 jql_files.append(file_path)
                 self.log(f"Saved {len(issues_list)} issues to {file_path}")
 
@@ -150,7 +162,7 @@ class JiraDataUtility:
         self.log("Merging Excel files...")
         merged_data = pd.DataFrame()
         for file in jql_files:
-            df = pd.read_excel(file)
+            df = pd.read_excel(file, engine='openpyxl')
             merged_data = pd.concat([merged_data, df], ignore_index=True)
 
         output_file = f"Date_{start_date}_{end_date}.xlsx"
@@ -185,7 +197,7 @@ class JiraDataUtility:
         # Initialize or load existing final.xlsx
         final_file = "final.xlsx"
         if os.path.exists(final_file):
-            df_final = pd.read_excel(final_file)
+            df_final = pd.read_excel(final_file, engine='openpyxl')
         else:
             df_final = pd.DataFrame({"JQL": jqls + ["Total"]})
 
@@ -194,7 +206,7 @@ class JiraDataUtility:
         for jql in jqls:
             file_path = f"{jql}.xlsx"
             if os.path.exists(file_path):
-                df = pd.read_excel(file_path)
+                df = pd.read_excel(file_path, engine='openpyxl')
                 counts[jql] = len(df)
             else:
                 counts[jql] = 0
