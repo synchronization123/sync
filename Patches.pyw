@@ -13,27 +13,33 @@ class DefectDojoGUI:
         self.root = root
         self.root.title("DefectDojo Data Fetcher")
         # Set medium-sized window
-        self.root.geometry("400x250")  # Increased window size
-        self.root.resizable(False, False)  # Prevent resizing for consistent appearance
+        self.root.geometry("400x250")
+        self.root.resizable(False, False)
         
         # Define larger font
         label_font = ("Arial", 12)
         button_font = ("Arial", 12)
         
+        # Set default dates (today is June 16, 2025, Monday)
+        today = datetime.now()
+        is_monday = today.weekday() == 0
+        default_end = today - timedelta(days=1)  # Yesterday: 2025-06-15
+        default_start = today - timedelta(days=3) if is_monday else default_end  # Friday: 2025-06-13 if Monday
+        
         # Create GUI elements with increased padding and size
         tk.Label(root, text="Start Date:", font=label_font).grid(row=0, column=0, padx=10, pady=10, sticky="e")
         self.start_date = DateEntry(root, date_pattern='yyyy-mm-dd', 
-                                  year=datetime.now().year, 
-                                  month=(datetime.now() - timedelta(days=3 if datetime.now().weekday() == 0 else 1)).month, 
-                                  day=(datetime.now() - timedelta(days=3 if datetime.now().weekday() == 0 else 1)).day,
+                                  year=default_start.year, 
+                                  month=default_start.month, 
+                                  day=default_start.day,
                                   font=label_font, width=15)
         self.start_date.grid(row=0, column=1, padx=10, pady=10)
 
         tk.Label(root, text="End Date:", font=label_font).grid(row=1, column=0, padx=10, pady=10, sticky="e")
         self.end_date = DateEntry(root, date_pattern='yyyy-mm-dd',
-                                 year=(datetime.now() - timedelta(days=1)).year,
-                                 month=(datetime.now() - timedelta(days=1)).month,
-                                 day=(datetime.now() - timedelta(days=1)).day,
+                                 year=default_end.year,
+                                 month=default_end.month,
+                                 day=default_end.day,
                                  font=label_font, width=15)
         self.end_date.grid(row=1, column=1, padx=10, pady=10)
 
@@ -55,7 +61,7 @@ class DefectDojoGUI:
             # API configuration
             url = "https://demo.defectdojo.org/api/v2/engagements/"
             headers = {
-                "Authorization": "Token DOJOTOKEN"
+                "Authorization": "Token DOJOTOKEN"  # Replace with actual token
             }
             
             # Get date range
@@ -80,9 +86,9 @@ class DefectDojoGUI:
             patches_data = []
             for item in data:
                 if 'pci' in item.get('tags', []) and item.get('status') == 'Completed':
-                    # Explicitly set 'Approved' for blank or null commit_hash
+                    # Set 'Approved' for blank/null commit_hash or any value other than 'Approved with Exception' or 'Rejected'
                     commit_hash = item.get('commit_hash')
-                    comment = 'Approved' if not commit_hash else commit_hash
+                    comment = 'Approved' if not commit_hash or commit_hash not in ['Approved with Exception', 'Rejected'] else commit_hash
                     patches_data.append({
                         'Patch': item.get('name', ''),
                         'IR': item.get('version', ''),
