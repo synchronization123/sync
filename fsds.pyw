@@ -1,3 +1,9 @@
+<xaiArtifact
+  artifact_id="b13ce776-aff1-4dff-80a8-c86e45d7fd03"
+  artifact_version_id="f3g4h5i6-d789-0123-e456-f78901234567"
+  title="jira_data_utility.pyw"
+  contentType="text/python"
+>
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
@@ -8,6 +14,9 @@ import pandas as pd
 import xlsxwriter
 from pathlib import Path
 import numpy as np
+
+# Set working directory to script's directory
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 class JiraDataUtility:
     def __init__(self, root):
@@ -44,10 +53,14 @@ class JiraDataUtility:
         self.console.config(yscrollcommand=scrollbar.set)
 
         # API Tokens
-        self.crm_token = "DOJOTOKEN"
-        self.jira_token = "JIRATOKEN"
+        self.crm_token = "token"
+        self.jira_token = "token+3+e8Zt1UH"
         self.crm_url = "https://demo.defectdojo.org/api/v2/users/?is_active=true&limit=100"
         self.jira_server = "https://jira.demo.almworks.com"
+
+        # Initialize JQL templates and display names
+        self.jql_templates = {}
+        self.jql_display_names = {}
 
     def log(self, message):
         """Log messages to GUI text area."""
@@ -149,23 +162,32 @@ class JiraDataUtility:
         """Step 2: Fetch JQL data using HTTP requests with Bearer token and save to jqlX.xlsx."""
         self.log("Fetching JQL data...")
         jql_files = []
+
+        # Define JQL queries and display names
+        self.jql_templates = {
+            "jql1": 'status changed FROM "OPEN" TO "CLOSED" DURING ("{start_date}", "{end_date}") BY {username}',
+            "jql2": 'status = "RESOLVED" DURING ("{start_date}", "{end_date}") BY {username}',
+            "jql3": 'status = "IN PROGRESS" DURING ("{start_date}", "{end_date}") BY {username}',
+            # Add or remove JQLs as needed
+        }
+        self.jql_display_names = {
+            "jql1": "Closed Issues",
+            "jql2": "Resolved Issues",
+            "jql3": "In Progress Issues",
+            # Match keys to jql_templates
+        }
+
         headers = {
             "Authorization": f"Bearer {self.jira_token}",
             "Content-Type": "application/json"
         }
         jira_base_url = f"{self.jira_server}/rest/api/2/search"
 
-        # Define JQL queries
-        jql_templates = {
-            "jql1": 'status changed FROM "OPEN" TO "CLOSED" DURING ("{start_date}", "{end_date}") BY {username}',
-            "jql2": 'status changed FROM "OPEN" TO "RESOLVED" DURING ("{start_date}", "{end_date}") BY {username}',
-        }
-
-        for jql_name, jql_template in jql_templates.items():
+        for jql_name, jql_template in self.jql_templates.items():
             issues_list = []
             for username in usernames[:3]:
                 jql = jql_template.format(start_date=start_date, end_date=end_date, username=username)
-                self.log(f"Executing {jql_name} for {username}: {jql}")
+                self.log(f"Executing {jql_name} ({self.jql_display_names.get(jql_name, jql_name)}) for {username}: {jql}")
                 try:
                     start_at = 0
                     max_results = 50
@@ -242,28 +264,26 @@ class JiraDataUtility:
         self.log(f"Merged data saved to {output_file}")
 
     def update_daily_final(self, start_date, end_date):
-        """Step 4: Update daily final.xlsx, hide zeros for jql1-jql6, handle NaN/INF, apply bold and borders, then delete files."""
+        """Step 4: Update daily final.xlsx, hide zeros for JQLs, handle NaN/INF, apply bold and borders, then delete files."""
         self.log("Updating daily final.xlsx...")
         date_str = datetime.datetime.strptime(start_date, '%Y-%m-%d').strftime('%d-%b-%Y')
-        jqls = [f"jql{i}" for i in range(1, 7)]
+        jqls = list(self.jql_templates.keys())
 
         # Initialize or load existing final.xlsx
         final_file = "final.xlsx"
         if os.path.exists(final_file):
             try:
                 df_final = pd.read_excel(final_file, engine='openpyxl')
-                # Replace NaN with 0 to handle invalid values
                 df_final = df_final.fillna(0)
                 self.log("Loaded existing final.xlsx and replaced NaN with 0")
-                # Log if INF exists
                 if np.isinf(df_final.select_dtypes(include=np.number)).any().any():
                     self.log("Warning: INF values detected in final.xlsx, replacing with 0")
                     df_final = df_final.replace([np.inf, -np.inf], 0)
             except Exception as e:
                 self.log(f"Error reading final.xlsx: {str(e)}, initializing new DataFrame")
-                df_final = pd.DataFrame({"JQL": jqls + ["Total"]})
+                df_final = pd.DataFrame({"JQL": [self.jql_display_names.get(jql, jql) for jql in jqls] + ["Total"]})
         else:
-            df_final = pd.DataFrame({"JQL": jqls + ["Total"]})
+            df_final = pd.DataFrame({"JQL": [self.jql_display_names.get(jql, jql) for jql in jqls] + ["Total"]})
             self.log("Initialized new final.xlsx")
 
         # Count issues for each JQL
@@ -311,23 +331,20 @@ class JiraDataUtility:
             format_to_use = bold_left_format if col == 0 else bold_center_format
             worksheet.write(0, col, header, format_to_use)
 
-        # Write data, hide zeros for jql1-jql6
+        # Write data, hide zeros for JQLs
         for row, data in enumerate(df_final.itertuples(index=False), 1):
             is_total_row = data[0] == "Total"
             for col, value in enumerate(data):
-                # Convert value to float to check for NaN/INF
                 try:
                     numeric_value = float(value)
                     if np.isnan(numeric_value) or np.isinf(numeric_value):
                         self.log(f"NaN/INF detected at row {row}, col {col}, replacing with 0")
                         value = 0
                 except (ValueError, TypeError):
-                    pass  # Non-numeric, keep as is
-                # Hide zeros for jql1-jql6 in non-JQL columns
+                    pass
                 display_value = value
                 if col > 0 and not is_total_row and value == 0:
                     display_value = ""
-                # Apply formatting
                 if col == 0 or is_total_row:
                     format_to_use = bold_left_format if col == 0 else bold_center_format
                 else:
@@ -338,7 +355,7 @@ class JiraDataUtility:
         self.log(f"Updated {final_file} with data for {date_str}")
 
         # Delete intermediate files
-        files_to_delete = [f"jql{i}.xlsx" for i in range(1, 7)] + ["usernames.xlsx"]
+        files_to_delete = [f"{jql}.xlsx" for jql in jqls] + ["usernames.xlsx"]
         for file in files_to_delete:
             try:
                 if os.path.exists(file):
