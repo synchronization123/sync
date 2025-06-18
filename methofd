@@ -1,0 +1,35 @@
+import requests
+
+url = "https://abc.crm.com/portal/storecontroller?action=getkeys"
+
+# Step 1: Check current GET response
+print("=== GET Response ===")
+resp = requests.get(url)
+print(resp.status_code)
+print(resp.json())
+
+# Step 2: Try POST, PUT, PATCH to attempt override
+payload = {
+    "cache": {
+        "enablerater": "no"
+    }
+}
+
+headers = {
+    "Content-Type": "application/json"
+}
+
+print("\n=== POST Attempt ===")
+post = requests.post(url, json=payload, headers=headers)
+print(post.status_code)
+print(post.text)
+
+print("\n=== PUT Attempt ===")
+put = requests.put(url, json=payload, headers=headers)
+print(put.status_code)
+print(put.text)
+
+print("\n=== PATCH Attempt ===")
+patch = requests.patch(url, json=payload, headers=headers)
+print(patch.status_code)
+print(patch.text)
