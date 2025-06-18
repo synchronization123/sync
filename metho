@@ -1,0 +1,27 @@
+import requests
+
+# Target endpoint
+url = "https://test.crm.com/few/ScheduledJobseevlet"
+
+# List of HTTP methods to try
+methods = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'TRACE', 'HEAD']
+
+# Optional: headers (you can add cookies/auth headers if needed)
+headers = {
+    "User-Agent": "MethodTester/1.0"
+}
+
+print(f"Testing methods on {url}\n")
+
+for method in methods:
+    try:
+        response = requests.request(method, url, headers=headers)
+        print(f"{method:7} --> Status Code: {response.status_code}", end="")
+
+        # Check if server gives 'Allow' header in 405 response
+        if response.status_code == 405 and 'Allow' in response.headers:
+            print(f" | Allow: {response.headers['Allow']}")
+        else:
+            print()
+    except Exception as e:
+        print(f"{method:7} --> ERROR: {e}")
