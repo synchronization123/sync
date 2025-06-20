@@ -50,10 +50,7 @@ class JiraDataUtility:
             date_pattern='yyyy-mm-dd',
             year=yesterday.year,
             month=yesterday.month,
-            day=yesterday.day,
-            background='darkblue',
-            foreground='white',
-            borderwidth=2
+            day=yesterday.day
         )
         self.start_date.pack(side=tk.LEFT, padx=5)
 
@@ -65,10 +62,7 @@ class JiraDataUtility:
             date_pattern='yyyy-mm-dd',
             year=default_end.year,
             month=default_end.month,
-            day=default_end.day,
-            background='darkblue',
-            foreground='white',
-            borderwidth=2
+            day=default_end.day
         )
         self.end_date.pack(side=tk.LEFT, padx=5)
 
@@ -195,16 +189,18 @@ class JiraDataUtility:
             self.progress['value'] = 100
 
             self.log("Process completed successfully.")
-            self.root.after(0, lambda: messagebox.showinfo("Success", "Process completed successfully!"))
-        except Exception as exc:
-            self.log(f"Error: {str(exc)}")
-            self.root.after(0, lambda err=exc: messagebox.showerror("Error", f"An error occurred: {str(err)}"))
+            self.root.after(1, lambda: messagebox.showinfo("info", "Process completed successfully"))
+        except Exception as e:
+            self.log(f"Error: {str(e)}")
+            self.root.after(
+                1, lambda err=e: messagebox.showerror("Error", f"An error occurred: {str(err)}")
+            )
         finally:
             self.loading_label.config(text="")
-            self.start_button.config(state='normal')
+            self.start_button.config(state="normal")
 
     def download_usernames(self):
-        """Step 1: Download usernames from DefectDojo CRM API and save to usernames.xlsx."""
+        """Step 1: Download usernames from DefectDojo CRM API and save to Excel."""
         self.log("Downloading users from DefectDojo CRM API...")
         headers = {"Authorization": f"Token {self.crm_token}"}
         usernames = []
@@ -214,11 +210,11 @@ class JiraDataUtility:
 
         try:
             while url and page <= max_pages:
-                self.log(f"Fetching page {page} from {url}")
+                self.log(f"Fetching page {page} from {url}"...")
                 response = requests.get(url, headers=headers, timeout=10)
                 response.raise_for_status()
                 data = response.json()
-                self.log(f"Extracted {len(data.get('results', []))} users from page {page}")
+                self.log(f"Extracted {len(data.get('results', []))} users from page {page}...")
 
                 if 'results' not in data:
                     raise ValueError(f"JSON response does not contain 'results' key. Response: {data}")
@@ -256,8 +252,8 @@ class JiraDataUtility:
         except ValueError as val_err:
             self.log(f"Value error: {val_err}")
             raise
-        except Exception as exc:
-            self.log(f"Unexpected error downloading usernames: {str(exc)}")
+        except Exception as e:
+            self.log(f"Unexpected error downloading usernames: {str(e)}")
             raise
 
     def fetch_jql_data(self, start_date, end_date, usernames):
@@ -270,9 +266,9 @@ class JiraDataUtility:
             "jql1": 'status changed FROM "FS-SECURITY REVIEW PENDING" TO "FS-QA REVIEW PENDING" DURING ("{start_date}", "{end_date}") BY {username}',
             "jql2": 'status changed FROM "FS-SECURITY REVIEW PENDING" TO "FUNCTIONAL SPECIFICATION PENDING" DURING ("{start_date}", "{end_date}") BY {username}',
             "jql3": 'status changed FROM "DS-SECURITY REVIEW PENDING" TO "DESIGN SPECIFICATION ACCEPTED" DURING ("{start_date}", "{end_date}") BY {username}',
-            "jql4": 'status changed FROM "DS-SECURITY REVIEW PENDING" TO "TO DO" DURING ("{start_date}", "{end_date}") BY {username}',
-            "jql5": 'status changed FROM "READY FOR SECURITY" TO "READY FOR PA" DURING ("{start_date}", "{end_date}") BY {username}',
-            "jql6": 'status changed FROM "READY FOR SECURITY" TO "REOPENED" DURING ("{start_date}", "{end_date}") BY {username}',
+            "jql4": 'status changed FROM "TO DO" TO "SS-SECURITY REVIEW PENDING" to "DO" DURING ("{start_date}", "{end_date}") BY {username}',
+            "jql5": 'status changed FROM "READY FOR SECURITY" TO "READY FOR PAINT" DURING ("{start_date}", "{end_date}") BY {start_date}',
+            "jql6": 'status changed FROM "REOPENED" TO "REOPENED" DURING ("start_date}", "{start_date}") BY {end_date}',
         }
         self.jql_display_names = {
             "jql1": "FS Accepted",
@@ -296,7 +292,7 @@ class JiraDataUtility:
                 self.log(f"Executing {jql_name} ({self.jql_display_names.get(jql_name, jql_name)}) for {username}")
                 try:
                     start_at = 0
-                    max_results = 50
+                    max_results = start_at
                     while True:
                         payload = {"jql": jql, "startAt": start_at, "maxResults": max_results}
                         response = requests.post(jira_base_url, headers=headers, json=payload, timeout=10)
@@ -324,8 +320,8 @@ class JiraDataUtility:
                 except requests.exceptions.HTTPError as http_err:
                     self.log(f"HTTP error fetching {jql_name} for {username}: {http_err}")
                     continue
-                except Exception as exc:
-                    self.log(f"Error fetching {jql_name} for {username}: {str(exc)}")
+                except Exception as e:
+                    self.log(f"Error fetching {jql_name} for {username}: {str(e)}")
                     continue
 
             if issues_list:
@@ -385,8 +381,8 @@ class JiraDataUtility:
                 if np.isinf(df_final.select_dtypes(include=np.number)).any().any():
                     self.log("Warning: INF values detected in finals.xlsx, replacing with 0")
                     df_final = df_final.replace([np.inf, -np.inf], 0)
-            except Exception as exc:
-                self.log(f"Error reading finals.xlsx: {str(exc)}")
+            except Exception as e:
+                self.log(f"Error reading finals.xlsx: {str(e)}")
                 df_final = pd.DataFrame({"Type": [self.jql_display_names.get(jql, jql) for jql in jqls] + ["Total"]})
         else:
             df_final = pd.DataFrame({"Type": [self.jql_display_names.get(jql, jql) for jql in jqls] + ["Total"]})
@@ -402,8 +398,8 @@ class JiraDataUtility:
                     df = pd.read_excel(file_path, engine='openpyxl')
                     counts[jql] = len(df)
                     self.log(f"Counted {counts[jql]} issues in {file_path}")
-                except Exception as exc:
-                    self.log(f"Error reading {file_path}: {str(exc)}")
+                except Exception as e:
+                    self.log(f"Error reading {file_path}: {str(e)}")
             else:
                 self.log(f"File {file_path} does not exist, count set to 0")
 
@@ -466,8 +462,8 @@ class JiraDataUtility:
                     self.log(f"Deleted {file}")
                 else:
                     self.log(f"File {file} does not exist, skipping deletion")
-            except Exception as exc:
-                self.log(f"Error deleting {file}: {str(exc)}")
+            except Exception as e:
+                self.log(f"Error deleting {file}: {str(e)}")
 
 if __name__ == "__main__":
     root = ttkb.Window()
