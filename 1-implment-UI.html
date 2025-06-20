@@ -5,15 +5,15 @@ import datetime
 import os
 import requests
 import pandas as pd
-from jira import JIRA
 import xlsxwriter
 from pathlib import Path
+import numpy as np
 
 class JiraDataUtility:
     def __init__(self, root):
         self.root = root
         self.root.title("Jira Data Utility")
-        self.root.geometry("400x300")
+        self.root.geometry("600x600")
 
         # Default dates
         today = datetime.date.today()
@@ -24,26 +24,43 @@ class JiraDataUtility:
             default_end = yesterday
 
         # GUI Elements
-        tk.Label(root, text="Start Date:").grid(row=0, column=0, padx=10, pady=10)
+        tk.Label(root, text="Start Date:").pack(pady=5)
         self.start_date = DateEntry(root, width=12, date_pattern='yyyy-mm-dd', year=yesterday.year, month=yesterday.month, day=yesterday.day)
-        self.start_date.grid(row=0, column=1, padx=10, pady=10)
+        self.start_date.pack(pady=5)
 
-        tk.Label(root, text="End Date:").grid(row=1, column=0, padx=10, pady=10)
+        tk.Label(root, text="End Date:").pack(pady=5)
         self.end_date = DateEntry(root, width=12, date_pattern='yyyy-mm-dd', year=default_end.year, month=default_end.month, day=default_end.day)
-        self.end_date.grid(row=1, column=1, padx=10, pady=10)
+        self.end_date.pack(pady=5)
 
         self.start_button = tk.Button(root, text="Start", command=self.start_process)
-        self.start_button.grid(row=2, column=0, columnspan=2, pady=20)
+        self.start_button.pack(pady=10)
+
+        # Console area
+        tk.Label(root, text="Execution Log:").pack(pady=5)
+        self.console = tk.Text(root, height=20, width=70, state='disabled', wrap=tk.WORD)
+        self.console.pack(pady=5)
+        scrollbar = tk.Scrollbar(root, orient=tk.VERTICAL, command=self.console.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.console.config(yscrollcommand=scrollbar.set)
 
         # API Tokens
-        self.crm_token = "sjsjdnnd"
-        self.jira_token = "sjsjsndn"
-        self.crm_url = "https://dojo.crm.com/api/v2/users/?is_active=true&limit=100"
-        self.jira_server = "https://crm.jirs.com"
+        self.crm_token = "crm_token"
+        self.jira_token = "jira_token"
+        self.crm_url = "https://demo.defectdojo.org/api/v2/users/?is_active=true&limit=100"
+        self.jira_server = "https://jira.crm.com"
+
+        # Initialize JQL templates and display names
+        self.jql_templates = {}
+        self.jql_display_names = {}
 
     def log(self, message):
-        """Print progress to console."""
-        print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {message}")
+        """Log messages to GUI text area."""
+        self.console.config(state='normal')
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        self.console.insert(tk.END, f"{timestamp}: {message}\n")
+        self.console.see(tk.END)
+        self.console.config(state='disabled')
+        self.root.update()
 
     def start_process(self):
         """Main process triggered by Start button."""
@@ -64,7 +81,7 @@ class JiraDataUtility:
             # Step 3: Merge excels
             self.merge_excels(jql_files, start_date, end_date)
 
-            # Step 4: Update daily final.xlsx
+            # Step 4: Update daily FS-DS-RFS-Data.xlsx
             self.update_daily_final(start_date, end_date)
 
             self.log("Process completed successfully.")
@@ -76,80 +93,138 @@ class JiraDataUtility:
             self.start_button.config(state='normal')
 
     def download_usernames(self):
-        """Step 1: Download usernames from JSON and save to usernames.xlsx."""
-        self.log("Downloading usernames from Dojo CRM API...")
-        headers = {"Authorization": f"Bearer {self.crm_token}"}
-        try:
-            response = requests.get(self.crm_url, headers=headers)
-            response.raise_for_status()
-            data = response.json()
+        """Step 1: Download usernames from DefectDojo CRM API and save to usernames.xlsx."""
+        self.log("Downloading users from DefectDojo CRM API...")
+        headers = {"Authorization": f"Token {self.crm_token}"}
+        usernames = []
+        url = self.crm_url
+        page = 1
+        max_pages = 10
 
-            # Extract usernames from JSON
-            if 'results' not in data:
-                raise ValueError("JSON response does not contain 'results' key")
-            usernames = []
-            for user in data.get('results', []):
-                email = user.get('email', '')
-                if email and '@' in email:
-                    username = email.split('@')[0]
-                    usernames.append(username)
+        try:
+            while url and page <= max_pages:
+                self.log(f"Fetching page {page} from {url}")
+                response = requests.get(url, headers=headers, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                self.log(f"Extracted {len(data.get('results', []))} users from page {page}")
+
+                if 'results' not in data:
+                    raise ValueError(f"JSON response does not contain 'results' key. Response: {data}")
+
+                for user in data.get('results', []):
+                    email = user.get('email', '')
+                    if email and '@' in email:
+                        username = email.split('@')[0]
+                        usernames.append(username)
+                    else:
+                        self.log(f"Skipping user with invalid email: {user}")
+
+                url = data.get('next', None)
+                page += 1
 
             if not usernames:
-                raise ValueError("No valid usernames found in JSON response")
+                raise ValueError("No valid usernames found in API response")
 
-            # Delete existing file
-            if os.path.exists("usernames.xlsx"):
-                os.remove("usernames.xlsx")
-                self.log("Deleted existing usernames.xlsx")
+            output_file = "usernames.xlsx"
+            if os.path.exists(output_file):
+                os.remove(output_file)
+                self.log(f"Deleted existing {output_file}")
 
-            # Save to Excel
             df = pd.DataFrame(usernames, columns=["Username"])
-            df.to_excel("usernames.xlsx", index=False, engine='openpyxl')
-            self.log(f"Saved {len(usernames)} usernames to usernames.xlsx")
+            df.to_excel(output_file, index=False, engine='openpyxl')
+            self.log(f"Saved {len(usernames)} usernames to {output_file}")
             return usernames
+
+        except requests.exceptions.HTTPError as http_err:
+            self.log(f"HTTP error occurred: {http_err}, Response: {response.text}")
+            raise
+        except requests.exceptions.RequestException as req_err:
+            self.log(f"Request error occurred: {req_err}")
+            raise
+        except ValueError as val_err:
+            self.log(f"Value error: {val_err}")
+            raise
         except Exception as e:
-            self.log(f"Error downloading usernames: {str(e)}")
+            self.log(f"Unexpected error downloading usernames: {str(e)}")
             raise
 
     def fetch_jql_data(self, start_date, end_date, usernames):
-        """Step 2: Fetch JQL data and save to jqlX.xlsx."""
+        """Step 2: Fetch JQL data using HTTP requests with Bearer token and save to jqlX.xlsx."""
         self.log("Fetching JQL data...")
         jql_files = []
-        jira = JIRA(server=self.jira_server, basic_auth=("user@example.com", self.jira_token))  # Replace with actual email
 
-        # Define JQL queries (example for jql1 to jql6, adjust as needed)
-        jql_templates = {
+        # Define JQL queries and display names
+        self.jql_templates = {
             "jql1": 'status changed FROM "FS-SECURITY REVIEW PENDING" TO "FS-QA REVIEW PENDING" DURING ("{start_date}", "{end_date}") BY {username}',
-            "jql2": 'status changed FROM "FS-QA REVIEW PENDING" TO "DONE" DURING ("{start_date}", "{end_date}") BY {username}',
-            # Add jql3 to jql6 similarly
+            "jql2": 'status changed FROM "FS-SECURITY REVIEW PENDING" TO "FUNCTIONAL SPECIFICATION PENDING" DURING ("{start_date}", "{end_date}") BY {username}',
+            "jql3": 'status changed FROM "DS-SECURITY REVIEW PENDING" TO "DESIGN SPECIFICATION ACCEPTED" DURING ("{start_date}", "{end_date}") BY {username}',
+            "jql4": 'status changed FROM "DS-SECURITY REVIEW PENDING" TO "TO DO" DURING ("{start_date}", "{end_date}") BY {username}',
+            "jql5": 'status changed FROM "READY FOR SECURITY" TO "READY FOR PA" DURING ("{start_date}", "{end_date}") BY {username}',
+            "jql6": 'status changed FROM "READY FOR SECURITY" TO "REOPENED" DURING ("{start_date}", "{end_date}") BY {username}',
+            # Add or remove JQLs as needed
+        }
+        self.jql_display_names = {
+            "jql1": "FS Accepted",
+            "jql2": "FS Rejected",
+            "jql3": "DS Accepted",
+            "jql4": "DS Rejected",
+            "jql5": "RFS Accepted",
+            "jql6": "RFS Rejected",
+            # Match keys to jql_templates
         }
 
-        for jql_name, jql_template in jql_templates.items():
+        headers = {
+            "Authorization": f"Bearer {self.jira_token}",
+            "Content-Type": "application/json"
+        }
+        jira_base_url = f"{self.jira_server}/rest/api/2/search"
+
+        for jql_name, jql_template in self.jql_templates.items():
             issues_list = []
-            for username in usernames[:3]:  # Limit to 3 usernames as per example
+            for username in usernames[:100]:
                 jql = jql_template.format(start_date=start_date, end_date=end_date, username=username)
-                self.log(f"Executing {jql_name} for {username}: {jql}")
+                self.log(f"Executing {jql_name} ({self.jql_display_names.get(jql_name, jql_name)}) for {username}: {jql}")
                 try:
-                    issues = jira.search_issues(jql, maxResults=0)
-                    for issue in issues:
-                        issues_list.append({
-                            "Source": jql_name,
-                            "Issue Key": issue.key,
-                            "Status": issue.fields.status.name,
-                            "Project Name": issue.fields.project.name,
-                            "Priority": issue.fields.priority.name
-                        })
+                    start_at = 0
+                    max_results = 50
+                    while True:
+                        payload = {"jql": jql, "startAt": start_at, "maxResults": max_results}
+                        response = requests.post(jira_base_url, headers=headers, json=payload, timeout=10)
+                        response.raise_for_status()
+                        data = response.json()
+
+                        if "issues" not in data:
+                            self.log(f"No 'issues' key in response for {jql_name}: {data}")
+                            break
+
+                        for issue in data.get("issues", []):
+                            issues_list.append({
+                                "Source": jql_name,
+                                "Issue Key": issue.get("key", ""),
+                                "Status": issue.get("fields", {}).get("status", {}).get("name", ""),
+                                "Project Name": issue.get("fields", {}).get("project", {}).get("name", ""),
+                                "Priority": issue.get("fields", {}).get("priority", {}).get("name", "")
+                            })
+
+                        total = data.get("total", 0)
+                        start_at += max_results
+                        if start_at >= total:
+                            break
+
+                except requests.exceptions.HTTPError as http_err:
+                    self.log(f"HTTP error fetching {jql_name} for {username}: {http_err}, Response: {response.text}")
+                    continue
                 except Exception as e:
                     self.log(f"Error fetching {jql_name} for {username}: {str(e)}")
+                    continue
 
             if issues_list:
-                # Delete existing file
                 file_path = f"{jql_name}.xlsx"
                 if os.path.exists(file_path):
                     os.remove(file_path)
                     self.log(f"Deleted existing {file_path}")
 
-                # Save to Excel
                 df = pd.DataFrame(issues_list)
                 df.to_excel(file_path, index=False, engine='openpyxl')
                 jql_files.append(file_path)
@@ -170,17 +245,14 @@ class JiraDataUtility:
             os.remove(output_file)
             self.log(f"Deleted existing {output_file}")
 
-        # Save with formatting
         workbook = xlsxwriter.Workbook(output_file)
         worksheet = workbook.add_worksheet()
         center_format = workbook.add_format({'align': 'center'})
 
-        # Write headers
         headers = ["Source", "Issue Key", "Status", "Project Name", "Priority"]
         for col, header in enumerate(headers):
             worksheet.write(0, col, header, center_format)
 
-        # Write data
         for row, data in enumerate(merged_data.itertuples(index=False), 1):
             for col, value in enumerate(data):
                 worksheet.write(row, col, value, center_format)
@@ -189,49 +261,112 @@ class JiraDataUtility:
         self.log(f"Merged data saved to {output_file}")
 
     def update_daily_final(self, start_date, end_date):
-        """Step 4: Update daily final.xlsx with new data."""
-        self.log("Updating daily final.xlsx...")
+        """Step 4: Update daily FS-DS-RFS-Data.xlsx, hide zeros for JQLs, handle NaN/INF, apply bold and borders, then delete files."""
+        self.log("Updating daily FS-DS-RFS-Data.xlsx...")
         date_str = datetime.datetime.strptime(start_date, '%Y-%m-%d').strftime('%d-%b-%Y')
-        jqls = [f"jql{i}" for i in range(1, 7)]  # Adjust based on actual JQLs
+        jqls = list(self.jql_templates.keys())  # Use defined JQLs dynamically
 
-        # Initialize or load existing final.xlsx
-        final_file = "final.xlsx"
+        # Initialize or load existing FS-DS-RFS-Data.xlsx
+        final_file = "finals.xlsx"
         if os.path.exists(final_file):
-            df_final = pd.read_excel(final_file, engine='openpyxl')
+            try:
+                df_final = pd.read_excel(final_file, engine='openpyxl')
+                # Replace NaN with 0
+                df_final = df_final.fillna(0)
+                self.log("Loaded existing FS-DS-RFS-Data.xlsx and replaced NaN with 0")
+                # Replace INF
+                if np.isinf(df_final.select_dtypes(include=np.number)).any().any():
+                    self.log("Warning: INF values detected in FS-DS-RFS-Data.xlsx, replacing with 0")
+                    df_final = df_final.replace([np.inf, -np.inf], 0)
+            except Exception as e:
+                self.log(f"Error reading FS-DS-RFS-Data.xlsx: {str(e)}, initializing new DataFrame")
+                df_final = pd.DataFrame({"Type": [self.jql_display_names.get(jql, jql) for jql in jqls] + ["Total"]})
         else:
-            df_final = pd.DataFrame({"JQL": jqls + ["Total"]})
+            df_final = pd.DataFrame({"Type": [self.jql_display_names.get(jql, jql) for jql in jqls] + ["Total"]})
+            self.log("Initialized new FS-DS-RFS-Data.xlsx")
 
         # Count issues for each JQL
         counts = {}
         for jql in jqls:
             file_path = f"{jql}.xlsx"
+            counts[jql] = 0
             if os.path.exists(file_path):
-                df = pd.read_excel(file_path, engine='openpyxl')
-                counts[jql] = len(df)
+                try:
+                    df = pd.read_excel(file_path, engine='openpyxl')
+                    counts[jql] = len(df)
+                    self.log(f"Counted {counts[jql]} issues in {file_path}")
+                except Exception as e:
+                    self.log(f"Error reading {file_path}: {str(e)}")
             else:
-                counts[jql] = 0
+                self.log(f"File {file_path} does not exist, count set to 0")
 
         # Add new date column if not exists
         if date_str not in df_final.columns:
             df_final[date_str] = [counts.get(jql, 0) for jql in jqls] + [sum(counts.values())]
+            self.log(f"Added new date column {date_str}")
 
         # Save with formatting
-        workbook = xlsxwriter.Workbook(final_file)
+        workbook = xlsxwriter.Workbook(final_file, {'nan_inf_to_errors': True})
         worksheet = workbook.add_worksheet()
-        center_format = workbook.add_format({'align': 'center'})
+
+        # Define formats
+        bold_center_format = workbook.add_format({
+            'bold': True,
+            'align': 'center',
+            'border': 1
+        })
+        bold_left_format = workbook.add_format({
+            'bold': True,
+            'align': 'left',
+            'border': 1
+        })
+        center_format = workbook.add_format({
+            'align': 'center',
+            'border': 1
+        })
 
         # Write headers
         for col, header in enumerate(df_final.columns):
-            worksheet.write(0, col, header, center_format)
+            format_to_use = bold_left_format if col == 0 else bold_center_format
+            worksheet.write(0, col, header, format_to_use)
 
-        # Write data
+        # Write data, hide zeros for JQLs
         for row, data in enumerate(df_final.itertuples(index=False), 1):
+            is_total_row = data[0] == "Total"
             for col, value in enumerate(data):
-                format_to_use = None if col == 0 else center_format  # Left-align JQL column
-                worksheet.write(row, col, value, format_to_use)
+                # Check for NaN/INF
+                try:
+                    numeric_value = float(value)
+                    if np.isnan(numeric_value) or np.isinf(numeric_value):
+                        self.log(f"NaN/INF detected at row {row}, col {col}, replacing with 0")
+                        value = 0
+                except (ValueError, TypeError):
+                    pass
+                # Hide zeros for non-Total rows in non-JQL columns
+                display_value = value
+                if col > 0 and not is_total_row and value == 0:
+                    display_value = ""
+                # Apply formatting
+                if col == 0 or is_total_row:
+                    format_to_use = bold_left_format if col == 0 else bold_center_format
+                else:
+                    format_to_use = center_format
+                worksheet.write(row, col, display_value, format_to_use)
 
         workbook.close()
         self.log(f"Updated {final_file} with data for {date_str}")
+
+        # Delete intermediate files
+        files_to_delete = [f"{jql}.xlsx" for jql in jqls] + ["usernames.xlsx"]
+        for file in files_to_delete:
+            try:
+                if os.path.exists(file):
+                    os.remove(file)
+                    self.log(f"Deleted {file}")
+                else:
+                    self.log(f"File {file} does not exist, skipping deletion")
+            except Exception as e:
+                self.log(f"Error deleting {file}: {str(e)}")
 
 if __name__ == "__main__":
     root = tk.Tk()
