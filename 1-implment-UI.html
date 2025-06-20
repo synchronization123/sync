@@ -3,17 +3,31 @@ from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
 import datetime
 import os
+from pathlib import Path
 import requests
 import pandas as pd
 import xlsxwriter
-from pathlib import Path
 import numpy as np
 
 class JiraDataUtility:
     def __init__(self, root):
         self.root = root
         self.root.title("Jira Data Utility")
-        self.root.geometry("600x600")
+        self.root.geometry("700x650")
+        self.root.resizable(True, True)
+
+        # Set modern theme
+        style = ttk.Style()
+        style.theme_use('clam')  # Modern theme: 'clam', 'alt', 'default', or 'classic'
+
+        # Configure styles
+        style.configure('TLabel', font=('Helvetica', 10))
+        style.configure('TButton', font=('Helvetica', 10), padding=5)
+        style.configure('TFrame', padding=10)
+
+        # Main frame
+        self.main_frame = ttk.Frame(self.root)
+        self.main_frame.pack(fill='both', expand=True, padx=10, pady=10)
 
         # Default dates
         today = datetime.date.today()
@@ -24,24 +38,48 @@ class JiraDataUtility:
             default_end = yesterday
 
         # GUI Elements
-        tk.Label(root, text="Start Date:").pack(pady=5)
-        self.start_date = DateEntry(root, width=12, date_pattern='yyyy-mm-dd', year=yesterday.year, month=yesterday.month, day=yesterday.day)
+        ttk.Label(self.main_frame, text="Start Date:").pack(pady=5)
+        self.start_date = DateEntry(
+            self.main_frame, width=12, date_pattern='yyyy-mm-dd',
+            year=yesterday.year, month=yesterday.month, day=yesterday.day,
+            font=('Helvetica', 10)
+        )
         self.start_date.pack(pady=5)
 
-        tk.Label(root, text="End Date:").pack(pady=5)
-        self.end_date = DateEntry(root, width=12, date_pattern='yyyy-mm-dd', year=default_end.year, month=default_end.month, day=default_end.day)
+        ttk.Label(self.main_frame, text="End Date:").pack(pady=5)
+        self.end_date = DateEntry(
+            self.main_frame, width=12, date_pattern='yyyy-mm-dd',
+            year=default_end.year, month=default_end.month, day=default_end.day,
+            font=('Helvetica', 10)
+        )
         self.end_date.pack(pady=5)
 
-        self.start_button = tk.Button(root, text="Start", command=self.start_process)
+        self.start_button = ttk.Button(self.main_frame, text="Start", command=self.start_process)
         self.start_button.pack(pady=10)
 
         # Console area
-        tk.Label(root, text="Execution Log:").pack(pady=5)
-        self.console = tk.Text(root, height=20, width=70, state='disabled', wrap=tk.WORD)
-        self.console.pack(pady=5)
-        scrollbar = tk.Scrollbar(root, orient=tk.VERTICAL, command=self.console.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        ttk.Label(self.main_frame, text="Execution Log:").pack(pady=5)
+        self.console_frame = ttk.Frame(self.main_frame)
+        self.console_frame.pack(fill='both', expand=True, pady=5)
+        
+        self.console = tk.Text(
+            self.console_frame, height=20, width=70, wrap='word',
+            font=('Helvetica', 9), borderwidth=1, relief='solid'
+        )
+        self.console.pack(side='left', fill='both', expand=True)
+        self.console.config(state='disabled')
+        
+        scrollbar = ttk.Scrollbar(self.console_frame, orient='vertical', command=self.console.yview)
+        scrollbar.pack(side='right', fill='y')
         self.console.config(yscrollcommand=scrollbar.set)
+
+        # Status bar
+        self.status_var = tk.StringVar(value="Ready")
+        status_bar = ttk.Label(
+            self.main_frame, textvariable=self.status_var, relief='sunken',
+            anchor='w', padding=5
+        )
+        status_bar.pack(side='bottom', fill='x')
 
         # API Tokens
         self.crm_token = "crm_token"
@@ -53,18 +91,23 @@ class JiraDataUtility:
         self.jql_templates = {}
         self.jql_display_names = {}
 
+        # Current working directory
+        self.working_dir = Path.cwd()
+
     def log(self, message):
-        """Log messages to GUI text area."""
+        """Log messages to GUI text area and update status."""
         self.console.config(state='normal')
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         self.console.insert(tk.END, f"{timestamp}: {message}\n")
         self.console.see(tk.END)
         self.console.config(state='disabled')
+        self.status_var.set(message[:50] + "..." if len(message) > 50 else message)
         self.root.update()
 
     def start_process(self):
         """Main process triggered by Start button."""
         self.start_button.config(state='disabled')
+        self.status_var.set("Processing...")
         try:
             start_date = self.start_date.get_date().strftime('%Y-%m-%d')
             end_date = self.end_date.get_date().strftime('%Y-%m-%d')
@@ -85,9 +128,11 @@ class JiraDataUtility:
             self.update_daily_final(start_date, end_date)
 
             self.log("Process completed successfully.")
+            self.status_var.set("Process completed successfully")
             messagebox.showinfo("Success", "Process completed successfully!")
         except Exception as e:
             self.log(f"Error: {str(e)}")
+            self.status_var.set("Error occurred")
             messagebox.showerror("Error", f"An error occurred: {str(e)}")
         finally:
             self.start_button.config(state='normal')
@@ -126,9 +171,9 @@ class JiraDataUtility:
             if not usernames:
                 raise ValueError("No valid usernames found in API response")
 
-            output_file = "usernames.xlsx"
-            if os.path.exists(output_file):
-                os.remove(output_file)
+            output_file = self.working_dir / "usernames.xlsx"
+            if output_file.exists():
+                output_file.unlink()
                 self.log(f"Deleted existing {output_file}")
 
             df = pd.DataFrame(usernames, columns=["Username"])
@@ -162,7 +207,6 @@ class JiraDataUtility:
             "jql4": 'status changed FROM "DS-SECURITY REVIEW PENDING" TO "TO DO" DURING ("{start_date}", "{end_date}") BY {username}',
             "jql5": 'status changed FROM "READY FOR SECURITY" TO "READY FOR PA" DURING ("{start_date}", "{end_date}") BY {username}',
             "jql6": 'status changed FROM "READY FOR SECURITY" TO "REOPENED" DURING ("{start_date}", "{end_date}") BY {username}',
-            # Add or remove JQLs as needed
         }
         self.jql_display_names = {
             "jql1": "FS Accepted",
@@ -171,7 +215,6 @@ class JiraDataUtility:
             "jql4": "DS Rejected",
             "jql5": "RFS Accepted",
             "jql6": "RFS Rejected",
-            # Match keys to jql_templates
         }
 
         headers = {
@@ -220,9 +263,9 @@ class JiraDataUtility:
                     continue
 
             if issues_list:
-                file_path = f"{jql_name}.xlsx"
-                if os.path.exists(file_path):
-                    os.remove(file_path)
+                file_path = self.working_dir / f"{jql_name}.xlsx"
+                if file_path.exists():
+                    file_path.unlink()
                     self.log(f"Deleted existing {file_path}")
 
                 df = pd.DataFrame(issues_list)
@@ -240,9 +283,9 @@ class JiraDataUtility:
             df = pd.read_excel(file, engine='openpyxl')
             merged_data = pd.concat([merged_data, df], ignore_index=True)
 
-        output_file = f"Date_{start_date}_{end_date}.xlsx"
-        if os.path.exists(output_file):
-            os.remove(output_file)
+        output_file = self.working_dir / f"Date_{start_date}_{end_date}.xlsx"
+        if output_file.exists():
+            output_file.unlink()
             self.log(f"Deleted existing {output_file}")
 
         workbook = xlsxwriter.Workbook(output_file)
@@ -264,17 +307,15 @@ class JiraDataUtility:
         """Step 4: Update daily FS-DS-RFS-Data.xlsx, hide zeros for JQLs, handle NaN/INF, apply bold and borders, then delete files."""
         self.log("Updating daily FS-DS-RFS-Data.xlsx...")
         date_str = datetime.datetime.strptime(start_date, '%Y-%m-%d').strftime('%d-%b-%Y')
-        jqls = list(self.jql_templates.keys())  # Use defined JQLs dynamically
+        jqls = list(self.jql_templates.keys())
 
         # Initialize or load existing FS-DS-RFS-Data.xlsx
-        final_file = "finals.xlsx"
-        if os.path.exists(final_file):
+        final_file = self.working_dir / "finals.xlsx"
+        if final_file.exists():
             try:
                 df_final = pd.read_excel(final_file, engine='openpyxl')
-                # Replace NaN with 0
                 df_final = df_final.fillna(0)
                 self.log("Loaded existing FS-DS-RFS-Data.xlsx and replaced NaN with 0")
-                # Replace INF
                 if np.isinf(df_final.select_dtypes(include=np.number)).any().any():
                     self.log("Warning: INF values detected in FS-DS-RFS-Data.xlsx, replacing with 0")
                     df_final = df_final.replace([np.inf, -np.inf], 0)
@@ -288,9 +329,9 @@ class JiraDataUtility:
         # Count issues for each JQL
         counts = {}
         for jql in jqls:
-            file_path = f"{jql}.xlsx"
+            file_path = self.working_dir / f"{jql}.xlsx"
             counts[jql] = 0
-            if os.path.exists(file_path):
+            if file_path.exists():
                 try:
                     df = pd.read_excel(file_path, engine='openpyxl')
                     counts[jql] = len(df)
@@ -334,7 +375,6 @@ class JiraDataUtility:
         for row, data in enumerate(df_final.itertuples(index=False), 1):
             is_total_row = data[0] == "Total"
             for col, value in enumerate(data):
-                # Check for NaN/INF
                 try:
                     numeric_value = float(value)
                     if np.isnan(numeric_value) or np.isinf(numeric_value):
@@ -342,26 +382,21 @@ class JiraDataUtility:
                         value = 0
                 except (ValueError, TypeError):
                     pass
-                # Hide zeros for non-Total rows in non-JQL columns
                 display_value = value
                 if col > 0 and not is_total_row and value == 0:
                     display_value = ""
-                # Apply formatting
-                if col == 0 or is_total_row:
-                    format_to_use = bold_left_format if col == 0 else bold_center_format
-                else:
-                    format_to_use = center_format
+                format_to_use = bold_left_format if col == 0 or is_total_row else center_format
                 worksheet.write(row, col, display_value, format_to_use)
 
         workbook.close()
         self.log(f"Updated {final_file} with data for {date_str}")
 
         # Delete intermediate files
-        files_to_delete = [f"{jql}.xlsx" for jql in jqls] + ["usernames.xlsx"]
+        files_to_delete = [self.working_dir / f"{jql}.xlsx" for jql in jqls] + [self.working_dir / "usernames.xlsx"]
         for file in files_to_delete:
             try:
-                if os.path.exists(file):
-                    os.remove(file)
+                if file.exists():
+                    file.unlink()
                     self.log(f"Deleted {file}")
                 else:
                     self.log(f"File {file} does not exist, skipping deletion")
