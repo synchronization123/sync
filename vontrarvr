@@ -1,0 +1,198 @@
+# Save this file as servers_download.pyw
+import requests
+import pandas as pd
+import os
+import tkinter as tk
+from tkinter import ttk, messagebox
+import threading
+import ttkbootstrap as ttkb
+from ttkbootstrap.constants import *
+
+# Set the working directory to the script's directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(script_dir)
+
+# GUI Class
+class App:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Contrast Servers Downloader")
+        self.root.geometry("600x400")
+        self.root.resizable(True, True)
+
+        # Use ttkbootstrap style
+        style = ttkb.Style(theme="flatly")  # Modern theme
+
+        # Main frame
+        self.main_frame = ttk.Frame(self.root, padding=10)
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Download button
+        self.download_button = ttk.Button(
+            self.main_frame,
+            text="Download Servers",
+            command=self.start_download,
+            bootstyle=SUCCESS
+        )
+        self.download_button.pack(pady=10)
+
+        # Progress bar
+        self.progress = ttk.Progressbar(
+            self.main_frame,
+            length=400,
+            mode='determinate',
+            bootstyle=INFO
+        )
+        self.progress.pack(pady=10)
+
+        # Loading label
+        self.loading_label = ttk.Label(
+            self.main_frame,
+            text="",
+            bootstyle=SECONDARY
+        )
+        self.loading_label.pack(pady=5)
+
+        # Log area
+        self.log_frame = ttk.Frame(self.main_frame)
+        self.log_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        self.log_text = tk.Text(
+            self.log_frame,
+            height=10,
+            width=70,
+            state='disabled',
+            wrap=tk.WORD,
+            font=("Segoe UI", 10)
+        )
+        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Scrollbar for log text
+        scrollbar = ttk.Scrollbar(
+            self.log_frame,
+            orient=tk.VERTICAL,
+            command=self.log_text.yview,
+            bootstyle=SECONDARY
+        )
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_text['yscrollcommand'] = scrollbar.set
+
+    def log(self, message):
+        self.log_text.configure(state='normal')
+        self.log_text.insert(tk.END, f"{pd.Timestamp.now().strftime('%H:%M:%S')}: {message}\n")
+        self.log_text.configure(state='disabled')
+        self.log_text.see(tk.END)
+
+    def start_download(self):
+        self.download_button.config(state='disabled')
+        self.loading_label.config(text="Loading")
+        self.progress['value'] = 0
+        self.animate_loading()
+        threading.Thread(target=self.download_thread, daemon=True).start()
+
+    def animate_loading(self):
+        def update_dots():
+            if self.loading_label.cget("text").startswith("Loading"):
+                dots = self.loading_label.cget("text")[7:]
+                if dots == "...":
+                    self.loading_label.config(text="Loading")
+                else:
+                    self.loading_label.config(text="Loading" + dots + ".")
+                self.root.after(1000, update_dots)
+        self.root.after(1000, update_dots)
+
+    def download_thread(self):
+        self.log("Starting server data download...")
+
+        # Step 1: Fetch servers (80% progress)
+        self.progress['value'] = 10
+        servers = self.fetch_servers()
+        self.progress['value'] = 80
+
+        # Step 2: Save to Excel (20% progress)
+        self.log("Saving data to Servers.xlsx...")
+        self.save_to_excel(servers)
+        self.progress['value'] = 100
+
+        # Finalize
+        self.loading_label.config(text="")
+        self.download_button.config(state='normal')
+        self.log("Download completed.")
+        self.root.after(0, lambda: messagebox.showinfo("Success", "Server data saved to Servers.xlsx"))
+
+    def fetch_servers(self):
+        contrast_token = 'dhdjdjdjdjrjrjrjdj=='  # Replace with actual token
+        org_uuid = 'shjdjdjdjjd'  # Provided orgid
+        api_key = 'hhjkkjdddjdkdk'  # Replace with actual API key
+
+        headers = {
+            'Authorization': contrast_token,
+            'Api-key': api_key,
+            'Accept': 'application/json'
+        }
+
+        base_url = 'https://crm.contrast.com/api/ng/'
+        url = f"{base_url}{org_uuid}/servers"
+        servers = []
+
+        with requests.Session() as session:
+            session.headers.update(headers)
+            try:
+                self.log(f"Fetching data from {url}")
+                response = session.get(url, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    for server in data.get('servers', []):
+                        servers.append({
+                            'Name': server.get('name', ''),
+                            'Server ID': server.get('server_id', ''),
+                            'Status': server.get('status', ''),
+                            'Environment': server.get('environment', ''),
+                            'Hostname': server.get('hostname', ''),
+                            'Path': server.get('path', ''),
+                            'Agent Version': server.get('agent_version', '')
+                        })
+                    self.log(f"Fetched {len(servers)} servers")
+                else:
+                    self.log(f"Error fetching servers: {response.status_code} - {response.text}")
+                    self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to fetch servers: {response.status_code}"))
+                    return None
+            except Exception as e:
+                self.log(f"Exception fetching servers: {e}")
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Exception: {e}"))
+                return None
+        
+        return servers
+
+    def save_to_excel(self, servers):
+        if servers is None:
+            self.log("No server data to save.")
+            return
+
+        # Delete existing Servers.xlsx if it exists
+        excel_file = os.path.join(script_dir, 'Servers.xlsx')
+        if os.path.exists(excel_file):
+            try:
+                os.remove(excel_file)
+                self.log("Deleted existing Servers.xlsx")
+            except Exception as e:
+                self.log(f"Error deleting Servers.xlsx: {e}")
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to delete existing Servers.xlsx: {e}"))
+                return
+
+        # Save to Excel
+        try:
+            df = pd.DataFrame(servers)
+            # Reorder columns to match requested order
+            columns = ['Name', 'Server ID', 'Status', 'Environment', 'Hostname', 'Path', 'Agent Version']
+            df = df[columns]
+            df.to_excel(excel_file, index=False)
+            self.log(f"Data saved to {excel_file}")
+        except Exception as e:
+            self.log(f"Error saving to Servers.xlsx: {e}")
+            self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to save Servers.xlsx: {e}"))
+
+if __name__ == "__main__":
+    root = ttkb.Window()
+    app = App(root)
+    root.mainloop()
