@@ -37,25 +37,31 @@ class JiraDataUtility:
         else:
             default_end = yesterday
 
-        # GUI Elements
-        ttk.Label(self.main_frame, text="Start Date:").pack(pady=5)
+        # Datepickers and Start button frame
+        self.input_frame = ttk.Frame(self.main_frame)
+        self.input_frame.pack(fill='x', pady=10)
+
+        # Start Date
+        ttk.Label(self.input_frame, text="Start Date:").pack(side='left', padx=5)
         self.start_date = DateEntry(
-            self.main_frame, width=12, date_pattern='yyyy-mm-dd',
+            self.input_frame, width=12, date_pattern='yyyy-mm-dd',
             year=yesterday.year, month=yesterday.month, day=yesterday.day,
             font=('Helvetica', 10)
         )
-        self.start_date.pack(pady=5)
+        self.start_date.pack(side='left', padx=5)
 
-        ttk.Label(self.main_frame, text="End Date:").pack(pady=5)
+        # End Date
+        ttk.Label(self.input_frame, text="End Date:").pack(side='left', padx=5)
         self.end_date = DateEntry(
-            self.main_frame, width=12, date_pattern='yyyy-mm-dd',
+            self.input_frame, width=12, date_pattern='yyyy-mm-dd',
             year=default_end.year, month=default_end.month, day=default_end.day,
             font=('Helvetica', 10)
         )
-        self.end_date.pack(pady=5)
+        self.end_date.pack(side='left', padx=5)
 
-        self.start_button = ttk.Button(self.main_frame, text="Start", command=self.start_process)
-        self.start_button.pack(pady=10)
+        # Start Button
+        self.start_button = ttk.Button(self.input_frame, text="Start", command=self.start_process)
+        self.start_button.pack(side='left', padx=5)
 
         # Console area
         ttk.Label(self.main_frame, text="Execution Log:").pack(pady=5)
@@ -91,8 +97,10 @@ class JiraDataUtility:
         self.jql_templates = {}
         self.jql_display_names = {}
 
-        # Current working directory
+        # Current working directory and data folder
         self.working_dir = Path.cwd()
+        self.data_dir = self.working_dir / "data"
+        self.data_dir.mkdir(exist_ok=True)  # Create /data folder if it doesn't exist
 
     def log(self, message):
         """Log messages to GUI text area and update status."""
@@ -124,7 +132,7 @@ class JiraDataUtility:
             # Step 3: Merge excels
             self.merge_excels(jql_files, start_date, end_date)
 
-            # Step 4: Update daily FS-DS-RFS-Data.xlsx
+            # Step 4: Update daily FS-DS-RFS_Report.xlsx
             self.update_daily_final(start_date, end_date)
 
             self.log("Process completed successfully.")
@@ -171,7 +179,7 @@ class JiraDataUtility:
             if not usernames:
                 raise ValueError("No valid usernames found in API response")
 
-            output_file = self.working_dir / "usernames.xlsx"
+            output_file = self.data_dir / "usernames.xlsx"
             if output_file.exists():
                 output_file.unlink()
                 self.log(f"Deleted existing {output_file}")
@@ -263,7 +271,7 @@ class JiraDataUtility:
                     continue
 
             if issues_list:
-                file_path = self.working_dir / f"{jql_name}.xlsx"
+                file_path = self.data_dir / f"{jql_name}.xlsx"
                 if file_path.exists():
                     file_path.unlink()
                     self.log(f"Deleted existing {file_path}")
@@ -276,14 +284,14 @@ class JiraDataUtility:
         return jql_files
 
     def merge_excels(self, jql_files, start_date, end_date):
-        """Step 3: Merge excels into Date_{startdate_enddate}.xlsx."""
+        """Step 3: Merge excels into Date_{startdate_enddate}.xlsx in /data folder."""
         self.log("Merging Excel files...")
         merged_data = pd.DataFrame()
         for file in jql_files:
             df = pd.read_excel(file, engine='openpyxl')
             merged_data = pd.concat([merged_data, df], ignore_index=True)
 
-        output_file = self.working_dir / f"Date_{start_date}_{end_date}.xlsx"
+        output_file = self.data_dir / f"Date_{start_date}_{end_date}.xlsx"
         if output_file.exists():
             output_file.unlink()
             self.log(f"Deleted existing {output_file}")
@@ -304,32 +312,32 @@ class JiraDataUtility:
         self.log(f"Merged data saved to {output_file}")
 
     def update_daily_final(self, start_date, end_date):
-        """Step 4: Update daily FS-DS-RFS-Data.xlsx, hide zeros for JQLs, handle NaN/INF, apply bold and borders, then delete files."""
-        self.log("Updating daily FS-DS-RFS-Data.xlsx...")
+        """Step 4: Update daily FS-DS-RFS_Report.xlsx, hide zeros for JQLs, handle NaN/INF, apply bold and borders, center-align dates, then delete files."""
+        self.log("Updating daily FS-DS-RFS_Report.xlsx...")
         date_str = datetime.datetime.strptime(start_date, '%Y-%m-%d').strftime('%d-%b-%Y')
         jqls = list(self.jql_templates.keys())
 
-        # Initialize or load existing FS-DS-RFS-Data.xlsx
-        final_file = self.working_dir / "finals.xlsx"
+        # Initialize or load existing FS-DS-RFS_Report.xlsx
+        final_file = self.working_dir / "FS-DS-RFS_Report.xlsx"
         if final_file.exists():
             try:
                 df_final = pd.read_excel(final_file, engine='openpyxl')
                 df_final = df_final.fillna(0)
-                self.log("Loaded existing FS-DS-RFS-Data.xlsx and replaced NaN with 0")
+                self.log("Loaded existing FS-DS-RFS_Report.xlsx and replaced NaN with 0")
                 if np.isinf(df_final.select_dtypes(include=np.number)).any().any():
-                    self.log("Warning: INF values detected in FS-DS-RFS-Data.xlsx, replacing with 0")
+                    self.log("Warning: INF values detected in FS-DS-RFS_Report.xlsx, replacing with 0")
                     df_final = df_final.replace([np.inf, -np.inf], 0)
             except Exception as e:
-                self.log(f"Error reading FS-DS-RFS-Data.xlsx: {str(e)}, initializing new DataFrame")
+                self.log(f"Error reading FS-DS-RFS_Report.xlsx: {str(e)}, initializing new DataFrame")
                 df_final = pd.DataFrame({"Type": [self.jql_display_names.get(jql, jql) for jql in jqls] + ["Total"]})
         else:
             df_final = pd.DataFrame({"Type": [self.jql_display_names.get(jql, jql) for jql in jqls] + ["Total"]})
-            self.log("Initialized new FS-DS-RFS-Data.xlsx")
+            self.log("Initialized new FS-DS-RFS_Report.xlsx")
 
         # Count issues for each JQL
         counts = {}
         for jql in jqls:
-            file_path = self.working_dir / f"{jql}.xlsx"
+            file_path = self.data_dir / f"{jql}.xlsx"
             counts[jql] = 0
             if file_path.exists():
                 try:
@@ -371,9 +379,8 @@ class JiraDataUtility:
             format_to_use = bold_left_format if col == 0 else bold_center_format
             worksheet.write(0, col, header, format_to_use)
 
-        # Write data, hide zeros for JQLs
+        # Write data, hide zeros for JQLs, center-align all date columns
         for row, data in enumerate(df_final.itertuples(index=False), 1):
-            is_total_row = data[0] == "Total"
             for col, value in enumerate(data):
                 try:
                     numeric_value = float(value)
@@ -383,16 +390,18 @@ class JiraDataUtility:
                 except (ValueError, TypeError):
                     pass
                 display_value = value
+                is_total_row = data[0] == "Total"
                 if col > 0 and not is_total_row and value == 0:
                     display_value = ""
-                format_to_use = bold_left_format if col == 0 or is_total_row else center_format
+                # Apply center alignment for all date columns, including Total row
+                format_to_use = bold_left_format if col == 0 else center_format
                 worksheet.write(row, col, display_value, format_to_use)
 
         workbook.close()
         self.log(f"Updated {final_file} with data for {date_str}")
 
         # Delete intermediate files
-        files_to_delete = [self.working_dir / f"{jql}.xlsx" for jql in jqls] + [self.working_dir / "usernames.xlsx"]
+        files_to_delete = [self.data_dir / f"{jql}.xlsx" for jql in jqls] + [self.data_dir / "usernames.xlsx"]
         for file in files_to_delete:
             try:
                 if file.exists():
