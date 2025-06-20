@@ -51,7 +51,9 @@ class JiraDataUtility:
             year=yesterday.year,
             month=yesterday.month,
             day=yesterday.day,
-            bootstyle=PRIMARY
+            background='darkblue',
+            foreground='white',
+            borderwidth=2
         )
         self.start_date.pack(side=tk.LEFT, padx=5)
 
@@ -64,7 +66,9 @@ class JiraDataUtility:
             year=default_end.year,
             month=default_end.month,
             day=default_end.day,
-            bootstyle=PRIMARY
+            background='darkblue',
+            foreground='white',
+            borderwidth=2
         )
         self.end_date.pack(side=tk.LEFT, padx=5)
 
@@ -144,7 +148,7 @@ class JiraDataUtility:
     def start_process(self):
         """Main process triggered by Start button."""
         self.start_button.config(state='disabled')
-        self.loading_label.config(text="Loading...")
+        self.loading_label.config(text="Loading")
         self.progress['value'] = 0
         self.animate_loading()
         threading.Thread(target=self.process_thread, daemon=True).start()
