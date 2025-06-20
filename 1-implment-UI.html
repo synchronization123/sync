@@ -8,99 +8,121 @@ import requests
 import pandas as pd
 import xlsxwriter
 import numpy as np
+import traceback
+import logging
 
 class JiraDataUtility:
     def __init__(self, root):
-        self.root = root
-        self.root.title("Jira Data Utility")
-        self.root.geometry("700x650")
-        self.root.resizable(True, True)
-
-        # Set modern theme
-        style = ttk.Style()
-        style.theme_use('clam')  # Modern theme: 'clam', 'alt', 'default', or 'classic'
-
-        # Configure styles
-        style.configure('TLabel', font=('Helvetica', 10))
-        style.configure('TButton', font=('Helvetica', 10), padding=5)
-        style.configure('TFrame', padding=10)
-
-        # Main frame
-        self.main_frame = ttk.Frame(self.root)
-        self.main_frame.pack(fill='both', expand=True, padx=10, pady=10)
-
-        # Default dates
-        today = datetime.date.today()
-        yesterday = today - datetime.timedelta(days=1)
-        if today.weekday() == 0:  # If Monday, set end date to previous Friday
-            default_end = today - datetime.timedelta(days=3)
-        else:
-            default_end = yesterday
-
-        # Datepickers and Start button frame
-        self.input_frame = ttk.Frame(self.main_frame)
-        self.input_frame.pack(fill='x', pady=10)
-
-        # Start Date
-        ttk.Label(self.input_frame, text="Start Date:").pack(side='left', padx=5)
-        self.start_date = DateEntry(
-            self.input_frame, width=12, date_pattern='yyyy-mm-dd',
-            year=yesterday.year, month=yesterday.month, day=yesterday.day,
-            font=('Helvetica', 10)
-        )
-        self.start_date.pack(side='left', padx=5)
-
-        # End Date
-        ttk.Label(self.input_frame, text="End Date:").pack(side='left', padx=5)
-        self.end_date = DateEntry(
-            self.input_frame, width=12, date_pattern='yyyy-mm-dd',
-            year=default_end.year, month=default_end.month, day=default_end.day,
-            font=('Helvetica', 10)
-        )
-        self.end_date.pack(side='left', padx=5)
-
-        # Start Button
-        self.start_button = ttk.Button(self.input_frame, text="Start", command=self.start_process)
-        self.start_button.pack(side='left', padx=5)
-
-        # Console area
-        ttk.Label(self.main_frame, text="Execution Log:").pack(pady=5)
-        self.console_frame = ttk.Frame(self.main_frame)
-        self.console_frame.pack(fill='both', expand=True, pady=5)
-        
-        self.console = tk.Text(
-            self.console_frame, height=20, width=70, wrap='word',
-            font=('Helvetica', 9), borderwidth=1, relief='solid'
-        )
-        self.console.pack(side='left', fill='both', expand=True)
-        self.console.config(state='disabled')
-        
-        scrollbar = ttk.Scrollbar(self.console_frame, orient='vertical', command=self.console.yview)
-        scrollbar.pack(side='right', fill='y')
-        self.console.config(yscrollcommand=scrollbar.set)
-
-        # Status bar
-        self.status_var = tk.StringVar(value="Ready")
-        status_bar = ttk.Label(
-            self.main_frame, textvariable=self.status_var, relief='sunken',
-            anchor='w', padding=5
-        )
-        status_bar.pack(side='bottom', fill='x')
-
-        # API Tokens
-        self.crm_token = "crm_token"
-        self.jira_token = "jira_token+"
-        self.crm_url = "https://demo.defectdojo.org/api/v2/users/?is_active=true&limit=100"
-        self.jira_server = "https://jira.crm.com"
-
-        # Initialize JQL templates and display names
-        self.jql_templates = {}
-        self.jql_display_names = {}
-
-        # Current working directory and data folder
+        # Set up logging to file for debugging
         self.working_dir = Path.cwd()
-        self.data_dir = self.working_dir / "data"
-        self.data_dir.mkdir(exist_ok=True)  # Create /data folder if it doesn't exist
+        logging.basicConfig(
+            filename=self.working_dir / 'error_log.txt',
+            level=logging.ERROR,
+            format='%(asctime)s: %(message)s'
+        )
+        try:
+            self.root = root
+            self.root.title("Jira Data Utility")
+            self.root.geometry("700x650")
+            self.root.resizable(True, True)
+
+            # Set modern theme
+            style = ttk.Style()
+            style.theme_use('clam')  # Modern theme: 'clam', 'alt', 'default', or 'classic'
+
+            # Configure styles
+            style.configure('TLabel', font=('Helvetica', 10))
+            style.configure('TButton', font=('Helvetica', 10), padding=5)
+            style.configure('TFrame', padding=10)
+
+            # Main frame
+            self.main_frame = ttk.Frame(self.root)
+            self.main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+
+            # Default dates
+            today = datetime.date.today()
+            yesterday = today - datetime.timedelta(days=1)
+            if today.weekday() == 0:  # If Monday, set end date to previous Friday
+                default_end = today - datetime.timedelta(days=3)
+            else:
+                default_end = yesterday
+
+            # Datepickers and Start button frame
+            self.input_frame = ttk.Frame(self.main_frame)
+            self.input_frame.pack(fill='x', pady=10)
+
+            # Start Date
+            ttk.Label(self.input_frame, text="Start Date:").pack(side='left', padx=5)
+            self.start_date = DateEntry(
+                self.input_frame, width=12, date_pattern='yyyy-mm-dd',
+                year=yesterday.year, month=yesterday.month, day=yesterday.day,
+                font=('Helvetica', 10)
+            )
+            self.start_date.pack(side='left', padx=5)
+
+            # End Date
+            ttk.Label(self.input_frame, text="End Date:").pack(side='left', padx=5)
+            self.end_date = DateEntry(
+                self.input_frame, width=12, date_pattern='yyyy-mm-dd',
+                year=default_end.year, month=default_end.month, day=default_end.day,
+                font=('Helvetica', 10)
+            )
+            self.end_date.pack(side='left', padx=5)
+
+            # Start Button
+            self.start_button = ttk.Button(self.input_frame, text="Start", command=self.start_process)
+            self.start_button.pack(side='left', padx=5)
+
+            # Console area
+            ttk.Label(self.main_frame, text="Execution Log:").pack(pady=5)
+            self.console_frame = ttk.Frame(self.main_frame)
+            self.console_frame.pack(fill='both', expand=True, pady=5)
+            
+            self.console = tk.Text(
+                self.console_frame, height=20, width=70, wrap='word',
+                font=('Helvetica', 9), borderwidth=1, relief='solid'
+            )
+            self.console.pack(side='left', fill='both', expand=True)
+            self.console.config(state='disabled')
+            
+            scrollbar = ttk.Scrollbar(self.console_frame, orient='vertical', command=self.console.yview)
+            scrollbar.pack(side='right', fill='y')
+            self.console.config(yscrollcommand=scrollbar.set)
+
+            # Status bar
+            self.status_var = tk.StringVar(value="Ready")
+            status_bar = ttk.Label(
+                self.main_frame, textvariable=self.status_var, relief='sunken',
+                anchor='w', padding=5
+            )
+            status_bar.pack(side='bottom', fill='x')
+
+            # API Tokens
+            self.crm_token = "crm_token"
+            self.jira_token = "jira_token+"
+            self.crm_url = "https://demo.defectdojo.org/api/v2/users/?is_active=true&limit=100"
+            self.jira_server = "https://jira.crm.com"
+
+            # Initialize JQL templates and display names
+            self.jql_templates = {}
+            self.jql_display_names = {}
+
+            # Data folder
+            self.data_dir = self.working_dir / "data"
+            try:
+                self.data_dir.mkdir(exist_ok=True)
+                self.log("Created or verified /data folder")
+            except Exception as e:
+                self.log(f"Failed to create /data folder: {str(e)}")
+                raise
+
+        except Exception as e:
+            error_msg = f"Initialization error: {str(e)}\nTraceback: {traceback.format_exc()}"
+            logging.error(error_msg)
+            messagebox.showerror("Initialization Error", f"An error occurred during startup: {str(e)}")
+            self.log(f"Initialization error: {str(e)}")
+            # Keep GUI open for user to see error
+            self.status_var.set("Initialization failed")
 
     def log(self, message):
         """Log messages to GUI text area and update status."""
@@ -139,6 +161,8 @@ class JiraDataUtility:
             self.status_var.set("Process completed successfully")
             messagebox.showinfo("Success", "Process completed successfully!")
         except Exception as e:
+            error_msg = f"Error: {str(e)}\nTraceback: {traceback.format_exc()}"
+            logging.error(error_msg)
             self.log(f"Error: {str(e)}")
             self.status_var.set("Error occurred")
             messagebox.showerror("Error", f"An error occurred: {str(e)}")
@@ -190,15 +214,23 @@ class JiraDataUtility:
             return usernames
 
         except requests.exceptions.HTTPError as http_err:
-            self.log(f"HTTP error occurred: {http_err}, Response: {response.text}")
+            error_msg = f"HTTP error occurred: {http_err}, Response: {response.text}\nTraceback: {traceback.format_exc()}"
+            logging.error(error_msg)
+            self.log(f"HTTP error occurred: {http_err}")
             raise
         except requests.exceptions.RequestException as req_err:
+            error_msg = f"Request error occurred: {req_err}\nTraceback: {traceback.format_exc()}"
+            logging.error(error_msg)
             self.log(f"Request error occurred: {req_err}")
             raise
         except ValueError as val_err:
+            error_msg = f"Value error: {val_err}\nTraceback: {traceback.format_exc()}"
+            logging.error(error_msg)
             self.log(f"Value error: {val_err}")
             raise
         except Exception as e:
+            error_msg = f"Unexpected error downloading usernames: {str(e)}\nTraceback: {traceback.format_exc()}"
+            logging.error(error_msg)
             self.log(f"Unexpected error downloading usernames: {str(e)}")
             raise
 
@@ -264,9 +296,13 @@ class JiraDataUtility:
                             break
 
                 except requests.exceptions.HTTPError as http_err:
-                    self.log(f"HTTP error fetching {jql_name} for {username}: {http_err}, Response: {response.text}")
+                    error_msg = f"HTTP error fetching {jql_name} for {username}: {http_err}, Response: {response.text}\nTraceback: {traceback.format_exc()}"
+                    logging.error(error_msg)
+                    self.log(f"HTTP error fetching {jql_name} for {username}: {http_err}")
                     continue
                 except Exception as e:
+                    error_msg = f"Error fetching {jql_name} for {username}: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    logging.error(error_msg)
                     self.log(f"Error fetching {jql_name} for {username}: {str(e)}")
                     continue
 
@@ -286,30 +322,36 @@ class JiraDataUtility:
     def merge_excels(self, jql_files, start_date, end_date):
         """Step 3: Merge excels into Date_{startdate_enddate}.xlsx in /data folder."""
         self.log("Merging Excel files...")
-        merged_data = pd.DataFrame()
-        for file in jql_files:
-            df = pd.read_excel(file, engine='openpyxl')
-            merged_data = pd.concat([merged_data, df], ignore_index=True)
+        try:
+            merged_data = pd.DataFrame()
+            for file in jql_files:
+                df = pd.read_excel(file, engine='openpyxl')
+                merged_data = pd.concat([merged_data, df], ignore_index=True)
 
-        output_file = self.data_dir / f"Date_{start_date}_{end_date}.xlsx"
-        if output_file.exists():
-            output_file.unlink()
-            self.log(f"Deleted existing {output_file}")
+            output_file = self.data_dir / f"Date_{start_date}_{end_date}.xlsx"
+            if output_file.exists():
+                output_file.unlink()
+                self.log(f"Deleted existing {output_file}")
 
-        workbook = xlsxwriter.Workbook(output_file)
-        worksheet = workbook.add_worksheet()
-        center_format = workbook.add_format({'align': 'center'})
+            workbook = xlsxwriter.Workbook(output_file)
+            worksheet = workbook.add_worksheet()
+            center_format = workbook.add_format({'align': 'center'})
 
-        headers = ["Source", "Issue Key", "Status", "Project Name", "Priority"]
-        for col, header in enumerate(headers):
-            worksheet.write(0, col, header, center_format)
+            headers = ["Source", "Issue Key", "Status", "Project Name", "Priority"]
+            for col, header in enumerate(headers):
+                worksheet.write(0, col, header, center_format)
 
-        for row, data in enumerate(merged_data.itertuples(index=False), 1):
-            for col, value in enumerate(data):
-                worksheet.write(row, col, value, center_format)
+            for row, data in enumerate(merged_data.itertuples(index=False), 1):
+                for col, value in enumerate(data):
+                    worksheet.write(row, col, value, center_format)
 
-        workbook.close()
-        self.log(f"Merged data saved to {output_file}")
+            workbook.close()
+            self.log(f"Merged data saved to {output_file}")
+        except Exception as e:
+            error_msg = f"Error merging excels: {str(e)}\nTraceback: {traceback.format_exc()}"
+            logging.error(error_msg)
+            self.log(f"Error merging excels: {str(e)}")
+            raise
 
     def update_daily_final(self, start_date, end_date):
         """Step 4: Update daily FS-DS-RFS_Report.xlsx, hide zeros for JQLs, handle NaN/INF, apply bold and borders, center-align dates, then delete files."""
@@ -317,102 +359,120 @@ class JiraDataUtility:
         date_str = datetime.datetime.strptime(start_date, '%Y-%m-%d').strftime('%d-%b-%Y')
         jqls = list(self.jql_templates.keys())
 
-        # Initialize or load existing FS-DS-RFS_Report.xlsx
-        final_file = self.working_dir / "FS-DS-RFS_Report.xlsx"
-        if final_file.exists():
-            try:
-                df_final = pd.read_excel(final_file, engine='openpyxl')
-                df_final = df_final.fillna(0)
-                self.log("Loaded existing FS-DS-RFS_Report.xlsx and replaced NaN with 0")
-                if np.isinf(df_final.select_dtypes(include=np.number)).any().any():
-                    self.log("Warning: INF values detected in FS-DS-RFS_Report.xlsx, replacing with 0")
-                    df_final = df_final.replace([np.inf, -np.inf], 0)
-            except Exception as e:
-                self.log(f"Error reading FS-DS-RFS_Report.xlsx: {str(e)}, initializing new DataFrame")
-                df_final = pd.DataFrame({"Type": [self.jql_display_names.get(jql, jql) for jql in jqls] + ["Total"]})
-        else:
-            df_final = pd.DataFrame({"Type": [self.jql_display_names.get(jql, jql) for jql in jqls] + ["Total"]})
-            self.log("Initialized new FS-DS-RFS_Report.xlsx")
-
-        # Count issues for each JQL
-        counts = {}
-        for jql in jqls:
-            file_path = self.data_dir / f"{jql}.xlsx"
-            counts[jql] = 0
-            if file_path.exists():
+        try:
+            # Initialize or load existing FS-DS-RFS_Report.xlsx
+            final_file = self.working_dir / "FS-DS-RFS_Report.xlsx"
+            if final_file.exists():
                 try:
-                    df = pd.read_excel(file_path, engine='openpyxl')
-                    counts[jql] = len(df)
-                    self.log(f"Counted {counts[jql]} issues in {file_path}")
+                    df_final = pd.read_excel(final_file, engine='openpyxl')
+                    df_final = df_final.fillna(0)
+                    self.log("Loaded existing FS-DS-RFS_Report.xlsx and replaced NaN with 0")
+                    if np.isinf(df_final.select_dtypes(include=np.number)).any().any():
+                        self.log("Warning: INF values detected in FS-DS-RFS_Report.xlsx, replacing with 0")
+                        df_final = df_final.replace([np.inf, -np.inf], 0)
                 except Exception as e:
-                    self.log(f"Error reading {file_path}: {str(e)}")
+                    error_msg = f"Error reading FS-DS-RFS_Report.xlsx: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    logging.error(error_msg)
+                    self.log(f"Error reading FS-DS-RFS_Report.xlsx: {str(e)}, initializing new DataFrame")
+                    df_final = pd.DataFrame({"Type": [self.jql_display_names.get(jql, jql) for jql in jqls] + ["Total"]})
             else:
-                self.log(f"File {file_path} does not exist, count set to 0")
+                df_final = pd.DataFrame({"Type": [self.jql_display_names.get(jql, jql) for jql in jqls] + ["Total"]})
+                self.log("Initialized new FS-DS-RFS_Report.xlsx")
 
-        # Add new date column if not exists
-        if date_str not in df_final.columns:
-            df_final[date_str] = [counts.get(jql, 0) for jql in jqls] + [sum(counts.values())]
-            self.log(f"Added new date column {date_str}")
-
-        # Save with formatting
-        workbook = xlsxwriter.Workbook(final_file, {'nan_inf_to_errors': True})
-        worksheet = workbook.add_worksheet()
-
-        # Define formats
-        bold_center_format = workbook.add_format({
-            'bold': True,
-            'align': 'center',
-            'border': 1
-        })
-        bold_left_format = workbook.add_format({
-            'bold': True,
-            'align': 'left',
-            'border': 1
-        })
-        center_format = workbook.add_format({
-            'align': 'center',
-            'border': 1
-        })
-
-        # Write headers
-        for col, header in enumerate(df_final.columns):
-            format_to_use = bold_left_format if col == 0 else bold_center_format
-            worksheet.write(0, col, header, format_to_use)
-
-        # Write data, hide zeros for JQLs, center-align all date columns
-        for row, data in enumerate(df_final.itertuples(index=False), 1):
-            for col, value in enumerate(data):
-                try:
-                    numeric_value = float(value)
-                    if np.isnan(numeric_value) or np.isinf(numeric_value):
-                        self.log(f"NaN/INF detected at row {row}, col {col}, replacing with 0")
-                        value = 0
-                except (ValueError, TypeError):
-                    pass
-                display_value = value
-                is_total_row = data[0] == "Total"
-                if col > 0 and not is_total_row and value == 0:
-                    display_value = ""
-                # Apply center alignment for all date columns, including Total row
-                format_to_use = bold_left_format if col == 0 else center_format
-                worksheet.write(row, col, display_value, format_to_use)
-
-        workbook.close()
-        self.log(f"Updated {final_file} with data for {date_str}")
-
-        # Delete intermediate files
-        files_to_delete = [self.data_dir / f"{jql}.xlsx" for jql in jqls] + [self.data_dir / "usernames.xlsx"]
-        for file in files_to_delete:
-            try:
-                if file.exists():
-                    file.unlink()
-                    self.log(f"Deleted {file}")
+            # Count issues for each JQL
+            counts = {}
+            for jql in jqls:
+                file_path = self.data_dir / f"{jql}.xlsx"
+                counts[jql] = 0
+                if file_path.exists():
+                    try:
+                        df = pd.read_excel(file_path, engine='openpyxl')
+                        counts[jql] = len(df)
+                        self.log(f"Counted {counts[jql]} issues in {file_path}")
+                    except Exception as e:
+                        error_msg = f"Error reading {file_path}: {str(e)}\nTraceback: {traceback.format_exc()}"
+                        logging.error(error_msg)
+                        self.log(f"Error reading {file_path}: {str(e)}")
                 else:
-                    self.log(f"File {file} does not exist, skipping deletion")
-            except Exception as e:
-                self.log(f"Error deleting {file}: {str(e)}")
+                    self.log(f"File {file_path} does not exist, count set to 0")
+
+            # Add new date column if not exists
+            if date_str not in df_final.columns:
+                df_final[date_str] = [counts.get(jql, 0) for jql in jqls] + [sum(counts.values())]
+                self.log(f"Added new date column {date_str}")
+
+            # Save with formatting
+            workbook = xlsxwriter.Workbook(final_file, {'nan_inf_to_errors': True})
+            worksheet = workbook.add_worksheet()
+
+            # Define formats
+            bold_center_format = workbook.add_format({
+                'bold': True,
+                'align': 'center',
+                'border': 1
+            })
+            bold_left_format = workbook.add_format({
+                'bold': True,
+                'align': 'left',
+                'border': 1
+            })
+            center_format = workbook.add_format({
+                'align': 'center',
+                'border': 1
+            })
+
+            # Write headers
+            for col, header in enumerate(df_final.columns):
+                format_to_use = bold_left_format if col == 0 else bold_center_format
+                worksheet.write(0, col, header, format_to_use)
+
+            # Write data, hide zeros for JQLs, center-align all date columns
+            for row, data in enumerate(df_final.itertuples(index=False), 1):
+                for col, value in enumerate(data):
+                    try:
+                        numeric_value = float(value)
+                        if np.isnan(numeric_value) or np.isinf(numeric_value):
+                            self.log(f"NaN/INF detected at row {row}, col {col}, replacing with 0")
+                            value = 0
+                    except (ValueError, TypeError):
+                        pass
+                    display_value = value
+                    is_total_row = data[0] == "Total"
+                    if col > 0 and not is_total_row and value == 0:
+                        display_value = ""
+                    format_to_use = bold_left_format if col == 0 else center_format
+                    worksheet.write(row, col, display_value, format_to_use)
+
+            workbook.close()
+            self.log(f"Updated {final_file} with data for {date_str}")
+
+            # Delete intermediate files
+            files_to_delete = [self.data_dir / f"{jql}.xlsx" for jql in jqls] + [self.data_dir / "usernames.xlsx"]
+            for file in files_to_delete:
+                try:
+                    if file.exists():
+                        file.unlink()
+                        self.log(f"Deleted {file}")
+                    else:
+                        self.log(f"File {file} does not exist, skipping deletion")
+                except Exception as e:
+                    error_msg = f"Error deleting {file}: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    logging.error(error_msg)
+                    self.log(f"Error deleting {file}: {str(e)}")
+
+        except Exception as e:
+            error_msg = f"Error updating FS-DS-RFS_Report.xlsx: {str(e)}\nTraceback: {traceback.format_exc()}"
+            logging.error(error_msg)
+            self.log(f"Error updating FS-DS-RFS_Report.xlsx: {str(e)}")
+            raise
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = JiraDataUtility(root)
-    root.mainloop()
+    try:
+        root = tk.Tk()
+        app = JiraDataUtility(root)
+        root.mainloop()
+    except Exception as e:
+        # Log top-level errors and show in messagebox
+        with open('error_log.txt', 'a') as f:
+            f.write(f"{datetime.datetime.now()}: Top-level error: {str(e)}\nTraceback: {traceback.format_exc()}\n")
+        messagebox.showerror("Fatal Error", f"The application failed to start: {str(e)}")
