@@ -1,4 +1,3 @@
-# Save this file as jira_data_utility.pyw
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
@@ -7,32 +6,14 @@ import os
 import requests
 import pandas as pd
 import xlsxwriter
+from pathlib import Path
 import numpy as np
-import threading
-import ttkbootstrap as ttkb
-from ttkbootstrap.constants import *
-
-# Set the working directory to the script's directory
-script_dir = os.path.dirname(os.path.abspath(__file__))
-os.chdir(script_dir)
 
 class JiraDataUtility:
     def __init__(self, root):
         self.root = root
         self.root.title("Jira Data Utility")
-        self.root.geometry("600x500")
-        self.root.resizable(True, True)
-
-        # Use ttkbootstrap style
-        style = ttkb.Style(theme="flatly")  # Modern theme
-
-        # Main frame
-        self.main_frame = ttk.Frame(self.root, padding=10)
-        self.main_frame.pack(fill=tk.BOTH, expand=True)
-
-        # Date inputs frame
-        self.date_frame = ttk.Frame(self.main_frame)
-        self.date_frame.pack(pady=5, fill=tk.X)
+        self.root.geometry("600x600")
 
         # Default dates
         today = datetime.date.today()
@@ -42,87 +23,29 @@ class JiraDataUtility:
         else:
             default_end = yesterday
 
-        # Start date picker
-        ttk.Label(self.date_frame, text="Start Date:").pack(side=tk.LEFT, padx=5)
-        self.start_date = DateEntry(
-            self.date_frame,
-            width=12,
-            date_pattern='yyyy-mm-dd',
-            year=yesterday.year,
-            month=yesterday.month,
-            day=yesterday.day
-        )
-        self.start_date.pack(side=tk.LEFT, padx=5)
+        # GUI Elements
+        tk.Label(root, text="Start Date:").pack(pady=5)
+        self.start_date = DateEntry(root, width=12, date_pattern='yyyy-mm-dd', year=yesterday.year, month=yesterday.month, day=yesterday.day)
+        self.start_date.pack(pady=5)
 
-        # End date picker
-        ttk.Label(self.date_frame, text="End Date:").pack(side=tk.LEFT, padx=5)
-        self.end_date = DateEntry(
-            self.date_frame,
-            width=12,
-            date_pattern='yyyy-mm-dd',
-            year=default_end.year,
-            month=default_end.month,
-            day=default_end.day
-        )
-        self.end_date.pack(side=tk.LEFT, padx=5)
+        tk.Label(root, text="End Date:").pack(pady=5)
+        self.end_date = DateEntry(root, width=12, date_pattern='yyyy-mm-dd', year=default_end.year, month=default_end.month, day=default_end.day)
+        self.end_date.pack(pady=5)
 
-        # Controls frame
-        self.controls_frame = ttk.Frame(self.main_frame)
-        self.controls_frame.pack(pady=10, fill=tk.X)
+        self.start_button = tk.Button(root, text="Start", command=self.start_process)
+        self.start_button.pack(pady=10)
 
-        # Start button
-        self.start_button = ttk.Button(
-            self.controls_frame,
-            text="Start",
-            command=self.start_process,
-            bootstyle=SUCCESS
-        )
-        self.start_button.pack(side=tk.LEFT, padx=5)
-
-        # Loading label
-        self.loading_label = ttk.Label(
-            self.controls_frame,
-            text="",
-            bootstyle=SECONDARY
-        )
-        self.loading_label.pack(side=tk.LEFT, padx=10)
-
-        # Progress bar
-        self.progress = ttk.Progressbar(
-            self.controls_frame,
-            length=300,
-            mode='determinate',
-            bootstyle=INFO
-        )
-        self.progress.pack(side=tk.LEFT, padx=5)
-
-        # Log area
-        self.log_frame = ttk.Frame(self.main_frame)
-        self.log_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        self.log_text = tk.Text(
-            self.log_frame,
-            height=15,
-            width=70,
-            state='disabled',
-            wrap=tk.WORD,
-            font=("Segoe UI", 10)
-        )
-        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        # Scrollbar for log text
-        scrollbar = ttk.Scrollbar(
-            self.log_frame,
-            orient=tk.VERTICAL,
-            command=self.log_text.yview,
-            bootstyle=SECONDARY
-        )
+        # Console area
+        tk.Label(root, text="Execution Log:").pack(pady=5)
+        self.console = tk.Text(root, height=20, width=70, state='disabled', wrap=tk.WORD)
+        self.console.pack(pady=5)
+        scrollbar = tk.Scrollbar(root, orient=tk.VERTICAL, command=self.console.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.log_text['yscrollcommand'] = scrollbar.set
+        self.console.config(yscrollcommand=scrollbar.set)
 
         # API Tokens
-        self.crm_token = "crm_token"  # Replace with actual token
-        self.jira_token = "jira_token"  # Replace with actual token
+        self.crm_token = "crm_token"
+        self.jira_token = "jira_token+"
         self.crm_url = "https://demo.defectdojo.org/api/v2/users/?is_active=true&limit=100"
         self.jira_server = "https://jira.crm.com"
 
@@ -132,75 +55,45 @@ class JiraDataUtility:
 
     def log(self, message):
         """Log messages to GUI text area."""
-        self.log_text.config(state='normal')
+        self.console.config(state='normal')
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        self.log_text.insert(tk.END, f"{timestamp}: {message}\n")
-        self.log_text.config(state='disabled')
-        self.log_text.see(tk.END)
+        self.console.insert(tk.END, f"{timestamp}: {message}\n")
+        self.console.see(tk.END)
+        self.console.config(state='disabled')
         self.root.update()
 
     def start_process(self):
         """Main process triggered by Start button."""
         self.start_button.config(state='disabled')
-        self.loading_label.config(text="Loading")
-        self.progress['value'] = 0
-        self.animate_loading()
-        threading.Thread(target=self.process_thread, daemon=True).start()
-
-    def animate_loading(self):
-        """Animate loading dots in the loading label."""
-        def update_dots():
-            if self.loading_label.cget("text").startswith("Loading"):
-                dots = self.loading_label.cget("text")[7:]
-                if dots == "...":
-                    self.loading_label.config(text="Loading")
-                else:
-                    self.loading_label.config(text="Loading" + dots + ".")
-                self.root.after(1000, update_dots)
-        self.root.after(1000, update_dots)
-
-    def process_thread(self):
-        """Run the main process in a separate thread."""
         try:
             start_date = self.start_date.get_date().strftime('%Y-%m-%d')
             end_date = self.end_date.get_date().strftime('%Y-%m-%d')
             self.log("Process started.")
 
-            # Step 1: Download usernames (25%)
-            self.progress['value'] = 10
+            # Step 1: Download usernames
             usernames = self.download_usernames()
             if not usernames:
-                raise ValueError("No usernames retrieved.")
-            self.progress['value'] = 25
+                raise Exception("No usernames retrieved.")
 
-            # Step 2: Fetch JQL data (50%)
-            self.log("Fetching JQL data...")
+            # Step 2: Fetch JQL data
             jql_files = self.fetch_jql_data(start_date, end_date, usernames)
-            self.progress['value'] = 50
 
-            # Step 3: Merge excels (75%)
-            self.log("Merging Excel files...")
+            # Step 3: Merge excels
             self.merge_excels(jql_files, start_date, end_date)
-            self.progress['value'] = 75
 
-            # Step 4: Update daily finals.xlsx (100%)
-            self.log("Updating finals.xlsx...")
+            # Step 4: Update daily FS-DS-RFS-Data.xlsx
             self.update_daily_final(start_date, end_date)
-            self.progress['value'] = 100
 
             self.log("Process completed successfully.")
-            self.root.after(1, lambda: messagebox.showinfo("info", "Process completed successfully"))
+            messagebox.showinfo("Success", "Process completed successfully!")
         except Exception as e:
             self.log(f"Error: {str(e)}")
-            self.root.after(
-                1, lambda err=e: messagebox.showerror("Error", f"An error occurred: {str(err)}")
-            )
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
         finally:
-            self.loading_label.config(text="")
-            self.start_button.config(state="normal")
+            self.start_button.config(state='normal')
 
     def download_usernames(self):
-        """Step 1: Download usernames from DefectDojo CRM API and save to Excel."""
+        """Step 1: Download usernames from DefectDojo CRM API and save to usernames.xlsx."""
         self.log("Downloading users from DefectDojo CRM API...")
         headers = {"Authorization": f"Token {self.crm_token}"}
         usernames = []
@@ -210,11 +103,11 @@ class JiraDataUtility:
 
         try:
             while url and page <= max_pages:
-                self.log(f"Fetching page {page} from {url}"...")
+                self.log(f"Fetching page {page} from {url}")
                 response = requests.get(url, headers=headers, timeout=10)
                 response.raise_for_status()
                 data = response.json()
-                self.log(f"Extracted {len(data.get('results', []))} users from page {page}...")
+                self.log(f"Extracted {len(data.get('results', []))} users from page {page}")
 
                 if 'results' not in data:
                     raise ValueError(f"JSON response does not contain 'results' key. Response: {data}")
@@ -266,9 +159,10 @@ class JiraDataUtility:
             "jql1": 'status changed FROM "FS-SECURITY REVIEW PENDING" TO "FS-QA REVIEW PENDING" DURING ("{start_date}", "{end_date}") BY {username}',
             "jql2": 'status changed FROM "FS-SECURITY REVIEW PENDING" TO "FUNCTIONAL SPECIFICATION PENDING" DURING ("{start_date}", "{end_date}") BY {username}',
             "jql3": 'status changed FROM "DS-SECURITY REVIEW PENDING" TO "DESIGN SPECIFICATION ACCEPTED" DURING ("{start_date}", "{end_date}") BY {username}',
-            "jql4": 'status changed FROM "TO DO" TO "SS-SECURITY REVIEW PENDING" to "DO" DURING ("{start_date}", "{end_date}") BY {username}',
-            "jql5": 'status changed FROM "READY FOR SECURITY" TO "READY FOR PAINT" DURING ("{start_date}", "{end_date}") BY {start_date}',
-            "jql6": 'status changed FROM "REOPENED" TO "REOPENED" DURING ("start_date}", "{start_date}") BY {end_date}',
+            "jql4": 'status changed FROM "DS-SECURITY REVIEW PENDING" TO "TO DO" DURING ("{start_date}", "{end_date}") BY {username}',
+            "jql5": 'status changed FROM "READY FOR SECURITY" TO "READY FOR PA" DURING ("{start_date}", "{end_date}") BY {username}',
+            "jql6": 'status changed FROM "READY FOR SECURITY" TO "REOPENED" DURING ("{start_date}", "{end_date}") BY {username}',
+            # Add or remove JQLs as needed
         }
         self.jql_display_names = {
             "jql1": "FS Accepted",
@@ -277,6 +171,7 @@ class JiraDataUtility:
             "jql4": "DS Rejected",
             "jql5": "RFS Accepted",
             "jql6": "RFS Rejected",
+            # Match keys to jql_templates
         }
 
         headers = {
@@ -289,10 +184,10 @@ class JiraDataUtility:
             issues_list = []
             for username in usernames[:100]:
                 jql = jql_template.format(start_date=start_date, end_date=end_date, username=username)
-                self.log(f"Executing {jql_name} ({self.jql_display_names.get(jql_name, jql_name)}) for {username}")
+                self.log(f"Executing {jql_name} ({self.jql_display_names.get(jql_name, jql_name)}) for {username}: {jql}")
                 try:
                     start_at = 0
-                    max_results = start_at
+                    max_results = 50
                     while True:
                         payload = {"jql": jql, "startAt": start_at, "maxResults": max_results}
                         response = requests.post(jira_base_url, headers=headers, json=payload, timeout=10)
@@ -318,7 +213,7 @@ class JiraDataUtility:
                             break
 
                 except requests.exceptions.HTTPError as http_err:
-                    self.log(f"HTTP error fetching {jql_name} for {username}: {http_err}")
+                    self.log(f"HTTP error fetching {jql_name} for {username}: {http_err}, Response: {response.text}")
                     continue
                 except Exception as e:
                     self.log(f"Error fetching {jql_name} for {username}: {str(e)}")
@@ -366,27 +261,29 @@ class JiraDataUtility:
         self.log(f"Merged data saved to {output_file}")
 
     def update_daily_final(self, start_date, end_date):
-        """Step 4: Update daily finals.xlsx, hide zeros for JQLs, handle NaN/INF, apply bold and borders."""
-        self.log("Updating finals.xlsx...")
+        """Step 4: Update daily FS-DS-RFS-Data.xlsx, hide zeros for JQLs, handle NaN/INF, apply bold and borders, then delete files."""
+        self.log("Updating daily FS-DS-RFS-Data.xlsx...")
         date_str = datetime.datetime.strptime(start_date, '%Y-%m-%d').strftime('%d-%b-%Y')
-        jqls = list(self.jql_templates.keys())
+        jqls = list(self.jql_templates.keys())  # Use defined JQLs dynamically
 
-        # Initialize or load existing finals.xlsx
+        # Initialize or load existing FS-DS-RFS-Data.xlsx
         final_file = "finals.xlsx"
         if os.path.exists(final_file):
             try:
                 df_final = pd.read_excel(final_file, engine='openpyxl')
+                # Replace NaN with 0
                 df_final = df_final.fillna(0)
-                self.log("Loaded existing finals.xlsx and replaced NaN with 0")
+                self.log("Loaded existing FS-DS-RFS-Data.xlsx and replaced NaN with 0")
+                # Replace INF
                 if np.isinf(df_final.select_dtypes(include=np.number)).any().any():
-                    self.log("Warning: INF values detected in finals.xlsx, replacing with 0")
+                    self.log("Warning: INF values detected in FS-DS-RFS-Data.xlsx, replacing with 0")
                     df_final = df_final.replace([np.inf, -np.inf], 0)
             except Exception as e:
-                self.log(f"Error reading finals.xlsx: {str(e)}")
+                self.log(f"Error reading FS-DS-RFS-Data.xlsx: {str(e)}, initializing new DataFrame")
                 df_final = pd.DataFrame({"Type": [self.jql_display_names.get(jql, jql) for jql in jqls] + ["Total"]})
         else:
             df_final = pd.DataFrame({"Type": [self.jql_display_names.get(jql, jql) for jql in jqls] + ["Total"]})
-            self.log("Initialized new finals.xlsx")
+            self.log("Initialized new FS-DS-RFS-Data.xlsx")
 
         # Count issues for each JQL
         counts = {}
@@ -433,10 +330,11 @@ class JiraDataUtility:
             format_to_use = bold_left_format if col == 0 else bold_center_format
             worksheet.write(0, col, header, format_to_use)
 
-        # Write data, hide zeros for non-Total rows
+        # Write data, hide zeros for JQLs
         for row, data in enumerate(df_final.itertuples(index=False), 1):
             is_total_row = data[0] == "Total"
             for col, value in enumerate(data):
+                # Check for NaN/INF
                 try:
                     numeric_value = float(value)
                     if np.isnan(numeric_value) or np.isinf(numeric_value):
@@ -444,10 +342,15 @@ class JiraDataUtility:
                         value = 0
                 except (ValueError, TypeError):
                     pass
+                # Hide zeros for non-Total rows in non-JQL columns
                 display_value = value
                 if col > 0 and not is_total_row and value == 0:
                     display_value = ""
-                format_to_use = bold_left_format if col == 0 or is_total_row else center_format
+                # Apply formatting
+                if col == 0 or is_total_row:
+                    format_to_use = bold_left_format if col == 0 else bold_center_format
+                else:
+                    format_to_use = center_format
                 worksheet.write(row, col, display_value, format_to_use)
 
         workbook.close()
@@ -466,6 +369,6 @@ class JiraDataUtility:
                 self.log(f"Error deleting {file}: {str(e)}")
 
 if __name__ == "__main__":
-    root = ttkb.Window()
+    root = tk.Tk()
     app = JiraDataUtility(root)
     root.mainloop()
